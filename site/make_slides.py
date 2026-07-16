@@ -3,19 +3,24 @@
 
     .venv/bin/python site/make_slides.py
 
-FOOTAGE LICENSING (why this file exists): every frame published on the site
-comes from **Tears of Steel** © Blender Foundation, CC-BY 3.0
-(mango.blender.org) — freely usable with attribution, which the site carries.
-Never publish client/member footage here. Hush's before/after pair is its own
-synthetic validation test card, rendered by the plugin's MIT test suite.
+FOOTAGE LICENSING (why this file exists): never publish client/member footage
+here — we don't hold public rights to it. Everything on the site comes from
+clips that are free to publish, and the people shown should reflect the
+communities these tools are built for:
 
-Prep (once):
-    ffmpeg -y -ss 316 -i tears-of-steel-1920.mov -t 8 -an -c:v prores_ks \
-        -profile:v 3 tos-celia.mov          # Celia close-up  (stencil, rise)
-    ffmpeg -y -ss 516 -i tears-of-steel-1920.mov -t 8 -an -c:v prores_ks \
-        -profile:v 3 tos-thom.mov           # Thom on the canal (pivot, depth)
-    .venv/bin/python -m pivot.cli analyze tos-thom.mov --aspect 9:16
-    .venv/bin/python -m stencil.cli run tos-celia.mov --prompts <pts> --range 96:148
+  px-portrait.mp4  Pexels 8496259 — curly-hair portrait   (stencil, speak)
+  px-face.mp4      Pexels 5251978 — freckled close-up     (rise)
+  px-street.mp4    Pexels 4483661 — man walking a city    (pivot, depth)
+                   Pexels License: free to use, attribution not required
+                   (we credit anyway). https://www.pexels.com/license/
+
+Hush's before/after pair is its own synthetic validation test card, rendered by
+the plugin's MIT test suite. Tears of Steel (CC-BY, Blender Foundation) is kept
+in Test Footage as a spare scope-format source.
+
+Prep (once), after downloading the clips to Test Footage:
+    .venv/bin/python -m pivot.cli analyze px-street.mp4 --aspect 9:16
+    .venv/bin/python -m stencil.cli run px-portrait.mp4 --prompts <pts> --range 24:80
 """
 
 import json
@@ -31,9 +36,12 @@ import numpy as np
 
 A = Path(__file__).parent / "content" / "assets"
 MEDIA = Path("/Users/stephen/Hush/Test Footage")
-CELIA = MEDIA / "tos-celia.mov"          # 1920x800, starts at 316s
-THOM = MEDIA / "tos-thom.mov"            # 1920x800, starts at 516s
-CELIA_MATTE = MEDIA / "tos-celia.stencil.mov"
+PORTRAIT = MEDIA / "px-portrait.mp4"      # 1920x1080 — curly-hair portrait
+FACE = MEDIA / "px-face.mp4"              # 1920x1080 — freckled close-up
+STREET = MEDIA / "px-street.mp4"          # 1920x1080 — walking (pivot)
+DEPTHCLIP = MEDIA / "px-depth.mp4"        # 1920x1080 — street canyon (depth)
+PORTRAIT_MATTE = MEDIA / "px-portrait.stencil.mov"
+MATTE_START = 24                          # the --range start used for the matte
 SCRATCH = os.environ.get(
     "CZ_SCRATCH",
     "/private/tmp/claude-502/-Users-stephen-Hush/4fd2e596-a96a-4fe8-9ebb-5cce1e56e198/scratchpad",
@@ -84,12 +92,15 @@ def slide_hush():
 
 
 def slide_rise():
-    """Celia's face, downsampled to 240px, then 4x by Lanczos vs Real-ESRGAN."""
+    """A real face, downsampled to 240px, then 4x by Lanczos vs Real-ESRGAN.
+
+    Freckles and hair are the point: fine detail either survives or it doesn't.
+    """
     from rise.engine import upscale_frame
 
-    f = grab(CELIA, {120})[120]
-    # square crop centred on the detected face (0.60, 0.47 of a 1920x800 frame)
-    cx, cy, half = int(.60 * 1920), int(.47 * 800), 190
+    f = grab(FACE, {30})[30]
+    # square crop centred on the detected face (0.51, 0.43 of a 1920x1080 frame)
+    cx, cy, half = int(.51 * 1920), int(.47 * 1080), 400
     crop = f[max(0, cy - half):cy + half, cx - half:cx + half]
     base = cv2.resize(crop, (240, 240), interpolation=cv2.INTER_AREA)
     esr, info = upscale_frame(base, 4, model="realesrgan-x4")
@@ -104,10 +115,14 @@ def slide_rise():
 
 
 def slide_stencil():
-    """The real SAM 2.1 matte, tinted over the frame it was solved on."""
-    idx = 110  # inside the propagated range (96:148)
-    img = fit(grab(CELIA, {idx})[idx])
-    m = fit(grab(CELIA_MATTE, {idx - 96})[idx - 96])[:, :, 0] > 127
+    """The real SAM 2.1 matte, tinted over the frame it was solved on.
+
+    Curly hair on purpose — it's the classic roto hard case, and the tool's
+    own honest limitations call it out.
+    """
+    idx = 50  # inside the propagated range (24:80)
+    img = fit(grab(PORTRAIT, {idx})[idx])
+    m = fit(grab(PORTRAIT_MATTE, {idx - MATTE_START})[idx - MATTE_START])[:, :, 0] > 127
     ov = img.astype(np.float32)
     ov[m] = ov[m] * .40 + np.array(PLUM) * .60
     edge = cv2.dilate(m.astype(np.uint8), np.ones((5, 5), np.uint8)) - m.astype(np.uint8)
@@ -116,26 +131,19 @@ def slide_stencil():
 
 
 def slide_pivot():
-    """The real solved 9:16 crop, shown inside the full scope frame."""
-    d = json.load(open(THOM.with_suffix(".pivot.json")))
+    """The real solved 9:16 crop, drawn on the native 16:9 frame it came from."""
+    d = json.load(open(STREET.with_suffix(".pivot.json")))
     sol = d["aspects"]["9:16"]
-    idx = 96
-    frame = grab(THOM, {idx})[idx]
-    # ToS is 2.4:1 scope; centre-crop to a true 16:9 so the slide's
-    # "16:9 -> 9:16" claim is literally what's drawn.
-    src_h = frame.shape[0]
-    keep_w = int(src_h * 16 / 9)
-    x_off = (frame.shape[1] - keep_w) // 2
-    frame = frame[:, x_off:x_off + keep_w]
+    idx = 150  # mid-walk, inside the solved follow
+    frame = grab(STREET, {idx})[idx]
     fw = W
     fh = int(round(frame.shape[0] * fw / frame.shape[1]))
     band = cv2.resize(frame, (fw, fh), interpolation=cv2.INTER_AREA)
     canvas = np.full((H, W, 3), DARK, np.uint8)
     y0 = (H - fh) // 2
     canvas[y0:y0 + fh] = band
-    # re-express the solved centre in the cropped frame's coordinates
-    cx = (sol["centers"][idx] * d["width"] - x_off) / keep_w
-    cw = int(sol["crop_w"] / keep_w * fw)
+    cx = sol["centers"][idx]
+    cw = int(sol["crop_w"] / d["width"] * fw)
     x = int(np.clip(cx * fw - cw / 2, 0, fw - cw))
     # dim what the reframe discards
     canvas[y0:y0 + fh, :x] = (canvas[y0:y0 + fh, :x] * .38).astype(np.uint8)
@@ -143,29 +151,29 @@ def slide_pivot():
     cv2.rectangle(canvas, (x, y0), (x + cw, y0 + fh), SLATE, 3)
     tx = sol["targets"][idx]
     if tx:
-        tx_c = (tx * d["width"] - x_off) / keep_w
-        if 0 <= tx_c <= 1:
-            cv2.circle(canvas, (int(tx_c * fw), y0 + int(fh * .42)), 9, AMBER, -1)
-    cv2.putText(canvas, "16:9  ->  9:16   solved crop", (18, H - 20),
-                cv2.FONT_HERSHEY_SIMPLEX, .55, (190, 190, 190), 1, cv2.LINE_AA)
+        cv2.circle(canvas, (int(tx * fw), y0 + int(fh * .30)), 9, AMBER, -1)
+    moves = sol["moves"]
+    cv2.putText(canvas, f"16:9  ->  9:16   following the subject, {moves} camera moves",
+                (18, H - 20), cv2.FONT_HERSHEY_SIMPLEX, .5, (190, 190, 190), 1,
+                cv2.LINE_AA)
     cv2.imwrite(str(A / "slide-pivot.jpg"), canvas, Q)
 
 
 def slide_depth():
-    """Real depth on the canal shot: statue foreground, subject, houses, trees."""
+    """Real depth on a street canyon: glass towers near, subject mid, block far."""
     from depth.engine import DepthEngine, normalize_shot
 
-    idx = 96
-    frame = grab(THOM, {idx})[idx]
+    idx = 120
+    frame = grab(DEPTHCLIP, {idx})[idx]
     eng = DepthEngine()
     d = eng.estimate(frame, ema=0, refine=True)
     nd = normalize_shot([d])[0][0]
     fc = cv2.applyColorMap((nd * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
-    cv2.imwrite(str(A / "depth-frame.jpg"), cv2.resize(fc, (880, 367),
+    cv2.imwrite(str(A / "depth-frame.jpg"), cv2.resize(fc, (880, 495),
                 interpolation=cv2.INTER_AREA), [int(cv2.IMWRITE_JPEG_QUALITY), 80])
     cv2.imwrite(str(A / "slide-depth.jpg"), fit(fc), Q)
-    grid = cv2.resize(nd, (96, 40), interpolation=cv2.INTER_AREA)
-    json.dump({"w": 96, "h": 40, "d": [round(float(v), 2) for v in grid.ravel()]},
+    grid = cv2.resize(nd, (96, 54), interpolation=cv2.INTER_AREA)
+    json.dump({"w": 96, "h": 54, "d": [round(float(v), 2) for v in grid.ravel()]},
               open(A / "depth-grid.json", "w"))
 
 
@@ -176,8 +184,8 @@ def slide_speak():
     this is an approximation of the look on the same frame, and the slide
     caption says so. Replace with a true Speak render once one is exported.
     """
-    idx = 120
-    sp = fit(grab(CELIA, {idx})[idx]).astype(np.float32) / 255
+    idx = 50
+    sp = fit(grab(PORTRAIT, {idx})[idx]).astype(np.float32) / 255
     sp = sp ** 0.92
     sp[:, :, 2] = np.clip(sp[:, :, 2] * 1.10 + .02, 0, 1)   # warm the reds
     sp[:, :, 0] = np.clip(sp[:, :, 0] * .94, 0, 1)          # cool the blues down
