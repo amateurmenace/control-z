@@ -1,0 +1,27 @@
+control-z — third-party notices
+===============================
+
+The code in this repository is MIT (see LICENSE). The tools also download
+machine-learning models on first use. Those models are NOT part of this
+repository and carry their own licenses — all permissive, never CC-BY-NC,
+never gated behind a login. Each shows its license card before downloading,
+is verified against a pinned SHA-256, and is listed with its license on the
+Suite's Models page.
+
+  YuNet face detection (OpenCV Zoo)        MIT
+  YOLOX-s person detection (Megvii)        Apache-2.0
+  SAM 2.1 hiera-small (Meta)               Apache-2.0
+  MiDaS-small (Intel ISL)                  MIT
+  Real-ESRGAN x2/x4 (xinntao)              BSD-3-Clause
+  Whisper via faster-whisper (Systran)     MIT
+  pyannote segmentation-3.0                MIT
+  3D-Speaker embeddings                    Apache-2.0
+  DeepFilterNet 3 (optional binary)        MIT/Apache-2.0 dual
+
+The policy that keeps this list permissive — and the models deliberately
+rejected for their licenses — is in specs/00-overview.md. The pinned registry
+is czcore/models.py.
+
+Demo imagery on control-z.org comes from freely-licensed Pexels clips; the
+site footer credits the creators. Site sources: site/make_slides.py documents
+the footage rule.

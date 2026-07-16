@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-The tools download machine-learning models on first use. Those models carry
-their own licenses — all permissive (MIT / Apache-2.0 / BSD-3), never
-CC-BY-NC, never gated. Each one shows its license card before downloading and
-is listed with it on the Suite's Models page. See specs/00-overview.md for the
-model and license policy, and czcore/models.py for the pinned registry.
