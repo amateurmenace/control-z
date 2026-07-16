@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}For community media centers · control-z{% endblock %}
+{% block body %}
+<div class="wrap" style="max-width:760px">
+  <section style="padding:52px 0 8px">
+    <span class="k">peg · community media · access tv</span>
+    <h1 style="font-size:38px">Built with a station, for stations.</h1>
+  </section>
+  <div style="font-size:16px;display:grid;gap:16px">
+    <p>control-z comes out of a working community media center — every tool is tested on
+    real member workflows at Brookline Interactive Group before release. The suite is
+    designed for the realities of access television: donated machines, volunteer editors,
+    submission queues, tape vaults, and accessibility obligations — all on the free
+    version of Resolve, so a lab of ten seats costs zero dollars in licenses.</p>
+    <h2>What a station gets today</h2>
+    <ul style="margin-left:22px;display:grid;gap:8px">
+      <li><b><a href="hush.html">Hush</a></b> — member footage shot in dark rooms stops
+      looking like member footage.</li>
+      <li><b><a href="scribe.html">Scribe</a></b> — captions for access compliance and
+      speaker-labeled markers for meeting coverage, all local.</li>
+      <li><b><a href="clear.html">Clear</a></b> — the HVAC hum, the podium PA, the gym
+      reverb: rescued. Loudness normalized to broadcast spec.</li>
+      <li><b><a href="pivot.html">Pivot</a></b> — every show becomes Shorts/Reels without
+      re-editing.</li>
+      <li><b><a href="rise.html">Rise</a> + <a href="depth.html">Depth</a> +
+      <a href="stencil.html">Stencil</a></b> — the archive upscales, the graders grade,
+      nobody buys Mocha.</li>
+    </ul>
+    <h2>Where this is going</h2>
+    <p>The <a href="roadmap.html">roadmap</a> is station-shaped: <b>Level</b> (drag-and-drop
+    submission QC), <b>Strobe</b> (free photosensitivity checking — the test that currently
+    costs thousands a year), <b>Minutes</b> (civic meetings → chapters, speakers, clip
+    lists), <b>Babel</b> (language access), <b>Rewind</b> (the tape vault). If your station
+    would pilot any of these, we want to hear from you.</p>
+    <h2>Deploying in a lab</h2>
+    <ol style="margin-left:22px;display:grid;gap:8px">
+      <li>Install free Resolve + Hush on every seat (the installer handles OFX placement;
+      clear Resolve's plugin cache on upgrades).</li>
+      <li>Standalone tools are one folder per app — no admin rights needed to run,
+      CLI-scriptable for batch workflows (<code>scribe-cli transcribe *.mov</code> after
+      every meeting, for instance).</li>
+      <li>Models download once per machine into a shared store, license shown, hash
+      verified. Air-gapped labs can copy the store folder.</li>
+    </ol>
+    <p>Training curricula and a submission-QC playbook are being written alongside the
+    tools. Alliance for Community Media folks: come say hi.</p>
+  </div>
+</div>
+{% endblock %}

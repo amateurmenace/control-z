@@ -1,0 +1,79 @@
+<section>
+  <div class="wrap">
+    <div class="kicker">try the qc loop</div>
+    <h2>The matte tells you where it's guessing.</h2>
+    <div class="demo">
+      <div class="head"><span><b>simulated shot</b> · one click on frame 1 → propagated matte · amber = model unsure</span><span>scrub · click an amber frame to re-prompt</span></div>
+      <canvas id="stView" height="300"></canvas>
+      <canvas id="stConf" height="70" style="margin-top:10px"></canvas>
+      <div class="readout">
+        <span>frame <b id="stF">1</b>/24</span>
+        <span>confidence <b id="stC">0.97</b></span>
+        <span class="live" id="stMsg">● scrub across the strip — the subject motion-blurs mid-shot and confidence drops</span>
+      </div>
+    </div>
+  </div>
+</section>
+<script>
+(function () {
+  var N = 24, cur = 0, conf = [], reprompted = false;
+  for (var i = 0; i < N; i++) {
+    var blur = (i >= 12 && i <= 17) ? (1 - Math.abs(i - 14.5) / 3.5) : 0;
+    conf.push(Math.max(.35, .97 - blur * .62 - Math.random() * .02));
+  }
+  var view = document.getElementById('stView'), vg = view.getContext('2d');
+  var strip = document.getElementById('stConf'), sg = strip.getContext('2d');
+  var fEl = document.getElementById('stF'), cEl = document.getElementById('stC');
+  var msg = document.getElementById('stMsg');
+  function subj(i) { var t = i / (N - 1); return { x: .18 + .64 * t, y: .55 - .18 * Math.sin(t * Math.PI), blur: (i >= 12 && i <= 17 && !reprompted) ? 1 : 0 }; }
+  function drawView() {
+    view.width = view.clientWidth * 2; var W = view.width, H = view.height = W * 9 / 32;
+    vg.fillStyle = '#191921'; vg.fillRect(0, 0, W, H);
+    for (var i = 1; i < 10; i++) { vg.fillStyle = '#20202a'; vg.fillRect(i * W / 10, 0, 1, H); }
+    var s = subj(cur), r = H * .18;
+    // "footage": the subject
+    vg.fillStyle = '#5a5a68';
+    vg.beginPath();
+    if (s.blur) vg.ellipse(s.x * W, s.y * H, r * 2.1, r * .8, 0, 0, 7); else vg.arc(s.x * W, s.y * H, r, 0, 7);
+    vg.fill();
+    // the matte overlay (plum), degraded when unsure
+    var q = conf[cur];
+    vg.fillStyle = 'rgba(142,106,158,' + (0.55 * q) + ')';
+    vg.beginPath();
+    if (s.blur) vg.ellipse(s.x * W, s.y * H, r * 2.1 * q, r * .8, 0, 0, 7); else vg.arc(s.x * W, s.y * H, r * (0.6 + 0.4 * q), 0, 7);
+    vg.fill();
+    vg.strokeStyle = '#8E6A9E'; vg.lineWidth = 2; vg.stroke();
+    fEl.textContent = cur + 1; cEl.textContent = conf[cur].toFixed(2);
+  }
+  function drawStrip() {
+    strip.width = strip.clientWidth * 2; var W = strip.width, H = strip.height;
+    sg.fillStyle = '#EFEDE6'; sg.fillRect(0, 0, W, H);
+    var bw = W / N;
+    for (var i = 0; i < N; i++) {
+      var q = conf[i];
+      sg.fillStyle = q < .75 ? 'rgba(229,168,53,.9)' : 'rgba(142,106,158,.75)';
+      sg.fillRect(i * bw + 2, H - q * (H - 8) - 4, bw - 4, q * (H - 8));
+      if (i === cur) { sg.strokeStyle = '#2D3A2E'; sg.lineWidth = 3; sg.strokeRect(i * bw + 1, 1, bw - 2, H - 2); }
+    }
+  }
+  function pick(e) {
+    var r = strip.getBoundingClientRect();
+    var i = Math.max(0, Math.min(N - 1, Math.floor((e.clientX - r.left) / r.width * N)));
+    cur = i;
+    if (conf[i] < .75 && e.type === 'pointerdown' && !reprompted) {
+      reprompted = true;
+      for (var k = 0; k < N; k++) if (conf[k] < .9) conf[k] = Math.min(.96, conf[k] + .45);
+      msg.textContent = '● re-prompted on the blurry frame — one corrective click re-propagates the whole shot';
+    }
+    drawView(); drawStrip();
+  }
+  strip.addEventListener('pointerdown', pick);
+  strip.addEventListener('pointermove', function (e) { if (e.buttons) pick(e); });
+  view.addEventListener('pointermove', function (e) {
+    var r = view.getBoundingClientRect();
+    cur = Math.max(0, Math.min(N - 1, Math.floor((e.clientX - r.left) / r.width * N)));
+    drawView(); drawStrip();
+  });
+  drawView(); drawStrip(); addEventListener('resize', function () { drawView(); drawStrip(); });
+})();
+</script>

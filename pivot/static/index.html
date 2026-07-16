@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>control-z · Pivot</title>
+<style>
+  :root {
+    --cream:#F5F3EE; --card:#FFF; --border:#E0DED9; --dark:#2D3A2E;
+    --green:#3D5A47; --text-med:#5A6B5E; --text-lt:#8A9A8E;
+    --accent:#5B7A9E; --accent-lt:#8FA9C4; --amber:#E5A835;
+    --mono:"SF Mono",ui-monospace,Menlo,monospace;
+    --r:12px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--cream);color:var(--dark);font:15px/1.5 -apple-system,"Segoe UI",sans-serif;padding:22px;max-width:1060px;margin:0 auto}
+  h1{font-size:22px;letter-spacing:-.2px}
+  h1 b{color:var(--accent)}
+  .tag{font-family:var(--mono);font-size:11px;color:var(--text-lt);text-transform:uppercase;letter-spacing:.12em}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-top:14px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input[type=text]{flex:1;min-width:280px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size:12.5px;background:var(--cream)}
+  select,button{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:13.5px;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.primary:disabled{opacity:.45;cursor:default}
+  .chips{display:flex;gap:6px}
+  .chip{padding:6px 11px;border:1px solid var(--border);border-radius:999px;font-family:var(--mono);font-size:12px;cursor:pointer;user-select:none}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  #stage{display:none}
+  .preview{display:flex;gap:16px;margin-top:12px}
+  #wrap{position:relative;flex:0 0 auto}
+  canvas#view{border-radius:8px;background:#111;display:block}
+  .side{flex:1;min-width:260px}
+  #spark{width:100%;height:74px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+  .shots{max-height:210px;overflow:auto;margin-top:10px;font-family:var(--mono);font-size:12px}
+  .shot{display:flex;gap:8px;align-items:center;padding:5px 8px;border-bottom:1px solid var(--border)}
+  .shot .m{color:var(--accent);width:52px}
+  .shot select{padding:2px 6px;font-size:11.5px;margin-left:auto}
+  .bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden;flex:1}
+  .bar i{display:block;height:100%;background:var(--accent);width:0%;transition:width .3s}
+  .msg{font-family:var(--mono);font-size:12px;color:var(--text-med)}
+  .note{font-size:13px;color:var(--text-med);margin-top:8px}
+  .covenant{font-family:var(--mono);font-size:10.5px;color:var(--text-lt);margin-top:18px;text-align:center}
+  #report{white-space:pre-wrap;font-family:var(--mono);font-size:12px;color:var(--green);margin-top:8px}
+</style>
+</head>
+<body>
+  <div class="tag">control-z · free finishing tools</div>
+  <h1><b>Pivot</b> — follows the subject</h1>
+
+  <div class="card">
+    <div class="row">
+      <input id="path" type="text" placeholder="/path/to/clip.mov — paste a file path" spellcheck="false">
+      <button class="primary" id="open">Open</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span class="chips" id="aspects">
+        <span class="chip on" data-a="9:16">9:16</span>
+        <span class="chip" data-a="1:1">1:1</span>
+        <span class="chip" data-a="4:5">4:5</span>
+      </span>
+      <select id="preset"><option>calm</option><option selected>standard</option><option>attentive</option></select>
+      <button class="primary" id="analyze" disabled>Analyze</button>
+      <div class="bar"><i id="abar"></i></div>
+      <span class="msg" id="amsg"></span>
+    </div>
+  </div>
+
+  <div class="card" id="stage">
+    <div class="row">
+      <span class="tag" id="clipinfo"></span>
+      <select id="viewAspect" style="margin-left:auto"></select>
+    </div>
+    <div class="preview">
+      <div id="wrap"><canvas id="view" width="480" height="270"></canvas></div>
+      <div class="side">
+        <canvas id="spark"></canvas>
+        <input id="scrub" type="range" min="0" max="0" value="0" style="width:100%">
+        <div class="row"><label class="msg"><input type="checkbox" id="play"> play</label>
+          <span class="msg" id="frameno"></span></div>
+        <div class="shots" id="shots"></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <select id="codec"><option>h264</option><option>hevc</option><option>prores</option></select>
+      <input id="outsize" type="text" placeholder="out WxH (blank = native)" style="min-width:170px;flex:0">
+      <label class="msg"><input type="checkbox" id="enhance"> enhance punch-ins (Rise)</label>
+      <button class="primary" id="render">Render</button>
+      <button id="fusion">Export Fusion .setting</button>
+      <div class="bar"><i id="rbar"></i></div>
+      <span class="msg" id="rmsg"></span>
+    </div>
+    <div id="report"></div>
+    <div class="note">Path trace: <span style="color:var(--accent)">■</span> crop &nbsp;
+      <span style="color:var(--amber)">●</span> detected subject &nbsp;— every camera decision is visible. That's the covenant.</div>
+  </div>
+
+  <div class="covenant">free forever · runs with free resolve · local only · shows its work · honest limitations</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let A = null, path = "", cur = 0, playTimer = null;
+
+function aspects() { return [...document.querySelectorAll('#aspects .chip.on')].map(c => c.dataset.a); }
+document.querySelectorAll('#aspects .chip').forEach(c =>
+  c.onclick = () => c.classList.toggle('on'));
+
+async function post(url, body) {
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  return r.json();
+}
+async function poll(job, onmsg) {
+  while (true) {
+    const j = await (await fetch('/api/job/' + job.id)).json();
+    onmsg(j);
+    if (j.status !== 'running') return j;
+    await new Promise(r => setTimeout(r, 500));
+  }
+}
+
+$('open').onclick = async () => {
+  const r = await post('/api/open', {path: $('path').value});
+  if (r.error) { $('amsg').textContent = r.error; return; }
+  path = r.path; $('analyze').disabled = false;
+  $('amsg').textContent = r.sidecar ? 'sidecar found — Analyze to refresh, or scrub below' : 'ready to analyze';
+  if (r.analysis) { A = r.analysis; setup(); }
+};
+
+$('analyze').onclick = async () => {
+  $('analyze').disabled = true; $('abar').style.width = '8%';
+  const job = await post('/api/analyze', {path, aspects: aspects(), preset: $('preset').value});
+  const done = await poll(job, j => { $('amsg').textContent = j.message || j.status; });
+  $('abar').style.width = '100%'; $('analyze').disabled = false;
+  if (done.status === 'error') { $('amsg').textContent = done.error; return; }
+  A = done.result; setup();
+};
+
+function setup() {
+  $('stage').style.display = 'block';
+  $('clipinfo').textContent = `${A.width}x${A.height} @ ${A.fps.toFixed(2)} · ${A.n_frames} frames · ${A.shots.length} shots · preset ${A.preset}`;
+  const va = $('viewAspect'); va.innerHTML = '';
+  Object.keys(A.aspects).forEach(a => { const o = document.createElement('option'); o.textContent = a; va.appendChild(o); });
+  $('scrub').max = A.n_frames - 1;
+  shotsList(); drawSpark(); show(cur = 0);
+}
+
+function sol() { return A.aspects[$('viewAspect').value]; }
+$('viewAspect').onchange = () => { shotsList(); drawSpark(); show(cur); };
+
+function shotsList() {
+  const s = sol(), box = $('shots'); box.innerHTML = '';
+  A.subjects.forEach((row, i) => {
+    const d = document.createElement('div'); d.className = 'shot';
+    const subj = row.fallback_center ? 'center' : `${row.subject_source || 'face'} t${row.subject_track} (${row.detections})`;
+    d.innerHTML = `<span>#${i}</span><span class="m">${s.shot_modes[i]}</span>
+      <span>[${row.start}–${row.end})</span><span>${subj}</span>
+      <select data-shot="${i}"><option>auto</option><option>punch</option><option>follow</option><option>center</option></select>`;
+    d.querySelector('select').onchange = async e => {
+      const r = await post('/api/override', {path, aspect: $('viewAspect').value, shot: i, mode: e.target.value});
+      sol().centers.splice(row.start, row.end - row.start, ...r.centers);
+      sol().shot_modes[i] = r.mode; shotsList(); drawSpark(); show(cur);
+    };
+    box.appendChild(d);
+  });
+}
+
+function drawSpark() {
+  const c = $('spark'), s = sol(); c.width = c.clientWidth * 2; c.height = 148;
+  const g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
+  g.strokeStyle = '#E0DED9'; A.shots.forEach(sh => { const x = sh[0] / A.n_frames * c.width;
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, c.height); g.stroke(); });
+  g.strokeStyle = '#E5A835'; g.lineWidth = 1.5; g.beginPath(); let started = false;
+  (s.targets || []).forEach((t, i) => { if (t == null) { started = false; return; }
+    const x = i / A.n_frames * c.width, y = (1 - t) * c.height;
+    started ? g.lineTo(x, y) : g.moveTo(x, y); started = true; }); g.stroke();
+  g.strokeStyle = '#5B7A9E'; g.lineWidth = 2.5; g.beginPath();
+  s.centers.forEach((v, i) => { const x = i / A.n_frames * c.width, y = (1 - v) * c.height;
+    i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+  g.fillStyle = '#2D3A2E'; g.fillRect(cur / A.n_frames * c.width - 1, 0, 2, c.height);
+}
+
+async function show(i) {
+  cur = i; $('scrub').value = i; $('frameno').textContent = `frame ${i}`;
+  const img = new Image();
+  img.onload = () => {
+    const v = $('view'), g = v.getContext('2d');
+    v.height = 300; v.width = Math.round(300 * img.width / img.height);
+    g.drawImage(img, 0, 0, v.width, v.height);
+    const s = sol(), cx = s.centers[Math.min(i, s.centers.length - 1)];
+    const cw = s.crop_w / A.width * v.width, ch = v.height;
+    if (s.axis === 'x') {
+      let x = cx * v.width - cw / 2; x = Math.max(0, Math.min(v.width - cw, x));
+      g.strokeStyle = '#5B7A9E'; g.lineWidth = 2.5; g.strokeRect(x, 0, cw, ch);
+      g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(0, 0, x, ch); g.fillRect(x + cw, 0, v.width - x - cw, ch);
+    }
+    const t = (s.targets || [])[i];
+    if (t != null) { g.fillStyle = '#E5A835'; g.beginPath();
+      g.arc(t * v.width, v.height * 0.4, 5, 0, 7); g.fill(); }
+    drawSpark();
+  };
+  img.src = `/api/frame?path=${encodeURIComponent(path)}&i=${i}`;
+}
+
+$('scrub').oninput = e => show(+e.target.value);
+$('play').onchange = e => {
+  if (playTimer) { clearInterval(playTimer); playTimer = null; }
+  if (e.target.checked) playTimer = setInterval(() =>
+    show((cur + 1) % A.n_frames), 1000 / Math.min(24, A ? A.fps : 24));
+};
+
+$('render').onclick = async () => {
+  $('rbar').style.width = '3%';
+  const job = await post('/api/render', {path, aspect: $('viewAspect').value,
+    codec: $('codec').value, out_size: $('outsize').value || null, enhance: $('enhance').checked});
+  const done = await poll(job, j => { $('rbar').style.width = Math.round((j.progress||0)*100) + '%'; $('rmsg').textContent = j.message || j.status; });
+  if (done.status === 'error') { $('rmsg').textContent = done.error; return; }
+  const r = done.result;
+  $('rmsg').textContent = 'done';
+  $('report').textContent += `→ ${r.out}  (${r.size[0]}x${r.size[1]}, ${r.frames} frames, audio ${r.audio}` +
+    (r.punch_in > 1.001 ? `, punch-in ${r.punch_in}x, enhance ${r.enhance}` : '') + `)\n`;
+};
+
+$('fusion').onclick = async () => {
+  const r = await post('/api/export_fusion', {path, aspect: $('viewAspect').value});
+  $('report').textContent += `→ ${r.out}  (${r.keyframes} keyframes — paste in Fusion page)\n`;
+};
+</script>
+</body>
+</html>

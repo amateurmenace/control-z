@@ -1,0 +1,23 @@
+{
+	Tools = ordered() {
+		CZHazeNote = Note {
+			Inputs = { Comments = Input { Value = "control-z Depth · HAZE LIGHT — wire: your image → CZHazeGlow.Input; depth matte → CZHazeMask.Image. Far side of the room glows like window haze.", } },
+			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
+		},
+		CZHazeMask = Bitmap {
+			Inputs = { Channel = Input { Value = FuID { "Luminance" }, },
+				Low = Input { Value = 0.5, }, },
+			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+		},
+		CZHazeGlow = SoftGlow {
+			Inputs = {
+				Threshold = Input { Value = 0.6, },
+				Gain = Input { Value = 1.4, },
+				XGlowSize = Input { Value = 18, },
+				EffectMask = Input { SourceOp = "CZHazeMask", Source = "Mask", },
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
+		},
+	},
+	ActiveTool = "CZHazeGlow"
+}

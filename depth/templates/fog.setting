@@ -1,0 +1,28 @@
+{
+	Tools = ordered() {
+		CZFogNote = Note {
+			Inputs = { Comments = Input { Value = "control-z Depth · FOG — wire: depth matte MediaIn → CZFogMask.Image; your image → CZFogMerge.Background. Color/level on CZFogColor.", } },
+			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
+		},
+		CZFogMask = Bitmap {
+			Inputs = { Channel = Input { Value = FuID { "Luminance" }, }, },
+			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+		},
+		CZFogColor = Background {
+			Inputs = {
+				TopLeftRed = Input { Value = 0.72, }, TopLeftGreen = Input { Value = 0.76, },
+				TopLeftBlue = Input { Value = 0.80, }, TopLeftAlpha = Input { Value = 1, },
+				EffectMask = Input { SourceOp = "CZFogMask", Source = "Mask", },
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
+		},
+		CZFogMerge = Merge {
+			Inputs = {
+				Foreground = Input { SourceOp = "CZFogColor", Source = "Output", },
+				Blend = Input { Value = 0.65, },
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 45 } },
+		},
+	},
+	ActiveTool = "CZFogMerge"
+}

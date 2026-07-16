@@ -1,0 +1,91 @@
+<section>
+  <div class="wrap">
+    <div class="kicker">try the actual solver</div>
+    <h2>Drag the subject. The camera is Pivot.</h2>
+    <div class="demo">
+      <div class="head"><span><b>live playground</b> · the same math that ships: deadzone · jerk-limited moves · no overshoot</span><span>drag the dot</span></div>
+      <canvas id="pvStage" height="360"></canvas>
+      <div class="row">
+        <div class="tabs" style="margin:0" id="pvPresets">
+          <button class="tab" data-p="calm">Calm</button>
+          <button class="tab on" data-p="standard">Standard</button>
+          <button class="tab" data-p="attentive">Attentive</button>
+        </div>
+        <span style="flex:1"></span>
+        <label><input type="checkbox" id="pvTrace" checked> path trace</label>
+      </div>
+      <div class="readout">
+        <span>camera: <b id="pvState">holding</b></span>
+        <span>moves: <b id="pvMoves">0</b></span>
+        <span class="live">● amber dot = subject · slate box = the 9:16 crop · shaded band = deadzone</span>
+      </div>
+    </div>
+    <p style="font-size:14px;margin-top:10px">The offline app also looks 12 frames ahead
+    (a luxury a live demo can't have), so real renders start their moves slightly early —
+    like an operator who read the script.</p>
+  </div>
+</section>
+<script>
+(function () {
+  var P = { calm:{dz:.09,v:.007,a:.0008}, standard:{dz:.06,v:.010,a:.0012}, attentive:{dz:.04,v:.014,a:.0018} };
+  var p = P.standard, c = document.getElementById('pvStage'), g = c.getContext('2d');
+  var subj = .5, cam = .5, v = 0, chasing = false, moves = 0, trace = [];
+  var stateEl = document.getElementById('pvState'), movesEl = document.getElementById('pvMoves');
+  var showTrace = document.getElementById('pvTrace');
+  function size() { c.width = c.clientWidth * 2; c.height = c.width * 9 / 32; }
+  size(); addEventListener('resize', size);
+  function drag(e) {
+    var r = c.getBoundingClientRect();
+    subj = Math.max(.02, Math.min(.98, ((e.touches ? e.touches[0] : e).clientX - r.left) / r.width));
+  }
+  c.addEventListener('pointerdown', function (e) { c.setPointerCapture(e.pointerId); drag(e); });
+  c.addEventListener('pointermove', function (e) { if (e.buttons) drag(e); });
+  document.querySelectorAll('#pvPresets .tab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      document.querySelectorAll('#pvPresets .tab').forEach(function (o) { o.classList.toggle('on', o === t); });
+      p = P[t.dataset.p];
+    });
+  });
+  // the shipped controller: braking-parabola velocity setpoint + accel clamp
+  setInterval(function () {
+    var hw = 9 / 32 / 2;  // 9:16 crop from 16:9, normalized half width
+    var lo = hw, hi = 1 - hw;
+    var r = Math.max(lo, Math.min(hi, subj));
+    var err = r - cam;
+    if (!chasing && Math.abs(err) > p.dz) { chasing = true; moves++; movesEl.textContent = moves; }
+    if (chasing) {
+      if (Math.abs(err) <= .015 && Math.abs(v) <= p.a) { v = 0; chasing = false; }
+      else {
+        var vd = Math.sign(err) * Math.min(p.v, Math.sqrt(2 * p.a * Math.abs(err)));
+        v = Math.max(v - p.a, Math.min(v + p.a, vd));
+        cam = Math.max(lo, Math.min(hi, cam + v));
+      }
+    }
+    stateEl.textContent = chasing ? (Math.abs(v) >= p.v - 1e-9 ? 'moving (v-max)' : 'easing') : 'holding';
+    trace.push(cam); if (trace.length > 260) trace.shift();
+  }, 1000 / 24);
+  (function draw() {
+    var W = c.width, H = c.height, hw = 9 / 32 / 2;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = '#191921'; g.fillRect(0, 0, W, H);
+    for (var i = 1; i < 8; i++) { g.fillStyle = '#22222c'; g.fillRect(i * W / 8, 0, 1, H); }
+    g.fillStyle = 'rgba(229,168,53,.10)';
+    g.fillRect((cam - p.dz) * W, 0, 2 * p.dz * W, H);
+    if (showTrace.checked) {
+      g.strokeStyle = '#5B7A9E'; g.lineWidth = 2; g.beginPath();
+      trace.forEach(function (t, i) { var y = H - 14 - i / trace.length * (H - 28);
+        i ? g.lineTo(t * W, y) : g.moveTo(t * W, y); });
+      g.stroke();
+    }
+    var cw = hw * 2 * W;
+    g.fillStyle = 'rgba(0,0,0,.44)';
+    g.fillRect(0, 0, cam * W - cw / 2, H); g.fillRect(cam * W + cw / 2, 0, W, H);
+    g.strokeStyle = '#8FA9C4'; g.lineWidth = 3;
+    g.strokeRect(cam * W - cw / 2, 2, cw, H - 4);
+    g.fillStyle = '#E5A835'; g.beginPath();
+    g.arc(subj * W, H * .42, 9, 0, 7); g.fill();
+    g.strokeStyle = '#4A3A10'; g.lineWidth = 2; g.stroke();
+    requestAnimationFrame(draw);
+  })();
+})();
+</script>

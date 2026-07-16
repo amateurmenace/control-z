@@ -1,0 +1,18 @@
+<section>
+  <div class="wrap">
+    <div class="kicker">try it by eye</div>
+    <h2>Honest resampling vs. reconstruction.</h2>
+    <div class="demo">
+      <div class="head"><span><b>4× upscale</b> · night footage, 240 px crop · left = lanczos (no synthesis) · right = real-esrgan</span><span>drag</span></div>
+      <div class="wipe">
+        <img src="{{ b64('rise-after.jpg') }}" alt="Real-ESRGAN reconstruction">
+        <div class="top"><img src="{{ b64('rise-before.jpg') }}" alt="Lanczos resample"></div>
+        <span class="lab" style="left:10px">LANCZOS</span>
+        <span class="lab" style="right:10px">RISE (SYNTHESIZED)</span>
+        <div class="handle" style="left:50%"></div>
+      </div>
+      <div class="readout"><span class="live">● the right side is labeled synthesis because it IS synthesis</span>
+        <span>noise becomes texture; edges return; skin can go plastic — the tool page says so</span></div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,550 @@
+# The single source of truth for control-z.org — one block per tool.
+# status: shipped | in-progress | proposed (proposed appears ONLY on /roadmap)
+
+- id: hush
+  name: Hush
+  verbline: Hush quiets the noise.
+  oneliner: Measured, transparent noise reduction — the tool free-Resolve users are missing most.
+  status: shipped
+  accent: '#3D5A47'
+  stage: color
+  audiences:
+  - stations
+  - journalists
+  - filmmakers
+  - artists
+  replaces:
+  - name: Resolve Studio NR palette
+    price: $295
+  - name: Neat Video
+    price: ~$160
+  platforms:
+  - macOS
+  - Windows
+  - OpenFX · Color/Edit/Fusion pages
+  links:
+    github: https://github.com/amateurmenace/Hush-OpenNR
+    download: https://github.com/amateurmenace/Hush-OpenNR/releases/latest
+  quickstart:
+  - Drop Hush Open NR on a node and click Auto Setup — it measures the clip and dials in every slider.
+  - 'Check the measurement: Step 1 → Scope: Measurements.'
+  - 'Check what''s being removed: Step 5 → View → Noise Removed. Featureless static = good.'
+  - Set View back to Result. Done.
+  shows_its_work: Live noise measurements, per-stage scopes, a Noise Removed view, and a clean-confidence
+    matte out — Resolve's own NR is a black box; Hush shows every move.
+  limitations:
+  - No motion-compensated temporal NR — Studio keeps an edge on fast pans.
+  - 'Classical (NLM), not AI: very competitive at normal noise, less magical on starlight footage.'
+  models: []
+  features:
+  - Auto Setup measures the clip and writes every slider — one undo reverts it all
+  - Motion-tracked temporal NR (~±8 px) with a hard anti-ghosting knee
+  - 'Noise EQ cuts noise by size: fine grain, clumps, stains, color blotches'
+  - Live scopes and a Noise Removed view — watch exactly what's being taken
+  - Exports a clean-confidence matte Speak (and your grade) can key on
+  tech: 'Three noise estimators run per frame (temporal difference, fine and coarse Laplacian) into
+    robust histograms, producing separate spatial and temporal sigmas plus a 16-band brightness gain
+    curve. The temporal stage compares 3×3 patches against up to ±3 frames with a hierarchical ±8
+    px motion search; a hard-knee gate reaches exactly zero past the knee, so mismatches cannot ghost
+    by construction. Spatial cleanup is noise-adaptive NLM with a size-banded Noise EQ, bounded by
+    Detail Rescue. The refine stack (v3.6) rebuilds optical character: coring, acutance, chroma-speckle,
+    and film-matched grain. GPU kernels (Metal/CUDA/OpenCL) are line-by-line ports of one CPU reference,
+    held to ~2×10⁻⁵ agreement by a parity test suite.'
+- id: pivot
+  name: Pivot
+  verbline: Pivot follows the subject.
+  oneliner: Auto-reframe your 16:9 masters to 9:16, 1:1, 4:5 — with an editor's eye, not a cropping
+    algorithm's.
+  status: in-progress
+  accent: '#5B7A9E'
+  stage: deliver
+  audiences:
+  - stations
+  - journalists
+  - filmmakers
+  replaces:
+  - name: Studio Smart Reframe
+    price: $295
+  - name: auto-clip SaaS tools
+    price: $15+/mo
+  platforms:
+  - macOS
+  - Windows
+  - standalone + CLI
+  - Fusion .setting export
+  quickstart:
+  - Open a clip, pick your aspects, hit Analyze — shots, faces, and a solved camera path.
+  - Scrub the path trace; override any shot to punch / follow / center.
+  - Render natively (no silent upscale) or export a keyframed .setting for the Fusion page.
+  shows_its_work: The path trace draws every detection, the chosen subject, and each camera move —
+    plus a per-shot report of what it did and why.
+  limitations:
+  - Faces and people only so far — sports and wildlife will miss (saliency model on the roadmap).
+  - Punch-ins past native resolution are honest resampling until you enable the Rise engine.
+  models:
+  - name: YuNet face detection
+    license: MIT (OpenCV Zoo)
+    size: 0.2 MB
+  - name: YOLOX-s person detection
+    license: Apache-2.0 (Megvii)
+    size: 34 MB
+  features:
+  - 'Shot-aware subject tracking: faces first, whole people as fallback'
+  - 'An editor''s camera: deadzone hold, eased jerk-limited moves, no drift'
+  - Path-trace view shows every detection and every camera decision
+  - 'Per-shot overrides: punch, follow, or center — re-solved instantly'
+  - Renders natively or exports keyframed Fusion .setting for free Resolve
+  tech: 'Analysis decodes once at 360p: shot detection (adaptive luma-diff), YuNet face detection
+    every 2nd frame, YOLOX-s persons only where faces are absent, greedy IoU/distance tracking. Per
+    shot, a subject is selected (size × centrality × persistence) and solved: shots under 2 s or under
+    the motion floor become static punches at a trimmed median; the rest get the follow controller
+    — deadzone with hysteresis, 12-frame lookahead anticipation, braking-parabola velocity setpoint
+    clamped by v-max/a-max. Overshoot is pinned ≤ 4 acceleration quanta by golden tests. Renders are
+    frame-accurate (EOF flush handled) with audio stream-copied, never re-encoded.'
+- id: stencil
+  name: Stencil
+  verbline: Stencil traces the subject.
+  oneliner: Click an object once, get a matte for the whole shot — delivered as matte clips any page
+    of free Resolve can use.
+  status: in-progress
+  accent: '#8E6A9E'
+  stage: color
+  audiences:
+  - filmmakers
+  - artists
+  - journalists
+  replaces:
+  - name: Studio Magic Mask
+    price: $295
+  - name: Mocha Pro
+    price: ~$700
+  platforms:
+  - macOS
+  - Windows
+  - standalone + CLI
+  quickstart:
+  - 'Point at the thing: one include click (add excludes if needed).'
+  - Propagate — SAM 2.1 tracks it across the shot on your GPU.
+  - Export a luma matte (Color page → Add Matte) or ProRes 4444 with alpha.
+  shows_its_work: The confidence timeline glows amber on every frame the model is unsure about — you
+    QC the minutes that need it, not the hour that doesn't.
+  limitations:
+  - Soft-matte quality on hair and motion blur — it's a roto assistant, not a keyer.
+  - Heavyweight install (PyTorch) until the ONNX port lands.
+  - 'Prompt granularity is real: click a face, get a face; click a jacket, get a jacket.'
+  models:
+  - name: SAM 2.1 hiera-small
+    license: Apache-2.0 (Meta)
+    size: 176 MB
+  features:
+  - One click on any frame propagates a matte across the whole shot (SAM 2.1)
+  - Confidence timeline glows amber exactly where the model is unsure
+  - Corrective clicks re-propagate — QC the minutes that need it
+  - Grow / feather / de-flicker post chain, tuned for grading mattes
+  - Exports luma mattes and ProRes 4444 alpha that free Resolve just uses
+  tech: 'SAM 2.1 hiera-small propagates prompted masklets bidirectionally through a shot at 720p analysis
+    resolution (PyTorch on Metal/CUDA; ONNX port planned). Confidence per frame is the model''s mean
+    in-mask probability — the amber QC strip. Post chain: 3-frame morphological majority (de-flicker),
+    despeckle, grow/shrink, gaussian feather; mattes upsample to source res on export. Shot-bounded
+    by the shared cut detector so propagation never crosses an edit.'
+- id: scribe
+  name: Scribe
+  verbline: Scribe writes it all down.
+  oneliner: 'Local transcription with speakers, captions, and the paper-edit superpower: select text,
+    get a cut timeline back.'
+  status: in-progress
+  accent: '#52678C'
+  stage: edit
+  audiences:
+  - stations
+  - journalists
+  - filmmakers
+  replaces:
+  - name: Studio Speech-to-Text
+    price: $295
+  - name: Descript / Rev / Simon Says
+    price: $15–30/mo
+  platforms:
+  - macOS
+  - Windows
+  - standalone + CLI
+  quickstart:
+  - scribe-cli transcribe interview.mov --diarize
+  - Import the .srt onto a subtitle track; import the marker EDL for speaker-colored timeline markers.
+  - Highlight the quotes you want, export a selects EDL, conform in Resolve.
+  shows_its_work: Word-level confidence shading — you proof the tinted words, not the whole transcript.
+    Timecode math is printed with every export.
+  limitations:
+  - Crosstalk and heavy accents still beat it — a human captioner is the accessibility gold standard.
+  - Diarization confuses similar voices in roomy recordings.
+  - Post only — live captions are community-captioner's job.
+  models:
+  - name: Whisper large-v3-turbo (faster-whisper)
+    license: MIT (OpenAI weights)
+    size: 1.6 GB
+  - name: pyannote segmentation 3.0
+    license: MIT
+    size: 6 MB
+  - name: 3D-Speaker embeddings
+    license: Apache-2.0
+    size: 40 MB
+  features:
+  - Whisper-class local transcription with word-accurate timestamps
+  - Speaker diarization with editable names, colored across all exports
+  - 'Broadcast-legal captions: SRT/VTT with line-length and CPS presets'
+  - Marker EDL puts speaker-colored markers on your Resolve timeline
+  - 'Paper edits: select text, export a CMX3600 selects EDL, conform'
+  tech: 'faster-whisper (CTranslate2 int8) with Silero VAD and word timestamps; diarization via sherpa-onnx
+    (pyannote segmentation 3.0 + 3D-Speaker embeddings, clustered), majority-overlap assigned per
+    segment. Exports are pure, golden-tested writers: SRT/VTT with word-timed re-blocking to caption
+    presets, speaker-colored marker EDLs (Resolve''s Timeline Markers From EDL), and CMX3600 selects
+    EDLs with accumulating record TC and handles. NDF timecode throughout, 23.976 drift documented
+    rather than hidden.'
+- id: clear
+  name: Clear
+  verbline: Clear rescues the voice.
+  oneliner: Voice isolation, de-hum, de-click, room-tone matching, and loudness to spec — the RX-shaped
+    hole in every community edit.
+  status: in-progress
+  accent: '#4A8C7E'
+  stage: sound
+  audiences:
+  - stations
+  - journalists
+  - filmmakers
+  replaces:
+  - name: Studio Voice Isolation
+    price: $295
+  - name: iZotope RX
+    price: $400–1,200
+  platforms:
+  - macOS
+  - Windows
+  - standalone + CLI
+  - VST3 planned
+  quickstart:
+  - clear-cli process interview.wav --isolate 0.65 --loudness broadcast
+  - Auto-detects mains hum (50/60 Hz + harmonics) and notches it.
+  - clear-cli roomtone interview.wav → 30 seconds of matching room tone for your gap fills.
+  shows_its_work: One button plays what was removed. If you hear words in the residual, you're over-processing
+    — the tool teaches honest gain-staging.
+  limitations:
+  - Full-wet isolation sounds processed — the default keeps 35% of the room, on purpose.
+  - No spectral repair painting (a cough under a word is still RX territory).
+  - 'Loudness normalize won''t limit: if your peaks argue with the target, it says so instead of squashing.'
+  models:
+  - name: DeepFilterNet 3 (official binary)
+    license: MIT/Apache dual
+    size: 60 MB
+  features:
+  - DeepFilterNet 3 voice isolation with an honest mix-back default (35% room)
+  - 'Auto de-hum: finds 50/60 Hz and notches the whole harmonic series'
+  - Second-difference de-click that refuses to eat sibilants
+  - Room-tone synthesis from a 2-second profile — endless matching tone
+  - Loudness to broadcast/podcast/streaming spec, with true-peak honesty
+  tech: Isolation runs the official DeepFilterNet 3 binary as a subprocess (48 kHz, real-time class)
+    with our mix-back blend. De-hum detects the mains fundamental by harmonic-sum test against the
+    spectral floor, then zero-phase notch cascades. De-click flags second-difference outliers (no
+    IIR ringing), interpolates runs ≤ 2 ms, and bails honestly if more than 1% of samples flag. Room
+    tone is random-phase resynthesis of a Welch PSD profile — exact spectral envelope, loop-safe tail.
+    Loudness is BS.1770 via pyloudnorm; if the true-peak ceiling fights the target, it says so instead
+    of limiting.
+- id: rise
+  name: Rise
+  verbline: Rise restores the detail.
+  oneliner: SD→HD/4K reconstruction for tape-era archives and punch-in rescue — with a heatmap of
+    what it invented.
+  status: in-progress
+  accent: '#C99A3A'
+  stage: restore
+  audiences:
+  - stations
+  - filmmakers
+  - artists
+  replaces:
+  - name: Studio Super Scale
+    price: $295
+  - name: Topaz Video AI
+    price: ~$300
+  platforms:
+  - macOS
+  - Windows
+  - standalone + CLI
+  - engine inside Pivot
+  quickstart:
+  - rise-cli probe tape.mov — interlace check first (combs + AI = garbage, we refuse politely).
+  - rise-cli up tape.mov --scale 2 --stabilize
+  - 'In Pivot: tick ''enhance punch-ins'' and crops route through the same engine.'
+  shows_its_work: Every render reports which backend actually ran — synthesized texture is labeled
+    synthesis, never 'recovered detail.' The A/B wipe and detail heatmap show you exactly what was
+    made up.
+  limitations:
+  - Per-frame model + temporal stabilization ≠ Topaz's temporal models on fast motion.
+  - Faces can go uncanny; face restore is opt-in and off by default for journalism.
+  models:
+  - name: Real-ESRGAN x4 (our ONNX export)
+    license: BSD-3 (xinntao)
+    size: 64 MB
+  features:
+  - Real-ESRGAN reconstruction, tiled and seam-free at any resolution
+  - Flow-gated temporal stabilization kills per-frame shimmer
+  - Interlace guard refuses combed sources instead of sharpening the combs
+  - 'Detail heatmap + A/B wipe: see exactly what was synthesized'
+  - The same engine powers Pivot's punch-in enhancement
+  tech: Official Real-ESRGAN x4plus weights converted to a pinned ONNX (the conversion script ships),
+    run through ONNX Runtime (CoreML/DirectML/CUDA) with 512 px tiles and ramped overlap blending
+    — golden-tested seam-free vs whole-frame. Temporal stabilization warps the previous output by
+    Farneback flow and blends where warp error is low. The engine is a frozen API consumed by both
+    the app and Pivot; every result carries which backend actually ran, and synthesis is always labeled
+    synthesis.
+- id: depth
+  name: Depth
+  verbline: Depth measures the scene.
+  oneliner: A depth matte for every clip — fog, rack focus, and depth-graded atmosphere through a
+    paste-in Fusion template pack.
+  status: in-progress
+  accent: '#5E5A8C'
+  stage: color
+  audiences:
+  - filmmakers
+  - artists
+  replaces:
+  - name: Studio Depth Map + Relight
+    price: $295
+  platforms:
+  - macOS
+  - Windows
+  - standalone + CLI
+  - Fusion templates
+  quickstart:
+  - depth-cli run scene.mov → a 10-bit gray depth matte clip beside your footage.
+  - 'depth-cli templates → five paste-ready Fusion setups: Fog, Rack Focus, Depth Grade, Parallax
+    2.5D, Haze Light.'
+  - 'Color page: Add Matte, key through the depth bands.'
+  shows_its_work: False-color previews with a click-anywhere probe, per-shot range readouts, and a
+    temporal-stability meter that flags flicker before you grade.
+  limitations:
+  - Relative depth, not metric — mattes and atmosphere, not measurement.
+  - Mirrors, glass, and scale tricks fool it.
+  - v0.1 backend is per-frame with temporal smoothing; the video-native model is planned.
+  models:
+  - name: MiDaS-small
+    license: MIT (Intel ISL)
+    size: 64 MB
+  features:
+  - A relative depth matte for every clip, temporally smoothed per shot
+  - Edge-guided upsampling keeps depth edges locked to image edges
+  - 10-bit gray ProRes mattes the Color page keys through directly
+  - 'Five paste-in Fusion templates: fog, rack focus, depth grade, parallax, haze'
+  - False-color probe view with per-shot range readouts
+  tech: MiDaS-small (256 px, MIT) behind a model-agnostic engine — Video-Depth-Anything-Small is the
+    planned v0.2 backend. Temporal EMA resets at every cut; per-shot normalization uses 2/98 percentiles
+    so hot pixels can't crush the range. Upsampling is a He-style guided filter against the source
+    luma, keeping depth edges on image edges. Export packs 0–1 depth into 10-bit gray ProRes 4444
+    (near = white by default, invertible, gamma-mappable).
+- id: level
+  name: Level
+  status: proposed
+  stage: deliver
+  oneliner: 'Drag-and-drop broadcast QC: loudness, legal levels, black/silence — with a human-readable
+    report.'
+  replaces:
+  - name: enterprise QC suites
+    price: five figures
+  audiences:
+  - stations
+- id: strobe
+  name: Strobe
+  status: proposed
+  stage: deliver
+  oneliner: Free photosensitive-epilepsy risk analysis with timeline markers at every failure.
+  replaces:
+  - name: Harding FPA
+    price: thousands/yr
+  audiences:
+  - stations
+  - journalists
+- id: slate
+  name: Slate
+  status: proposed
+  stage: deliver
+  oneliner: 'Station graphics kit: slates, bars & tone, countdowns, lower-third templates.'
+  replaces:
+  - name: hand-rolled every time
+    price: hours
+  audiences:
+  - stations
+- id: veil
+  name: Veil
+  status: proposed
+  stage: deliver
+  oneliner: 'Source protection: tracked blur with a leak-check that verifies every frame before export.'
+  replaces:
+  - name: manual roto + prayer
+    price: risk
+  audiences:
+  - journalists
+- id: minutes
+  name: Minutes
+  status: proposed
+  stage: edit
+  oneliner: 'Civic-meeting engine: agenda-aligned chapters, who-spoke-when, clip pull-lists, draft
+    minutes.'
+  replaces:
+  - name: nothing exists
+    price: —
+  audiences:
+  - stations
+  - journalists
+- id: rewind
+  name: Rewind
+  status: proposed
+  stage: restore
+  oneliner: 'Analog tape rescue: dropouts, head-switch noise, chroma bleed, TBC wobble.'
+  replaces:
+  - name: nothing turnkey at any price
+    price: —
+  audiences:
+  - stations
+  - artists
+- id: mend
+  name: Mend
+  status: proposed
+  stage: restore
+  oneliner: 'Film damage repair: dust, scratches, splice bumps, gate weave.'
+  replaces:
+  - name: PFClean / Diamant
+    price: 4–5 figures
+  audiences:
+  - stations
+  - filmmakers
+- id: steady
+  name: Steady
+  status: proposed
+  stage: restore
+  oneliner: Temporal deflicker for time-lapse, LED flicker, and archival footage.
+  replaces:
+  - name: Flicker Free
+    price: ~$150
+  audiences:
+  - filmmakers
+- id: flow
+  name: Flow
+  status: proposed
+  stage: restore
+  oneliner: 'Optical-flow retiming: smooth slow motion, frame interpolation, synthetic motion blur.'
+  replaces:
+  - name: Studio Speed Warp / Twixtor
+    price: $295–600
+  audiences:
+  - filmmakers
+- id: split
+  name: Split
+  status: proposed
+  stage: sound
+  oneliner: Stem separation — including removing unlicensed background music from submissions.
+  replaces:
+  - name: Studio Music Remixer / RipX
+    price: $295+
+  audiences:
+  - stations
+- id: match
+  name: Match
+  status: proposed
+  stage: color
+  oneliner: Match any clip to a reference still — emits a LUT and a report of what changed.
+  replaces:
+  - name: Colourlab AI
+    price: ~$550/yr
+  audiences:
+  - filmmakers
+- id: attest
+  name: Attest
+  status: proposed
+  stage: deliver
+  oneliner: 'C2PA content credentials: sign exports, verify sources, disclose AI operations honestly.'
+  replaces:
+  - name: emerging enterprise tools
+    price: —
+  audiences:
+  - journalists
+- id: babel
+  name: Babel
+  status: proposed
+  stage: edit
+  oneliner: 'Language access: translated subtitle tracks and optional local synthetic dubs.'
+  replaces:
+  - name: per-minute captioning services
+    price: $$/min
+  audiences:
+  - stations
+- id: index
+  name: Index
+  status: proposed
+  stage: edit
+  oneliner: 'A local footage librarian: auto-log the archive, search it in plain language.'
+  replaces:
+  - name: iconik / axle.ai
+    price: per-seat SaaS
+  audiences:
+  - stations
+- id: pulse
+  name: Pulse
+  status: proposed
+  stage: edit
+  oneliner: 'Music-aware cutting: beat-grid markers and montage sketches to a track.'
+  replaces:
+  - name: assorted beat-sync tools
+    price: $
+  audiences:
+  - filmmakers
+  - artists
+- id: bend
+  name: Bend
+  status: proposed
+  stage: color
+  oneliner: 'The glitch instrument: datamosh, pixel-sort, slit-scan, feedback — keyframable and performable.'
+  replaces:
+  - name: AE datamosh plugins + abandonware
+    price: ~$40
+  audiences:
+  - artists
+- id: speak
+  name: Speak
+  verbline: Speak gives the image its voice.
+  oneliner: 'Film character for the last node: stock density, subtractive color, halation, bloom,
+    grain placed by Hush''s confidence matte.'
+  status: in-progress
+  accent: '#E89D6B'
+  stage: color
+  audiences:
+  - filmmakers
+  - artists
+  replaces:
+  - name: Dehancer
+    price: ~$380
+  - name: FilmConvert Nitrate
+    price: ~$140
+  platforms:
+  - macOS
+  - Windows
+  - OpenFX · last node
+  links:
+    github: https://github.com/amateurmenace/Hush-OpenNR
+  quickstart:
+  - Hush first node, Speak last node. Grade in between.
+  - Speak reads Hush's clean-confidence matte and lays grain exactly where the image was cleaned most.
+  shows_its_work: Works in DaVinci Wide Gamut with the optical steps in linear light — one look, every
+    deliverable.
+  limitations:
+  - In development — the texture-reconstruction stack (Hush v3.6) ships first.
+  models: []
+  features:
+  - Film-stock density and subtractive color, built in DaVinci Wide Gamut
+  - Halation and bloom computed in linear light, like the optics they imitate
+  - Grain placed by Hush's confidence matte — texture where cleaning happened
+  - 'One look, every deliverable: RCM converts to Rec.709, P3, or HDR'
+  tech: 'In development on Hush''s texture-reconstruction stack. Color architecture: density and split-toning
+    operate in DaVinci Wide Gamut; halation and bloom in linear light; grain amplitude follows Hush''s
+    clean-confidence matte so texture returns exactly where denoising worked. Ships when the look
+    holds across Rec.709, P3, and HDR trims from one setting.'

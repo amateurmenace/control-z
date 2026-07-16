@@ -1,0 +1,24 @@
+{
+	Tools = ordered() {
+		CZGradeNote = Note {
+			Inputs = { Comments = Input { Value = "control-z Depth · DEPTH GRADE — wire depth matte → each Bitmap.Image. Three masks: NEAR/MID/FAR. Feed them to ColorCorrector EffectMask inputs (or export to Color page).", } },
+			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
+		},
+		CZNear = Bitmap {
+			Inputs = { Channel = Input { Value = FuID { "Luminance" }, },
+				Low = Input { Value = 0.66, }, },
+			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+		},
+		CZMid = Bitmap {
+			Inputs = { Channel = Input { Value = FuID { "Luminance" }, },
+				Low = Input { Value = 0.33, }, High = Input { Value = 0.66, }, },
+			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
+		},
+		CZFar = Bitmap {
+			Inputs = { Channel = Input { Value = FuID { "Luminance" }, },
+				High = Input { Value = 0.33, }, },
+			ViewInfo = OperatorInfo { Pos = { 275, 45 } },
+		},
+	},
+	ActiveTool = "CZNear"
+}

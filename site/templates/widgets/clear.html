@@ -1,0 +1,98 @@
+<section>
+  <div class="wrap">
+    <div class="kicker">try it by ear</div>
+    <h2>Hear the rescue — and hear what was removed.</h2>
+    <div class="demo">
+      <div class="head"><span><b>synthesized room</b> · a "voice", HVAC-ish noise, and 60 Hz mains hum — all generated in your browser</span><span>webaudio · nothing uploaded</span></div>
+      <div class="row">
+        <button class="hushbtn" id="clPlay">▶ play the noisy room</button>
+        <button class="hushbtn" id="clHum">de-hum: off</button>
+        <label>isolate <input type="range" id="clIso" min="0" max="100" value="0"></label>
+        <button class="hushbtn" id="clRes">listen to what's removed</button>
+      </div>
+      <div class="readout">
+        <span>hum: <b id="clHumR">present (60/120/180 Hz)</b></span>
+        <span>room kept: <b id="clRoomR">100%</b></span>
+        <span class="live" id="clNote">● the residual button is the whole philosophy: if the voice shows up in there, back off</span>
+      </div>
+    </div>
+    <p style="font-size:14px;margin-top:10px">The real tool runs DeepFilterNet 3 for
+    isolation (this demo just crossfades the synthetic room), auto-detects the hum
+    fundamental, and defaults to keeping 35% of the room — full-wet rarely sounds human.</p>
+  </div>
+</section>
+<script>
+(function () {
+  var ctx = null, playing = false, residual = false, dehum = false;
+  var nodes = {};
+  var playBtn = document.getElementById('clPlay'), humBtn = document.getElementById('clHum');
+  var resBtn = document.getElementById('clRes'), iso = document.getElementById('clIso');
+  function build() {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var out = ctx.createGain(); out.gain.value = .9; out.connect(ctx.destination);
+    // clean bus (what you keep) and removed bus (what clear took out)
+    var keep = ctx.createGain(), removed = ctx.createGain();
+    keep.connect(out); removed.connect(out); removed.gain.value = 0;
+    // "voice": two detuned triangles walking a little melody
+    var vGain = ctx.createGain(); vGain.gain.value = .16; vGain.connect(keep);
+    [0, 5].forEach(function (det) {
+      var o = ctx.createOscillator(); o.type = 'triangle'; o.detune.value = det;
+      o.connect(vGain); o.start(); (nodes.voz = nodes.voz || []).push(o);
+    });
+    var mel = [220, 246.9, 196, 220, 293.7, 261.6, 220, 174.6], mi = 0;
+    nodes.melT = setInterval(function () {
+      nodes.voz.forEach(function (o) { o.frequency.setTargetAtTime(mel[mi % mel.length], ctx.currentTime, .05); });
+      mi++;
+    }, 420);
+    // room: filtered noise, split into kept vs removed by the isolate slider
+    var buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    var d = buf.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    var noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
+    var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    noise.connect(lp); noise.start();
+    nodes.roomKeep = ctx.createGain(); nodes.roomKeep.gain.value = .12;
+    nodes.roomCut = ctx.createGain(); nodes.roomCut.gain.value = 0;
+    lp.connect(nodes.roomKeep); lp.connect(nodes.roomCut);
+    nodes.roomKeep.connect(keep); nodes.roomCut.connect(removed);
+    // hum: 60 + harmonics, routed kept OR removed depending on de-hum
+    nodes.humKeep = ctx.createGain(); nodes.humCut = ctx.createGain();
+    nodes.humKeep.gain.value = 1; nodes.humCut.gain.value = 0;
+    nodes.humKeep.connect(keep); nodes.humCut.connect(removed);
+    [[60, .05], [120, .02], [180, .012]].forEach(function (h) {
+      var o = ctx.createOscillator(); o.frequency.value = h[0];
+      var g = ctx.createGain(); g.gain.value = h[1];
+      o.connect(g); g.connect(nodes.humKeep); g.connect(nodes.humCut); o.start();
+    });
+    nodes.keep = keep; nodes.removed = removed;
+  }
+  function update() {
+    if (!ctx) return;
+    var a = iso.value / 100;
+    nodes.roomKeep.gain.setTargetAtTime(.12 * (1 - a), ctx.currentTime, .05);
+    nodes.roomCut.gain.setTargetAtTime(.12 * a, ctx.currentTime, .05);
+    nodes.humKeep.gain.setTargetAtTime(dehum ? 0 : 1, ctx.currentTime, .05);
+    nodes.humCut.gain.setTargetAtTime(dehum ? 1 : 0, ctx.currentTime, .05);
+    nodes.keep.gain.setTargetAtTime(residual ? 0 : 1, ctx.currentTime, .05);
+    nodes.removed.gain.setTargetAtTime(residual ? 1 : 0, ctx.currentTime, .05);
+    document.getElementById('clHumR').textContent = dehum ? 'notched (fundamental + harmonics)' : 'present (60/120/180 Hz)';
+    document.getElementById('clRoomR').textContent = Math.round(100 - a * 100) + '%';
+    document.getElementById('clNote').textContent = residual
+      ? '● you are hearing the REMOVED audio — the voice should NOT be in here'
+      : '● the residual button is the whole philosophy: if the voice shows up in there, back off';
+  }
+  playBtn.onclick = function () {
+    if (!ctx) build();
+    if (ctx.state === 'suspended') ctx.resume();
+    playing = !playing;
+    nodes.keep.gain.value = playing && !residual ? 1 : 0;
+    nodes.removed.gain.value = playing && residual ? 1 : 0;
+    if (!playing) { nodes.keep.gain.value = 0; nodes.removed.gain.value = 0; }
+    playBtn.textContent = playing ? '■ stop' : '▶ play the noisy room';
+    playBtn.classList.toggle('on', playing);
+    if (playing) update();
+  };
+  humBtn.onclick = function () { dehum = !dehum; humBtn.textContent = 'de-hum: ' + (dehum ? 'ON' : 'off'); humBtn.classList.toggle('on', dehum); update(); };
+  resBtn.onclick = function () { residual = !residual; resBtn.classList.toggle('on', residual); if (playing) update(); };
+  iso.oninput = update;
+})();
+</script>

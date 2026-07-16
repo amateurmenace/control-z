@@ -1,0 +1,17 @@
+<section>
+  <div class="wrap">
+    <div class="kicker">try it by eye</div>
+    <h2>Real footage, default settings.</h2>
+    <div class="demo">
+      <div class="head"><span><b>validation scene</b> · 5% gaussian noise · 26.0 → 39.0 dB PSNR</span><span>drag</span></div>
+      <div class="wipe">
+        <img src="{{ b64('after.jpg') }}" alt="Denoised output">
+        <div class="top"><img src="{{ b64('before.jpg') }}" alt="Noisy input"></div>
+        <span class="lab" style="left:10px">NOISY IN</span>
+        <span class="lab" style="right:10px">HUSH OUT</span>
+        <div class="handle" style="left:50%"></div>
+      </div>
+      <div class="readout"><span class="live">● hard edges, fine checker texture and 2-px lines survive</span></div>
+    </div>
+  </div>
+</section>

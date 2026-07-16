@@ -1,0 +1,21 @@
+{
+	Tools = ordered() {
+		CZParallaxNote = Note {
+			Inputs = { Comments = Input { Value = "control-z Depth · PARALLAX 2.5D — wire: your image → CZParallax.Input; depth matte → CZParallax.Foreground (displacement source). Animate CZPush.Center a few pixels for the move.", } },
+			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
+		},
+		CZParallax = Displace {
+			Inputs = {
+				Type = Input { Value = 1, },
+				XRefraction = Input { Value = 0.03, },
+				YRefraction = Input { Value = 0.015, },
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+		},
+		CZPush = Transform {
+			Inputs = { Size = Input { Value = 1.06, }, },
+			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
+		},
+	},
+	ActiveTool = "CZPush"
+}

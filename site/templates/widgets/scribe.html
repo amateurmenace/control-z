@@ -1,0 +1,90 @@
+<section>
+  <div class="wrap">
+    <div class="kicker">try the paper edit</div>
+    <h2>Click a word. Click another. That's your cut.</h2>
+    <div class="demo">
+      <div class="head"><span><b>real transcript</b> · two synthesized voices, diarized by scribe itself</span><span>click words to mark in/out</span></div>
+      <div id="scWords" style="font-size:16px;line-height:2;padding:6px 4px 10px;user-select:none"></div>
+      <canvas id="scTL" height="64" style="border:1px solid var(--border);border-radius:8px"></canvas>
+      <div class="row">
+        <button class="hushbtn" id="scClear">clear selects</button>
+        <span class="readout" style="padding:0"><span>pull list: <b id="scCount">0</b></span></span>
+      </div>
+      <div class="formula" id="scEDL">TITLE: Scribe selects
+FCM: NON-DROP FRAME
+
+(mark two words to write your first event)</div>
+    </div>
+  </div>
+</section>
+<script>
+(function () {
+  var SEGS = {{ asset_text('scribe-demo.json') }};
+  var COLORS = { 'Speaker 1':'#52678C', 'Speaker 2':'#4A8C7E' };
+  var box = document.getElementById('scWords'), tl = document.getElementById('scTL');
+  var edl = document.getElementById('scEDL'), count = document.getElementById('scCount');
+  var dur = 0; SEGS.forEach(function (s) { s.words.forEach(function (w) { dur = Math.max(dur, w.e); }); });
+  var pendIn = null, selects = [];
+  SEGS.forEach(function (s) {
+    var sp = document.createElement('span');
+    sp.innerHTML = '<b style="font:700 11px var(--mono);color:' + COLORS[s.speaker] + '">' + s.speaker.toUpperCase() + ': </b>';
+    box.appendChild(sp);
+    s.words.forEach(function (w) {
+      var el = document.createElement('span');
+      el.textContent = w.w + ' ';
+      el.style.cssText = 'cursor:pointer;border-radius:4px;padding:1px 2px';
+      el.onmouseenter = function () { el.style.background = '#FEF6E6'; };
+      el.onmouseleave = function () { el.style.background = el.dataset.on ? 'rgba(91,140,101,.18)' : ''; };
+      el.onclick = function () {
+        if (pendIn === null) { pendIn = w.s; el.dataset.on = 1; el.style.background = 'rgba(91,140,101,.18)'; }
+        else { selects.push([Math.min(pendIn, w.s), Math.max(pendIn, w.e)]); pendIn = null; render(); }
+      };
+      el.dataset.s = w.s; el.dataset.e = w.e;
+      box.appendChild(el);
+    });
+    box.appendChild(document.createElement('br'));
+  });
+  function tc(sec) {
+    var f = Math.round(sec * 24), fr = f % 24, s = ((f / 24) | 0) % 60, m = ((f / 1440) | 0) % 60;
+    function z(n) { return (n < 10 ? '0' : '') + n; }
+    return '00:' + z(m) + ':' + z(s) + ':' + z(fr);
+  }
+  function render() {
+    count.textContent = selects.length;
+    var rec = 3600 * 24, lines = ['TITLE: Scribe selects', 'FCM: NON-DROP FRAME', ''];
+    selects.forEach(function (sel, i) {
+      var durF = Math.round((sel[1] - sel[0]) * 24);
+      function rtc(f) { var fr = f % 24, s = ((f / 24) | 0) % 60, m = ((f / 1440) | 0) % 60, h = (f / 86400) | 0;
+        function z(n) { return (n < 10 ? '0' : '') + n; } return z(h) + ':' + z(m) + ':' + z(s) + ':' + z(fr); }
+      lines.push(String(i + 1).padStart(3, '0') + '  MEETING  V     C        ' +
+        tc(sel[0]) + ' ' + tc(sel[1]) + ' ' + rtc(rec) + ' ' + rtc(rec + durF));
+      lines.push('* FROM CLIP NAME: meeting.wav'); lines.push('');
+      rec += durF;
+    });
+    if (!selects.length) lines.push('(mark two words to write your first event)');
+    edl.textContent = lines.join('\n');
+    draw();
+    document.querySelectorAll('#scWords span[data-s]').forEach(function (el) {
+      var on = selects.some(function (sel) { return +el.dataset.s >= sel[0] - 1e-6 && +el.dataset.e <= sel[1] + 1e-6; });
+      el.dataset.on = on ? 1 : '';
+      el.style.background = on ? 'rgba(91,140,101,.18)' : '';
+    });
+  }
+  function draw() {
+    tl.width = tl.clientWidth * 2; var W = tl.width, H = tl.height;
+    var g = tl.getContext('2d'); g.clearRect(0, 0, W, H);
+    g.fillStyle = '#EFEDE6'; g.fillRect(0, 0, W, H);
+    SEGS.forEach(function (s) {
+      g.fillStyle = COLORS[s.speaker] + '55';
+      var a = s.words[0].s / dur * W, b = s.words[s.words.length - 1].e / dur * W;
+      g.fillRect(a, 8, b - a, H - 16);
+    });
+    g.fillStyle = '#3D5A47';
+    selects.forEach(function (sel) {
+      g.fillRect(sel[0] / dur * W, 2, Math.max(3, (sel[1] - sel[0]) / dur * W), H - 4);
+    });
+  }
+  document.getElementById('scClear').onclick = function () { selects = []; pendIn = null; render(); };
+  render(); addEventListener('resize', draw);
+})();
+</script>

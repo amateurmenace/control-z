@@ -1,0 +1,25 @@
+{
+	Tools = ordered() {
+		CZRackNote = Note {
+			Inputs = { Comments = Input { Value = "control-z Depth · RACK FOCUS — wire: your image → CZRackFocus.Input; depth matte MediaIn → CZRackFocus.Blur. Animate FocalPoint 0..1 (uses depth as blur map after CZFocalShift).", } },
+			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
+		},
+		CZFocalShift = BrightnessContrast {
+			Inputs = {
+				Gain = Input { Value = 2.0, },
+				Lift = Input { Value = -0.5, },
+				ClipBlack = Input { Value = 1, }, ClipWhite = Input { Value = 1, },
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+		},
+		CZRackFocus = VariBlur {
+			Inputs = {
+				BlurSize = Input { Value = 24, },
+				Method = Input { Value = FuID { "Soft" }, },
+				Blur = Input { SourceOp = "CZFocalShift", Source = "Output", },
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
+		},
+	},
+	ActiveTool = "CZRackFocus"
+}

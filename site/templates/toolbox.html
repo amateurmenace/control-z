@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}The free toolbox · control-z{% endblock %}
+{% block body %}
+<div class="wrap" style="max-width:760px">
+  <section style="padding:52px 0 8px">
+    <span class="k">tools we recommend instead of rebuilding</span>
+    <h1 style="font-size:38px">The rest of the free stack.</h1>
+  </section>
+  <div style="font-size:16px;display:grid;gap:14px">
+    <p>control-z only builds what doesn't exist for free. These already exist, are already
+    excellent, and belong in every kit — we link them instead of cloning them:</p>
+    <ul style="margin-left:22px;display:grid;gap:10px">
+      <li><b><a href="https://handbrake.fr">HandBrake</a></b> — transcoding.</li>
+      <li><b><a href="https://www.shutterencoder.com">Shutter Encoder</a></b> — the swiss-army
+      converter (ProRes proxies, rewraps, burn-ins).</li>
+      <li><b><a href="https://github.com/mifi/lossless-cut">LosslessCut</a></b> — instant
+      trims without re-encoding.</li>
+      <li><b><a href="https://obsproject.com">OBS Studio</a></b> — capture and streaming.</li>
+      <li><b><a href="https://www.audacityteam.org">Audacity</a></b> — quick audio surgery.</li>
+      <li><b><a href="https://natrongithub.github.io">Natron</a></b> — node compositing
+      (and it runs OpenFX, so Hush works there too).</li>
+    </ul>
+    <p>From our own shop, outside the suite: <b>community-captioner</b> (free browser-based
+    live captions for OBS — Scribe's live sibling) and the BIG download/ingest utilities.
+    Ask at <a href="https://community.weirdmachine.org">Community AI</a>.</p>
+  </div>
+</div>
+{% endblock %}

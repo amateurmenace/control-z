@@ -1,0 +1,33 @@
+<section>
+  <div class="wrap">
+    <div class="kicker">the pair, in the tree</div>
+    <h2>Denoise early. Reconstruct late.</h2>
+    <div class="ntree">
+      <div class="flow">
+        <div class="nt io"><span class="st">node 1</span><b>MediaIn</b><small>your clip</small></div>
+        <div class="wire"><i></i></div>
+        <div class="nt tool" style="--nc:#9BD3A6"
+          data-t="Hush · denoise, first"
+          data-b="Denoise before the grade amplifies noise — and while Hush can still see the original neighbour frames it stacks. Cache this node and grade in real time. It exports a clean-confidence matte that Speak reads downstream.">
+          <span class="st">node 2</span><b>Hush</b><small>NR · first</small></div>
+        <div class="wire"><i></i></div>
+        <div class="nt"
+          data-t="Your grade, in the middle"
+          data-b="Contrast, balance, look — all on clean footage, all in real time against Hush's cached node. This part stays entirely yours.">
+          <span class="st">node 3</span><b>Grade</b><small>yours</small></div>
+        <div class="wire"><i></i></div>
+        <div class="nt tool start" style="--nc:#F0B486"
+          data-t="Speak · film, last"
+          data-b="Film character, last: stock emulation, split toning, subtractive saturation, halation, bloom and grain. Most steps run in DaVinci Wide Gamut; the optical ones in linear light. Speak reads Hush's confidence matte to lay grain exactly where the image was cleaned most.">
+          <span class="st">node 4</span><b>Speak</b><small>film · last</small></div>
+        <div class="wire"><i></i></div>
+        <div class="nt io"><span class="st">deliver</span><b>Out</b><small>Rec.709 / P3 / HDR</small></div>
+      </div>
+      <div class="band">
+        <div class="ws">davinci wide gamut · one look, every deliverable</div>
+        <div class="ws" style="color:#F0B486;border-color:rgba(232,157,107,.4)">hush's matte rides downstream → speak lays grain where the image was cleaned most</div>
+      </div>
+    </div>
+    <div class="nt-detail"></div>
+  </div>
+</section>

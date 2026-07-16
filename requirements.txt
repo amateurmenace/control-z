@@ -1,0 +1,4 @@
+# Pivot v0.1 pipeline (decode / detect / render). Core algorithm tests need none of these.
+numpy
+av
+opencv-python

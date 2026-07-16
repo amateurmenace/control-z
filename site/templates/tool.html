@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ t.name }} — {{ t.verbline }} · control-z{% endblock %}
+{% block desc %}{{ t.oneliner }}{% endblock %}
+{% block style %}
+  .toolhero { padding:46px 0 8px; }
+  .toolhero h1 { font-size:clamp(48px,7vw,80px); line-height:.95; letter-spacing:-.03em; color:{{ t.accent }}; }
+  .toolhero h1 .dot { color:var(--amber); }
+  .rep { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; margin-top:22px; }
+  .rep .pcard { padding:18px 20px 16px; }
+  .rep .pcard h3 { font-size:20px; }
+  .rep .price { font:700 15px var(--mono); color:#9A6F1D; }
+  section.study .tipcard { background:rgba(255,255,255,.045); border:1px solid rgba(197,214,204,.18); }
+  section.study .tipcard b { color:#F5F3EE; }
+  section.study .tipcard p { color:var(--sage); }
+{% endblock %}
+{% block body %}
+<div class="wrap toolhero">
+  <div class="kicker">control-z · {{ t.stage }} · <span class="status {{ t.status }}">{{ t.status }}</span></div>
+  <h1>{{ t.name }}<span class="dot">.</span></h1>
+  <div class="tag">{{ t.verbline }}</div>
+  <p class="lead" style="font-size:19px;color:var(--text-med);max-width:56ch">{{ t.oneliner }}</p>
+  <div class="cta">
+    {% if t.links and t.links.download %}<a class="btn btn-green" href="{{ t.links.download }}">Download</a>{% endif %}
+    {% if t.links and t.links.github %}<a class="btn btn-line" href="{{ t.links.github }}">Source</a>{% endif %}
+    {% if not (t.links and t.links.download) %}<a class="btn btn-line" href="roadmap.html">Building in the open — roadmap</a>{% endif %}
+  </div>
+  <div class="meta">{{ t.platforms|join(" · ") }} · for {{ t.audiences|join(", ") }}</div>
+  <div class="feat-row">
+    <span class="feat"><b>✓</b>free forever</span><span class="feat"><b>✓</b>free Resolve</span>
+    <span class="feat"><b>✓</b>local only</span><span class="feat"><b>✓</b>shows its work</span>
+  </div>
+</div>
+
+{% include ['widgets/' ~ t.id ~ '.html'] ignore missing %}
+
+<section class="alt">
+  <div class="wrap">
+    <div class="kicker">what it replaces</div>
+    <h2>The paywalled equivalents.</h2>
+    <div class="rep">
+      {% for r in t.replaces %}
+      <div class="pcard" style="--pc:var(--border-lt)">
+        <span class="pc-tag">theirs</span><h3 style="color:var(--dark)">{{ r.name }}</h3>
+        <span class="price">{{ r.price }}</span>
+      </div>
+      {% endfor %}
+      <div class="pcard" style="--pc:{{ t.accent }}">
+        <div class="pc-top"><span class="pc-tag">ours</span><span class="pc-free">100% FREE</span></div>
+        <h3 style="color:{{ t.accent }}">{{ t.name }}</h3>
+        <span class="price" style="color:#2E6B3A">$0, forever</span>
+      </div>
+    </div>
+    <p style="font-size:13.5px;margin-top:12px">Prices are honest ballparks at time of
+    writing — the paid tools are good tools; the point is that you shouldn't need them
+    to get professional results.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">quick start</div>
+    <h2>Up and running.</h2>
+    <ol class="install">
+      {% for q in t.quickstart %}<li>{{ q }}</li>{% endfor %}
+    </ol>
+  </div>
+</section>
+
+<section class="study">
+  <canvas class="grain"></canvas>
+  <div class="wrap">
+    <div class="kicker">shows its work</div>
+    <h2>Nothing is a black box.</h2>
+    <p class="lede">{{ t.shows_its_work }}</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">honest limitations</div>
+    <h2>Where the paid tool still wins.</h2>
+    <div class="tips">
+      {% for l in t.limitations %}
+      <div class="tipcard"><span class="tn">limit {{ loop.index }}</span><p style="margin-top:0">{{ l }}</p></div>
+      {% endfor %}
+    </div>
+    {% if t.models %}
+    <div class="kicker" style="margin-top:40px">model card</div>
+    <table>
+      <tr><th>model</th><th>license</th><th>size</th></tr>
+      {% for m in t.models %}<tr><td><b style="color:var(--green)">{{ m.name }}</b></td><td>{{ m.license }}</td><td>{{ m.size }}</td></tr>{% endfor %}
+    </table>
+    <p style="font-size:13.5px">Downloaded on first use with the license shown, verified
+    by SHA-256, stored once for the whole suite. Rejected on principle: anything
+    non-commercial, gated, or phoning home.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
