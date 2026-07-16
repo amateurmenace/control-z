@@ -68,16 +68,108 @@
   section.study .tipcard { background:rgba(255,255,255,.045); border:1px solid rgba(197,214,204,.18); }
   section.study .tipcard b { color:#F5F3EE; }
   section.study .tipcard p { color:var(--sage); }
-  /* downloads strip */
-  .dl { display:grid; grid-template-columns:repeat(2,1fr); gap:18px; margin-top:30px; }
-  @media (max-width:760px){ .dl{grid-template-columns:1fr;} }
-  .dl .pcard { padding:30px 30px 26px; display:flex; flex-direction:column; }
-  .dl .pcard h3 { font-size:30px; }
-  .dl .pcard .sub { font:500 12.5px var(--mono); color:var(--text-lt); display:block; margin:4px 0 14px; letter-spacing:.03em; }
-  .dl .pcard p { flex:1; }
+  /* ---- downloads: three tiers — the app, the plugins, the resources ---- */
+  .subhead { display:flex; align-items:baseline; gap:14px; margin:44px 0 2px; }
+  .subhead h3 { font:700 22px "Space Grotesk",sans-serif; color:var(--green); letter-spacing:-.015em; white-space:nowrap; }
+  .subhead span { font:500 12.5px var(--mono); color:var(--text-lt); white-space:nowrap; }
+  .subhead .sh-rule { flex:1; height:1px; background:linear-gradient(90deg, var(--border-lt), transparent); }
+  @media (max-width:640px){ .subhead { flex-wrap:wrap; gap:6px; } .subhead span { white-space:normal; } }
+
+  /* the Suite: one wide dark bar with a spotlight that follows the cursor */
+  .suitebar { position:relative; display:block; margin-top:26px; overflow:hidden;
+    border-radius:var(--r-lg); background:linear-gradient(160deg,#191921 0%,#1d2420 60%,#24301F 100%);
+    border:1px solid #33452F; padding:30px 32px 26px; text-decoration:none;
+    box-shadow:0 18px 50px rgba(20,28,18,.28); transition:box-shadow .3s, transform .3s; }
+  .suitebar:hover { text-decoration:none; transform:translateY(-3px);
+    box-shadow:0 26px 66px rgba(20,28,18,.38); }
+  .suitebar::before { content:""; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(closest-side at var(--mx,70%) var(--my,40%),
+      rgba(229,168,53,.20), transparent 72%); opacity:0; transition:opacity .35s; }
+  .suitebar:hover::before { opacity:1; }
+  .suitebar > * { position:relative; z-index:1; }
+  .sb-top { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  .sb-kicker { font:700 10px var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--amber); }
+  .sb-free { font:800 9.5px var(--mono); letter-spacing:.12em; color:#9BD3A6;
+    border:1px solid rgba(155,211,166,.45); border-radius:999px; padding:2px 8px; }
+  .suitebar b { display:block; font:700 clamp(30px,3.6vw,44px) "Space Grotesk",sans-serif;
+    color:#F5F3EE; letter-spacing:-.025em; margin:8px 0 6px; }
+  .suitebar p { color:var(--sage-lt); font-size:15.5px; max-width:62ch; margin:0; }
+  .sb-tools { display:flex; gap:8px; flex-wrap:wrap; margin:20px 0 22px; }
+  .sb-tools span { font:700 11.5px var(--mono); letter-spacing:.04em; color:var(--sage);
+    border:1px solid #3a4c34; border-radius:999px; padding:6px 12px;
+    transition:color .25s, border-color .25s, box-shadow .25s, transform .25s; }
+  .suitebar:hover .sb-tools span { color:var(--tc); border-color:var(--tc);
+    box-shadow:0 0 16px color-mix(in srgb, var(--tc) 30%, transparent); transform:translateY(-2px); }
+  .suitebar:hover .sb-tools span:nth-child(1){ transition-delay:0s }
+  .suitebar:hover .sb-tools span:nth-child(2){ transition-delay:.05s }
+  .suitebar:hover .sb-tools span:nth-child(3){ transition-delay:.1s }
+  .suitebar:hover .sb-tools span:nth-child(4){ transition-delay:.15s }
+  .suitebar:hover .sb-tools span:nth-child(5){ transition-delay:.2s }
+  .suitebar:hover .sb-tools span:nth-child(6){ transition-delay:.25s }
+  .sb-cta { display:inline-flex; align-items:center; gap:8px; font:700 14.5px "DM Sans",sans-serif;
+    background:var(--amber); color:#4A3A10; padding:12px 22px; border-radius:999px;
+    transition:gap .25s, background .2s; }
+  .suitebar:hover .sb-cta { gap:14px; background:#F0B84A; }
+  @media (prefers-reduced-motion:reduce){
+    .suitebar, .suitebar:hover, .sb-tools span, .sb-cta { transition:none; transform:none; }
+  }
+
+  /* the OpenFX pair, as night and day — the same element as the design study */
+  .daynight { display:flex; border-radius:var(--r-lg); overflow:hidden;
+    border:1px solid var(--border-lt); box-shadow:0 18px 50px rgba(20,28,18,.20);
+    min-height:clamp(190px,24vw,250px); margin:18px 0 4px; }
+  .dn { flex:1; position:relative; display:flex; flex-direction:column; justify-content:flex-end;
+    padding:24px 26px 22px; text-decoration:none; overflow:hidden;
+    transition:flex .55s cubic-bezier(.2,.7,.2,1); }
+  .dn:hover { text-decoration:none; }
+  .dn::before { content:""; position:absolute; inset:-2px; transition:transform .6s ease; }
+  .dn > * { position:relative; z-index:1; }
+  .dn.night::before { background:
+    radial-gradient(1.4px 1.4px at 18% 26%, rgba(255,255,255,.75), transparent 100%),
+    radial-gradient(1px 1px at 58% 15%, rgba(255,255,255,.5), transparent 100%),
+    radial-gradient(1.6px 1.6px at 82% 38%, rgba(255,255,255,.6), transparent 100%),
+    radial-gradient(1px 1px at 34% 58%, rgba(255,255,255,.4), transparent 100%),
+    radial-gradient(1.2px 1.2px at 70% 66%, rgba(255,255,255,.45), transparent 100%),
+    linear-gradient(160deg, #10180B 0%, #24301F 62%, #2D3A2E 100%); }
+  .dn.day::before { background:
+    radial-gradient(closest-side at 80% 20%, rgba(229,168,53,.60), transparent 72%),
+    linear-gradient(160deg, #FDF7EA 0%, #F7E7C6 58%, #EEDCAF 100%); }
+  .dnk { font:700 9.5px var(--mono); letter-spacing:.17em; text-transform:uppercase; }
+  .dn.night .dnk { color:var(--sage); } .dn.day .dnk { color:#A0742A; }
+  .dn b { font:700 clamp(28px,3.2vw,42px) "Space Grotesk",sans-serif; line-height:1; margin:5px 0 3px; }
+  .dn.night b { color:#9BD3A6; } .dn.day b { color:#C06A32; }
+  .dn i { font-style:normal; font-size:14px; }
+  .dn.night i { color:var(--sage-lt); } .dn.day i { color:#6B5230; }
+  .dnb { align-self:flex-start; margin-top:14px; font:700 12.5px "DM Sans",sans-serif;
+    padding:8px 15px; border-radius:999px; opacity:.9; transform:translateY(5px);
+    transition:transform .3s ease, opacity .3s ease, background .2s, color .2s; }
+  .dn.night .dnb { background:rgba(155,211,166,.14); border:1px solid rgba(155,211,166,.45); color:#CFE8D6; }
+  .dn.day .dnb { background:rgba(192,106,50,.10); border:1px solid rgba(192,106,50,.4); color:#8A4A1E; }
+  .dn:hover .dnb, .dn:focus-visible .dnb { transform:none; opacity:1; }
+  .dn.night:hover .dnb, .dn.night:focus-visible .dnb { background:#9BD3A6; color:#16200F; }
+  .dn.day:hover .dnb, .dn.day:focus-visible .dnb { background:#C06A32; color:#FDF6E7; }
+  .dn:hover::before, .dn:focus-visible::before { transform:scale(1.05); }
+  .daynight:hover .dn { flex:.86; }
+  .daynight .dn:hover, .daynight .dn:focus-visible { flex:1.28; }
+  .dncap { font:500 12.5px var(--mono); color:var(--text-lt); }
+  @media (max-width:640px){
+    .daynight { flex-direction:column; }
+    .daynight:hover .dn, .daynight .dn:hover { flex:1; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    .daynight:hover .dn, .daynight .dn:hover { flex:1; }
+    .dn:hover::before { transform:none; }
+  }
+
+  /* the resources row */
+  .dl { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:18px; }
+  @media (max-width:900px){ .dl{grid-template-columns:1fr 1fr;} }
+  @media (max-width:640px){ .dl{grid-template-columns:1fr;} }
+  .dl .pcard { padding:26px 26px 24px; display:flex; flex-direction:column; }
+  .dl .pcard h3 { font-size:25px; }
+  .dl .pcard .sub { font:500 12px var(--mono); color:var(--text-lt); display:block; margin:4px 0 12px; letter-spacing:.03em; }
+  .dl .pcard p { flex:1; font-size:14px; }
   .dl .pcard .btn { align-self:flex-start; }
-  .dl .pcard.feature { box-shadow:0 0 0 2px var(--amber), 0 18px 44px rgba(45,58,46,.14); }
-  .dl .pcard .bars { height:7px; border-radius:4px; margin:0 0 16px; }
   /* guide two-up */
   .guide { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:22px; }
   @media (max-width:760px){ .guide{grid-template-columns:1fr;} }
@@ -179,44 +271,64 @@
 <section id="downloads">
   <div class="wrap">
     <div class="kicker">get it</div>
-    <h2>Everything, in two shapes.</h2>
+    <h2>Download the Tools.</h2>
     <svg class="squiggle" width="220" height="14" viewBox="0 0 220 14" aria-hidden="true">
       <path d="M2 7 q 13 -11 27 0 t 27 0 t 27 0 t 27 0 t 27 0 t 27 0 t 27 0"
         fill="none" stroke="#E5A835" stroke-width="3.5" stroke-linecap="round"/></svg>
-    <p class="lede">OpenFX plugins live inside Resolve's node tree. The standalone tools run
-    beside any editor — and the Suite app gathers them under one roof.</p>
+    <p class="lede">Plugins that live inside Resolve's node tree, apps that run beside any
+    editor, and the scaffolding to put them to work. All free, all MIT.</p>
+    <a class="suitebar" id="suiteBar" href="https://github.com/amateurmenace/control-z">
+      <div class="sb-top">
+        <span class="sb-kicker">the desktop app · macOS first, Windows next</span>
+        <span class="sb-free">100% FREE</span>
+        <span class="status in-progress">in development</span>
+      </div>
+      <b>control-z Suite</b>
+      <p>Six tools in one window — scopes on every panel, a batch queue that survives a
+      whole tape shelf, ProRes 4444 out, and an OpenFX installer for Hush and Speak built
+      in. The workbench on either side of your edit.</p>
+      <div class="sb-tools">
+        <span style="--tc:#C99A3A">Rise</span>
+        <span style="--tc:#52678C">Scribe</span>
+        <span style="--tc:#4A8C7E">Clear</span>
+        <span style="--tc:#8E6A9E">Stencil</span>
+        <span style="--tc:#5E5A8C">Depth</span>
+        <span style="--tc:#5B7A9E">Pivot</span>
+      </div>
+      <span class="sb-cta">Watch releases <span aria-hidden="true">→</span></span>
+    </a>
+
+    <div class="subhead">
+      <h3>OpenFX plugins</h3>
+      <span>they live inside Resolve's node tree · free edition</span>
+      <span class="sh-rule"></span>
+    </div>
+    <p style="font-size:15px">Two halves of one idea: Hush takes the noise out at the top of
+    the tree, Speak puts the optical character back at the bottom. Clean early, reconstruct
+    late.</p>
+    <div class="daynight">
+      <a class="dn night" href="https://github.com/amateurmenace/Hush-OpenNR">
+        <span class="dnk">night · first node · shipped</span>
+        <b>Hush</b>
+        <i>Quiets the noise — measured, and it shows its work.</i>
+        <span class="dnb">Get Hush ↓</span>
+      </a>
+      <a class="dn day" href="https://github.com/amateurmenace/Speak">
+        <span class="dnk">day · last node · early beta</span>
+        <b>Speak</b>
+        <i>Gives the image its voice — H&amp;D curves, halation, grain.</i>
+        <span class="dnb">Get Speak ↓</span>
+      </a>
+    </div>
+    <p class="dncap">macOS and Windows for Hush; macOS for Speak so far. Hush v3.7 hands its
+    clean-confidence matte to Speak's grain — the handoff, working.</p>
+
+    <div class="subhead">
+      <h3>Resources</h3>
+      <span>scaffolding, recipes, and the thinking behind it</span>
+      <span class="sh-rule"></span>
+    </div>
     <div class="dl">
-      <div class="pcard feature" style="--pc:var(--amber)">
-        <div class="bars" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-        <div class="pc-top"><span class="pc-tag">the suite app</span><span class="pc-free">100% FREE</span></div>
-        <h3>control-z Suite</h3><span class="sub">macOS first · windows next · in development</span>
-        <p>Pivot, Stencil, Scribe, Clear, Rise and Depth in one app — scopes everywhere,
-        batch queues, ProRes 4444 export, and an OpenFX installer built in. The workbench
-        on either side of your edit.</p>
-        <a class="btn btn-line" href="https://github.com/amateurmenace/control-z">Watch releases →</a>
-      </div>
-      <div class="pcard" style="--pc:var(--green)">
-        <div class="pc-top"><span class="pc-tag">openfx · shipped</span><span class="pc-free">100% FREE</span></div>
-        <h3>Hush<span style="color:var(--amber)">.</span></h3><span class="sub">noise reduction · resolve free &amp; studio · mac + win</span>
-        <p>Drop it on a node, click Auto Setup — measured, transparent denoising in the
-        free version of Resolve. The plugin that started the suite.</p>
-        <a class="btn btn-green" href="https://github.com/amateurmenace/Hush-OpenNR/releases/latest">Download Hush →</a>
-      </div>
-      <div class="pcard" style="--pc:#C06A32">
-        <div class="pc-top"><span class="pc-tag">openfx · early beta</span><span class="pc-free">100% FREE</span></div>
-        <h3>Speak<span style="color:var(--amber)">.</span></h3><span class="sub">film character · last node · macOS · v0.2 beta</span>
-        <p>The film look for the end of the tree — H&amp;D curves, subtractive color,
-        halation and grain. Built and machine-verified; not yet field-tested through
-        a full grade, and we say so.</p>
-        <a class="btn btn-line" href="https://github.com/amateurmenace/Speak/releases/latest">Download Speak →</a>
-      </div>
-      <div class="pcard" style="--pc:var(--amber)">
-        <div class="pc-top"><span class="pc-tag">the paper</span><span class="pc-free">FREE, OBVIOUSLY</span></div>
-        <h3>Design study</h3><span class="sub">why transparent tools beat black boxes</span>
-        <p>The white paper behind the suite's thesis — measurement, texture, and the case
-        for tools that show their work.</p>
-        <a class="btn btn-paper" style="font-size:15px;padding:12px 22px" href="whitepaper.html">Design Study White Paper<span class="up">↗</span></a>
-      </div>
       <div class="pcard" style="--pc:var(--sage)">
         <div class="pc-top"><span class="pc-tag">powergrade · start here</span><span class="pc-free">100% FREE</span></div>
         <h3>The node tree</h3><span class="sub">a blank grading scaffold · .drx · 31 MB</span>
@@ -225,6 +337,21 @@
         Gallery's PowerGrade album and build on it. <b>Free NR</b> is where Hush goes;
         <b>Look</b> is where Speak goes. No Studio effects in it, by design.</p>
         <a class="btn btn-line" href="https://github.com/amateurmenace/control-z/raw/main/grades/control-z-node-tree.zip">Download the tree →</a>
+      </div>
+      <div class="pcard" style="--pc:#5E5A8C">
+        <div class="pc-top"><span class="pc-tag">fusion pack · 3 kb</span><span class="pc-free">100% FREE</span></div>
+        <h3>The template pack</h3><span class="sub">fog · rack focus · depth grade · parallax · haze</span>
+        <p>Five paste-ready Fusion setups that run on a Depth matte: mist the far end of a
+        shot, rack to a focal plane you didn't shoot, grade near/mid/far separately. Built
+        from stock nodes — nothing in them needs Studio.</p>
+        <a class="btn btn-line" href="https://github.com/amateurmenace/control-z/raw/main/packs/control-z-fusion-templates.zip">Download the pack →</a>
+      </div>
+      <div class="pcard" style="--pc:var(--amber)">
+        <div class="pc-top"><span class="pc-tag">the paper</span><span class="pc-free">FREE, OBVIOUSLY</span></div>
+        <h3>Design study</h3><span class="sub">why transparent tools beat black boxes</span>
+        <p>The white paper behind the suite's thesis — measurement, texture, and the case
+        for tools that show their work. It ends where Hush and Speak begin.</p>
+        <a class="btn btn-paper" style="font-size:14px;padding:11px 18px" href="whitepaper.html">Read the study<span class="up">↗</span></a>
       </div>
     </div>
     <div class="guide" id="guide">
@@ -477,6 +604,17 @@
 </section>
 {% endblock %}
 {% block script %}
+/* the Suite bar's spotlight follows the cursor — the only thing on the page that
+   needs JS to be beautiful; without it the bar is simply a dark card that works. */
+(function () {
+  var bar = document.getElementById('suiteBar');
+  if (!bar || matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+  bar.addEventListener('pointermove', function (e) {
+    var r = bar.getBoundingClientRect();
+    bar.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+    bar.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+  });
+})();
 /* hero carousel: crossfade + ken burns, auto until first interaction (hush pattern) */
 (function () {
   var caro = document.getElementById('heroCaro');
