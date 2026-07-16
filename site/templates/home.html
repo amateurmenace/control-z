@@ -7,13 +7,15 @@
   section.epic::after { content:""; position:absolute; z-index:1; left:-12%; top:-30%; width:64%; height:130%;
     background:radial-gradient(closest-side, rgba(229,168,53,.13), transparent 70%); pointer-events:none; }
   section.epic .wrap { position:relative; z-index:2; }
-  .hgrid { display:grid; grid-template-columns:.92fr 1.08fr; gap:44px; align-items:center; }
-  @media (max-width:900px){ .hgrid { grid-template-columns:1fr; } }
-  .epic .kicker { color:var(--amber); max-width:44ch; }
-  .epic h1 { font-size:clamp(44px,5.6vw,74px); line-height:.96; letter-spacing:-.03em; color:#F5F3EE; text-wrap:balance; }
+  /* the hero gets the widest wrap on the page — it's the one screen everyone sees */
+  section.epic .wrap { max-width:1320px; }
+  .hgrid { display:grid; grid-template-columns:1fr 1.06fr; gap:60px; align-items:center; }
+  @media (max-width:900px){ .hgrid { grid-template-columns:1fr; gap:36px; } }
+  .epic .kicker { color:var(--amber); max-width:48ch; }
+  .epic h1 { font-size:clamp(46px,5.4vw,84px); line-height:.95; letter-spacing:-.032em; color:#F5F3EE; text-wrap:balance; }
   .epic h1 .dot { color:var(--amber); }
   .epic h1 .sub { display:block; font-size:.56em; color:var(--sage-lt); letter-spacing:-.02em; margin-top:10px; }
-  .epic .why { font-size:clamp(16.5px,1.9vw,18.5px); line-height:1.62; color:#D4E0D6; max-width:52ch; margin-top:22px; }
+  .epic .why { font-size:clamp(16.5px,1.55vw,19px); line-height:1.62; color:#D4E0D6; max-width:56ch; margin-top:24px; }
   .epic .why b { color:#F5F3EE; }
   .epic .cta { margin-top:26px; }
   .epic .meta { color:var(--sage); }

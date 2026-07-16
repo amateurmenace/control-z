@@ -19,12 +19,16 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   html { scroll-behavior:smooth; }
   body { background:var(--cream); color:var(--green); font:17px/1.65 "DM Sans",-apple-system,sans-serif; }
-  .wrap { max-width:960px; margin:0 auto; padding:0 24px; }
+  /* 960 was Hush's single-column width; the suite runs two-column layouts
+     (hero copy + carousel, tool grids), so it needs the extra air. Prose is
+     kept readable by the 68ch cap on <p>, not by the container. */
+  .wrap { max-width:1200px; margin:0 auto; padding:0 28px; }
+  @media (max-width:520px){ .wrap { padding:0 20px; } }
   h1,h2,h3,.display { font-family:"Space Grotesk","DM Sans",sans-serif; }
   a { color:var(--green-br); }
 
   /* ---------- header ---------- */
-  header.wrap { padding:52px 24px 0; }
+  header.wrap { padding:52px 28px 0; }
   .topline { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; font:500 13px var(--mono); letter-spacing:.12em; color:var(--text-lt); text-transform:uppercase; flex-wrap:wrap; }
   .topline a { color:var(--green-br); text-decoration:none; }
   .topline .nav a { margin-left:14px; color:var(--text-med); }
