@@ -214,6 +214,24 @@
   .btn-amber:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(229,168,53,.35); }
   .btn-lt { border:2px solid rgba(245,243,238,.4); color:#F5F3EE; background:transparent; }
   .btn-lt:hover { border-color:var(--amber); color:var(--amber); }
+  .btn-paper { border:2.5px solid var(--amber); color:var(--amber); background:transparent;
+    font-size:17px; padding:15px 28px; }
+  .btn-paper:hover { background:var(--amber); color:#4A3A10; transform:translateY(-2px);
+    box-shadow:0 8px 22px rgba(229,168,53,.3); }
+  .btn-paper .up { display:inline-block; transform:translateY(-1px); margin-left:6px; }
+
+  /* ---- hush-page furniture: test-card chrome, color bars, squiggle ---- */
+  .reg { position:relative; }
+  .reg::before, .reg::after { content:"+"; position:absolute; color:var(--sage); font:700 18px var(--mono); z-index:3; }
+  .reg::before { top:6px; left:10px; }
+  .reg::after { bottom:6px; right:10px; }
+  .bars { display:flex; height:10px; border-radius:5px; overflow:hidden; margin:0; }
+  .bars span { flex:1; }
+  .bars span:nth-child(1){background:#3D5A47} .bars span:nth-child(2){background:#A3C0B0}
+  .bars span:nth-child(3){background:#5B8C65} .bars span:nth-child(4){background:#C5D6CC}
+  .bars span:nth-child(5){background:#E5A835} .bars span:nth-child(6){background:#E89D6B}
+  .bars span:nth-child(7){background:#EFEDE6} .bars span:nth-child(8){background:#2D3A2E}
+  .squiggle { display:block; margin:18px 0 26px; }
   {% block style %}{% endblock %}
 </style>
 </head>
@@ -228,6 +246,7 @@
       <a href="index.html#who">Who it's for</a>
       <a href="index.html#toolbox">Toolbox</a>
       <a href="roadmap.html" {% if page=="roadmap" %}class="here"{% endif %}>Roadmap</a>
+      <a href="https://github.com/amateurmenace/control-z">Source&nbsp;↗</a>
     </span>
   </div>
 </header>

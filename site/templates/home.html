@@ -53,9 +53,15 @@
   section.study .tipcard b { color:#F5F3EE; }
   section.study .tipcard p { color:var(--sage); }
   /* downloads strip */
-  .dl { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:24px; }
-  .dl .pcard h3 { font-size:21px; }
-  .dl .pcard .sub { font:500 12px var(--mono); color:var(--text-lt); display:block; margin:2px 0 12px; }
+  .dl { display:grid; grid-template-columns:repeat(2,1fr); gap:18px; margin-top:30px; }
+  @media (max-width:760px){ .dl{grid-template-columns:1fr;} }
+  .dl .pcard { padding:30px 30px 26px; display:flex; flex-direction:column; }
+  .dl .pcard h3 { font-size:30px; }
+  .dl .pcard .sub { font:500 12.5px var(--mono); color:var(--text-lt); display:block; margin:4px 0 14px; letter-spacing:.03em; }
+  .dl .pcard p { flex:1; }
+  .dl .pcard .btn { align-self:flex-start; }
+  .dl .pcard.feature { box-shadow:0 0 0 2px var(--amber), 0 18px 44px rgba(45,58,46,.14); }
+  .dl .pcard .bars { height:7px; border-radius:4px; margin:0 0 16px; }
   /* guide two-up */
   .guide { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:22px; }
   @media (max-width:760px){ .guide{grid-template-columns:1fr;} }
@@ -116,11 +122,13 @@
           <a class="btn btn-amber" href="#downloads">Download the suite</a>
           <a class="btn btn-lt" href="#pipeline">Meet the tools</a>
         </div>
-        <div class="meta">eight tools · $0 forever · local only · MIT ·
-          <a href="whitepaper.html" style="color:var(--amber)">read the design study</a></div>
+        <div class="cta" style="margin-top:14px">
+          <a class="btn btn-paper" href="whitepaper.html">Design Study White Paper<span class="up">↗</span></a>
+        </div>
+        <div class="meta">eight tools · $0 forever · local only · MIT</div>
       </div>
       <div>
-        <div class="caro auto" id="heroCaro">
+        <div class="caro auto reg" id="heroCaro">
           <div class="cbar"><i></i></div>
           {% for id, name, line in slides %}
           {% set t = (tools | selectattr("id", "equalto", id) | list)[0] %}
@@ -140,42 +148,52 @@
         </div>
       </div>
     </div>
+    <div class="bars" style="margin-top:46px" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
   </div>
 </section>
+
 
 <section id="downloads">
   <div class="wrap">
     <div class="kicker">get it</div>
     <h2>Everything, in two shapes.</h2>
+    <svg class="squiggle" width="220" height="14" viewBox="0 0 220 14" aria-hidden="true">
+      <path d="M2 7 q 13 -11 27 0 t 27 0 t 27 0 t 27 0 t 27 0 t 27 0 t 27 0"
+        fill="none" stroke="#E5A835" stroke-width="3.5" stroke-linecap="round"/></svg>
     <p class="lede">OpenFX plugins live inside Resolve's node tree. The standalone tools run
     beside any editor — and the Suite app gathers them under one roof.</p>
     <div class="dl">
-      <div class="pcard" style="--pc:var(--amber)">
+      <div class="pcard feature" style="--pc:var(--amber)">
+        <div class="bars" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
         <div class="pc-top"><span class="pc-tag">the suite app</span><span class="pc-free">100% FREE</span></div>
         <h3>control-z Suite</h3><span class="sub">macOS first · windows next · in development</span>
-        <p>Pivot, Stencil, Scribe, Clear, Rise and Depth in one app — with scopes,
-        batch queues, ProRes 4444 export, and an OpenFX installer built in.</p>
-        <a class="btn btn-line" style="margin-top:12px" href="https://github.com/amateurmenace">Watch releases →</a>
+        <p>Pivot, Stencil, Scribe, Clear, Rise and Depth in one app — scopes everywhere,
+        batch queues, ProRes 4444 export, and an OpenFX installer built in. The workbench
+        on either side of your edit.</p>
+        <a class="btn btn-line" href="https://github.com/amateurmenace/control-z">Watch releases →</a>
       </div>
       <div class="pcard" style="--pc:var(--green)">
         <div class="pc-top"><span class="pc-tag">openfx · shipped</span><span class="pc-free">100% FREE</span></div>
-        <h3>Hush</h3><span class="sub">noise reduction · resolve free &amp; studio · mac + win</span>
-        <p>Drop it on a node, click Auto Setup. The plugin that started the suite.</p>
-        <a class="btn btn-green" style="margin-top:12px" href="https://github.com/amateurmenace/Hush-OpenNR/releases/latest">Download Hush →</a>
+        <h3>Hush<span style="color:var(--amber)">.</span></h3><span class="sub">noise reduction · resolve free &amp; studio · mac + win</span>
+        <p>Drop it on a node, click Auto Setup — measured, transparent denoising in the
+        free version of Resolve. The plugin that started the suite.</p>
+        <a class="btn btn-green" href="https://github.com/amateurmenace/Hush-OpenNR/releases/latest">Download Hush →</a>
       </div>
       <div class="pcard" style="--pc:#C06A32">
         <div class="pc-top"><span class="pc-tag">openfx · in progress</span><span class="pc-free">100% FREE</span></div>
-        <h3>Speak</h3><span class="sub">film character · last node · follows hush v3.6</span>
-        <p>The film look for the end of the tree. Ships when it holds across Rec.709, P3
-        and HDR from one setting.</p>
-        <a class="btn btn-line" style="margin-top:12px" href="#t-speak">Preview Speak →</a>
+        <h3>Speak<span style="color:var(--amber)">.</span></h3><span class="sub">film character · last node · follows hush v3.6</span>
+        <p>The film look for the end of the tree. Ships when the look holds across
+        Rec.709, P3 and HDR from a single setting.</p>
+        <a class="btn btn-line" href="#t-speak">Preview Speak →</a>
       </div>
-      <div class="pcard" style="--pc:var(--text-lt)">
+      <div class="pcard" style="--pc:var(--amber)">
         <div class="pc-top"><span class="pc-tag">the paper</span><span class="pc-free">FREE, OBVIOUSLY</span></div>
         <h3>Design study</h3><span class="sub">why transparent tools beat black boxes</span>
-        <p>The white paper behind Hush's texture-reconstruction thesis — measurements,
-        grain, and the case for showing your work.</p>
-        <a class="btn btn-line" style="margin-top:12px" href="whitepaper.html">Read it →</a>
+        <p>The white paper behind the suite's thesis — measurement, texture, and the case
+        for tools that show their work.</p>
+        <a class="btn btn-paper" style="font-size:15px;padding:12px 22px" href="whitepaper.html">Design Study White Paper<span class="up">↗</span></a>
       </div>
     </div>
     <div class="guide" id="guide">
@@ -195,6 +213,39 @@
         The honest exception: Hush and Speak are OpenFX plugins — Premiere doesn't host
         OpenFX, so run noisy footage through the Suite app instead (or grade in free
         Resolve; it costs the same as this website).</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="study" id="who">
+  <canvas class="grain"></canvas>
+  <div class="wrap">
+    <div class="kicker">who is this for?</div>
+    <h2>Built for the people the market skips.</h2>
+    <div class="tips" style="grid-template-columns:repeat(2,1fr)">
+      <div class="tipcard"><span class="tn">community media centers</span>
+        <b>The home team.</b>
+        <p>control-z comes out of a working access station — every tool is proven on member
+        footage, tape vaults, and city meetings at Brookline Interactive Group first. Ten
+        donated seats, zero license dollars: captions for compliance (Scribe), rescued
+        rooms (Clear), archives upscaled (Rise), every show vertical (Pivot).</p></div>
+      <div class="tipcard"><span class="tn">journalists</span>
+        <b>Fast, local, verifiable.</b>
+        <p>Transcribe the presser on your laptop — not a cloud service (Scribe). Pull the
+        quote as a cut list. Rescue the scanner-room audio (Clear). Matte a face for
+        protection (Stencil). Nothing leaves your machine, which is not a feature so much
+        as a duty of care.</p></div>
+      <div class="tipcard"><span class="tn">filmmakers</span>
+        <b>Finishing without a finishing budget.</b>
+        <p>Hush then Speak is a grade sandwich that used to cost $500 in plugins. Depth
+        fakes the rack focus you didn't shoot. Rise saves the archival pickup. Pivot cuts
+        the vertical trailer while you sleep. All of it in the free Resolve you already
+        edit in.</p></div>
+      <div class="tipcard"><span class="tn">artists &amp; advocates</span>
+        <b>Instruments, not appliances.</b>
+        <p>Every tool exposes its measurements — which means every tool can be played.
+        Grade through depth mattes, key through noise-confidence, push Rise until reality
+        gets soft. And when the work is advocacy, form is credibility: it deserves both.</p></div>
     </div>
   </div>
 </section>
@@ -285,36 +336,78 @@
 </section>
 {% endfor %}
 
-<section class="study" id="who">
-  <canvas class="grain"></canvas>
+<section class="alt" id="values">
   <div class="wrap">
-    <div class="kicker">who is this for?</div>
-    <h2>Built for the people the market skips.</h2>
-    <div class="tips" style="grid-template-columns:repeat(2,1fr)">
-      <div class="tipcard"><span class="tn">community media centers</span>
-        <b>The home team.</b>
-        <p>control-z comes out of a working access station — every tool is proven on member
-        footage, tape vaults, and city meetings at Brookline Interactive Group first. Ten
-        donated seats, zero license dollars: captions for compliance (Scribe), rescued
-        rooms (Clear), archives upscaled (Rise), every show vertical (Pivot).</p></div>
-      <div class="tipcard"><span class="tn">journalists</span>
-        <b>Fast, local, verifiable.</b>
-        <p>Transcribe the presser on your laptop — not a cloud service (Scribe). Pull the
-        quote as a cut list. Rescue the scanner-room audio (Clear). Matte a face for
-        protection (Stencil). Nothing leaves your machine, which is not a feature so much
-        as a duty of care.</p></div>
-      <div class="tipcard"><span class="tn">filmmakers</span>
-        <b>Finishing without a finishing budget.</b>
-        <p>Hush then Speak is a grade sandwich that used to cost $500 in plugins. Depth
-        fakes the rack focus you didn't shoot. Rise saves the archival pickup. Pivot cuts
-        the vertical trailer while you sleep. All of it in the free Resolve you already
-        edit in.</p></div>
-      <div class="tipcard"><span class="tn">artists</span>
-        <b>Instruments, not appliances.</b>
-        <p>Every tool exposes its measurements — which means every tool can be played.
-        Grade through depth mattes, key through noise-confidence, push Rise until reality
-        gets soft. The roadmap's Bend (the glitch instrument) is for you; so is everything
-        else, used wrong on purpose.</p></div>
+    <div class="kicker">design values</div>
+    <h2>What we refuse to compromise.</h2>
+    <svg class="squiggle" width="220" height="14" viewBox="0 0 220 14" aria-hidden="true">
+      <path d="M2 7 q 13 -11 27 0 t 27 0 t 27 0 t 27 0 t 27 0 t 27 0 t 27 0"
+        fill="none" stroke="#E5A835" stroke-width="3.5" stroke-linecap="round"/></svg>
+    <div class="tips" style="grid-template-columns:repeat(3,1fr)">
+      <div class="tipcard"><span class="tn">the premise</span><b>Free is the feature.</b>
+        <p>MIT-licensed, commercial use included. No tiers, trials, seats, accounts, or
+        "free for now." A price of zero is a design constraint we build around, not a
+        promotion.</p></div>
+      <div class="tipcard"><span class="tn">the boundary</span><b>Local is a right.</b>
+        <p>Footage and audio never leave your machine. Models run on your hardware,
+        downloaded once with their license shown and their hash verified. Nothing phones
+        home — there is no home to phone.</p></div>
+      <div class="tipcard"><span class="tn">the method</span><b>Show the work.</b>
+        <p>Every tool renders its own measurements: noise scopes, camera paths, confidence
+        strips, residual monitors, depth probes. Glass boxes build skill; black boxes
+        build dependence.</p></div>
+      <div class="tipcard"><span class="tn">the voice</span><b>Honest about limits.</b>
+        <p>Each tool names what the paid equivalent still does better — in writing, on
+        this page. Synthesis is labeled synthesis. A tool that can't admit its losses
+        can't be trusted with your wins.</p></div>
+      <div class="tipcard"><span class="tn">the door</span><b>Easy first, deep later.</b>
+        <p>Three clicks to a great default; every parameter still reachable two clicks
+        deeper. Auto-setup writes into visible controls you can override — automation as
+        a teacher, never a ceiling.</p></div>
+      <div class="tipcard"><span class="tn">the root</span><b>Built with community media.</b>
+        <p>Proven on member footage, tape vaults, and city meetings at a working access
+        station before release. If it doesn't survive a Tuesday-night edit bay, it
+        doesn't ship.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="dark" id="architecture">
+  <div class="wrap">
+    <div class="kicker">under the hood</div>
+    <h2>Architecture, strategy, and proof.</h2>
+    <p class="lede">Two engine families, one covenant: plugins that live inside Resolve's
+    node tree, and standalone tools that hand it files it already understands.</p>
+    <div class="formula reg">control-z/
+├─ OpenFX · C++ &amp; GPU      Hush · Speak — one CPU reference implementation,
+│                           three GPU ports (Metal / CUDA / OpenCL) held to
+│                           ~2×10⁻⁵ agreement by a parity test suite
+├─ standalone · Python      Pivot · Stencil · Scribe · Clear · Rise · Depth
+│   └─ czcore               shot detection · media IO · hash-pinned model
+│                           store · exports · app shell shared by every tool
+├─ interchange              SRT · marker &amp; selects EDL · keyframed Fusion
+│                           .setting · ProRes matte clips · sidecar JSON —
+│                           formats the free version of Resolve just reads
+└─ suite app · next         one window, scopes everywhere, batch queue,
+                            OpenFX installer, ProRes up to 4444 out</div>
+    <div class="tips">
+      <div class="tipcard"><span class="tn">models</span><b>Permissive or nothing.</b>
+        <p>Every AI model is MIT/Apache/BSD-licensed, mirrored with a pinned SHA-256, and
+        stored once for the whole suite. Non-commercial and login-gated checkpoints are
+        rejected on principle — the model card on each tool says exactly what runs.</p></div>
+      <div class="tipcard"><span class="tn">proof</span><b>Tested like broadcast gear.</b>
+        <p>Golden tests pin the math (solver physics, notch depths, timecode); GPU ports
+        are parity-tested against a single reference; every tool is verified on real 4K
+        footage before it's called working. The CHANGELOG says what's honest and what's
+        deferred.</p></div>
+      <div class="tipcard"><span class="tn">strategy</span><b>Engines compound.</b>
+        <p>Rise's upscaler already powers Pivot's punch-ins; Scribe's speech stack will
+        power Minutes and Babel; Hush's texture math becomes Speak. Each wave of tools
+        makes the next one cheaper — that's the whole roadmap.</p></div>
+    </div>
+    <div class="cta" style="margin-top:22px">
+      <a class="btn btn-lt" href="https://github.com/amateurmenace/control-z">Read the specs on GitHub</a>
+      <a class="btn btn-lt" href="roadmap.html">See what's next</a>
     </div>
   </div>
 </section>
