@@ -488,18 +488,22 @@ that diarization is registered, and if any kind is a one-way door, say so.
 > reach for `disable-library-validation`. (d) DMG: sign → submit zip → **staple the .app** →
 > build the DMG from the stapled app → sign → submit → staple → verify.
 >
-> **You will hit a wall, and that's expected.** There is no notarytool keychain profile on
-> this machine and no Developer ID **Installer** identity — only `Developer ID Application:
-> Stephen Walter (6M536MV7GT)`. Notarization needs Stephen to run `xcrun notarytool
-> store-credentials` himself with an app-specific password. **Do not enter or handle those
-> credentials.** Build up to a Developer-ID-Application-signed DMG you can verify yourself
-> with `codesign --verify --strict --deep` and `spctl --assess`, then stop and hand back.
+> **The credentials wall is gone — an earlier draft of this spec said you would hit one.**
+> As of 2026-07-16 the machine has the `opennr-notary` keychain profile, `Developer ID
+> Application: Stephen Walter (6M536MV7GT)` **and** `Developer ID Installer` (the latter was
+> created that day; its absence is why every Hush/Speak release before it shipped
+> Gatekeeper-rejected). So you can take the DMG all the way to notarized and stapled
+> yourself — `xcrun notarytool submit … --keychain-profile opennr-notary --wait`. **Never
+> enter or handle the app-specific password**; if the profile is ever missing, stop and ask
+> Stephen to run `store-credentials` himself. A `403 — a required agreement is missing` is
+> not a bad password: it means the Program License Agreement needs re-accepting at
+> developer.apple.com, and only Stephen can click it.
 >
 > **Definition of done for this session:** the LGPL gate is green; the frozen app,
 > **double-clicked from Finder** (never launched from a shell — that leaks your PATH and
 > hides the `shutil.which` bug), opens a real clip and runs one job per engine (Pivot
 > analyze, Scribe transcribe, Clear isolate, Rise enhance, Depth preview); `codesign --verify
-> --strict --deep` is valid on the signed `.app`; `spctl --assess` is positive; the 141 tests
+> --strict --deep` is valid on the signed `.app`; `spctl --assess` is positive on a NOTARIZED, stapled DMG; the 141 tests
 > are still green; `tests/test_packaging.py` covers the linkage gate and the resource paths.
 > Test footage: `/Users/amateurmenace/Movies/NR Test SHort Sabby.mov`.
 >
