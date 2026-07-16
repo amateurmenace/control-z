@@ -13,7 +13,13 @@ from pathlib import Path
 
 from . import __version__
 
+# The Fusion template pack. "depth" templates consume a Depth matte; "stencil"
+# ones consume a Stencil matte; "hush" reads Hush's clean-confidence alpha.
+# Every template pastes into free Resolve's Fusion page and is paste-tested live.
 TEMPLATES = ["fog", "rack-focus", "depth-grade", "parallax", "haze-light"]
+STENCIL_TEMPLATES = ["veil-blur", "cutout", "matte-tune", "confidence-grain",
+                     "social-vertical"]
+ALL_TEMPLATES = TEMPLATES + STENCIL_TEMPLATES
 
 
 def cmd_run(args) -> int:
@@ -112,16 +118,25 @@ def cmd_run(args) -> int:
     return 0
 
 
+# Filename prefix per template, so the pack is self-describing in Fusion's dir.
+_PREFIX = {t: "cz-depth" for t in TEMPLATES}
+_PREFIX.update({t: "cz-stencil" for t in
+                ["veil-blur", "cutout", "matte-tune", "social-vertical"]})
+_PREFIX["confidence-grain"] = "cz-hush"
+
+
 def cmd_templates(args) -> int:
     src_dir = Path(__file__).parent / "templates"
     out_dir = Path(args.output).expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
-    for t in TEMPLATES:
-        (out_dir / f"cz-depth-{t}.setting").write_text(
+    which = TEMPLATES if args.pack == "depth" else \
+        STENCIL_TEMPLATES if args.pack == "stencil" else ALL_TEMPLATES
+    for t in which:
+        (out_dir / f"{_PREFIX[t]}-{t}.setting").write_text(
             (src_dir / f"{t}.setting").read_text())
-    print(f"{len(TEMPLATES)} Fusion templates → {out_dir}")
+    print(f"{len(which)} Fusion templates → {out_dir}")
     print("Open one in a text editor, copy all, paste into the Fusion page, "
-          "then wire your MediaIn (image) and the depth matte as commented.")
+          "then wire the inputs as the sticky note in each file says.")
     return 0
 
 
@@ -148,6 +163,8 @@ def main(argv=None) -> int:
 
     pt = sub.add_parser("templates", help="write the Fusion template pack")
     pt.add_argument("-o", "--output", default="~/Documents/control-z-templates")
+    pt.add_argument("--pack", choices=["all", "depth", "stencil"], default="all",
+                    help="which templates to write (default: all ten)")
     pt.set_defaults(fn=cmd_templates)
 
     args = p.parse_args(argv)

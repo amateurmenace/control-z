@@ -1,0 +1,90 @@
+{
+	Tools = ordered() {
+		CZVeilNote = Note {
+			Inputs = {
+				Comments = Input { Value = "control-z Stencil · VEIL BLUR — privacy blur through a tracked matte. Wire: your image -> CZVeilIn.Input; Stencil matte -> CZVeilMask.Image. Blur amount: CZVeilBlur.XBlurSize. Mask edge: CZVeilMask BorderWidth (grow) + SoftEdge (feather) so edges don't leak. Mosaic instead of blur: set CZVeilMosaic.Blend to 1 (block size: CZMosaicDown.XSize — smaller = bigger blocks; keep CZMosaicUp.XSize = 1/that). HONEST NOTE: this blurs where the matte says — check every frame before you publish; Stencil's confidence strip tells you where to look.", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
+		},
+		CZVeilIn = BrightnessContrast {
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
+		},
+		CZVeilMask = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				SoftEdge = Input { Value = 0.003, },
+				BorderWidth = Input { Value = 0.002, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Channel = Input { Value = FuID { "Luminance" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 115.5 } },
+		},
+		CZVeilBlur = Blur {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				XBlurSize = Input { Value = 45, },
+				Input = Input {
+					SourceOp = "CZVeilIn",
+					Source = "Output",
+				},
+				EffectMask = Input {
+					SourceOp = "CZVeilMask",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 49.5 } },
+		},
+		CZMosaicDown = Scale {
+			Inputs = {
+				XSize = Input { Value = 0.05, },
+				HiQOnly = Input { Value = 0, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				Input = Input {
+					SourceOp = "CZVeilIn",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 82.5 } },
+		},
+		CZMosaicUp = Scale {
+			Inputs = {
+				XSize = Input { Value = 20, },
+				HiQOnly = Input { Value = 0, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				FilterMethod = Input { Value = 1, },
+				Input = Input {
+					SourceOp = "CZMosaicDown",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 82.5 } },
+		},
+		CZVeilMosaic = Merge {
+			Inputs = {
+				Blend = Input { Value = 0, },
+				Background = Input {
+					SourceOp = "CZVeilBlur",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "CZMosaicUp",
+					Source = "Output",
+				},
+				PerformDepthMerge = Input { Value = 0, },
+				EffectMask = Input {
+					SourceOp = "CZVeilMask",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+		}
+	}
+}

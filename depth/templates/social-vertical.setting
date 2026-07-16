@@ -1,0 +1,83 @@
+{
+	Tools = ordered() {
+		CZSocialNote = Note {
+			Inputs = {
+				Comments = Input { Value = "control-z Pivot · SOCIAL VERTICAL — 9:16 with a blurred backdrop. SET YOUR TIMELINE (or Fusion clip) TO 1080x1920 first. Wire: your image -> CZSocialIn.Input. The frame is scaled+blurred to fill behind (CZFillScale/CZFillBlur) and sits full-width on top (CZFit). Assumes a 16:9 HD source landing full-width; reframe with CZFit Size/Center. Pivot picks the crop for you — this template is the canvas it lands on.", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
+		},
+		CZSocialIn = BrightnessContrast {
+			ViewInfo = OperatorInfo { Pos = { -165, 49.5 } },
+		},
+		CZFillScale = Transform {
+			Inputs = {
+				Size = Input { Value = 3.2, },
+				Input = Input {
+					SourceOp = "CZSocialIn",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 82.5 } },
+		},
+		CZFillBlur = Blur {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				XBlurSize = Input { Value = 60, },
+				Input = Input {
+					SourceOp = "CZFillScale",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 82.5 } },
+		},
+		CZCanvas = Background {
+			Inputs = {
+				Width = Input { Value = 1080, },
+				Height = Input { Value = 1920, },
+				UseFrameFormatSettings = Input { Value = 1, },
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 115.5 } },
+		},
+		CZBack = Merge {
+			Inputs = {
+				Background = Input {
+					SourceOp = "CZCanvas",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "CZFillBlur",
+					Source = "Output",
+				},
+				PerformDepthMerge = Input { Value = 0, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 82.5 } },
+		},
+		CZFit = Transform {
+			Inputs = {
+				Input = Input {
+					SourceOp = "CZSocialIn",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 49.5 } },
+		},
+		CZFront = Merge {
+			Inputs = {
+				Background = Input {
+					SourceOp = "CZBack",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "CZFit",
+					Source = "Output",
+				},
+				PerformDepthMerge = Input { Value = 0, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+		}
+	}
+}

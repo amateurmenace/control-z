@@ -55,20 +55,86 @@ class TestGuidedFilter(unittest.TestCase):
 class TestTemplates(unittest.TestCase):
     DIR = Path(__file__).parent.parent / "depth" / "templates"
 
-    def test_all_present_and_balanced(self):
-        from depth.cli import TEMPLATES
+    # Tools every template must contain (the load-bearing node of each). These
+    # are checked against a live paste-test in free Resolve — see CHANGELOG
+    # 2026-07-16 "the template pack". `Bitmap` (an invalid RegID that pastes as
+    # a no-op Dummy) is deliberately NOT here: the correct id is `BitmapMask`.
+    EXPECTED = {
+        "fog": ["BitmapMask", "Background", "Merge"],
+        "rack-focus": ["VariBlur", "Custom"],
+        "depth-grade": ["BitmapMask", "ColorCorrector"],
+        "parallax": ["Displace", "Transform"],
+        "haze-light": ["BitmapMask", "SoftGlow"],
+        "veil-blur": ["Blur", "BitmapMask", "Scale", "Merge"],
+        "cutout": ["MatteControl", "Background", "Merge"],
+        "matte-tune": ["ErodeDilate", "BitmapMask", "Merge"],
+        "confidence-grain": ["FastNoise", "BitmapMask", "Merge"],
+        "social-vertical": ["Transform", "Blur", "Background", "Merge"],
+    }
 
-        for t in TEMPLATES:
+    # Tool RegIDs that only exist in DaVinci Resolve Studio (ResolveFX, Neural
+    # Engine, optical-flow) — none may appear in a free-edition pack. Also
+    # `Bitmap`, which Fusion silently turns into a Dummy on paste.
+    FORBIDDEN = ["Bitmap ", "OpticalFlow", "ResolveFX", "SmartVector",
+                 "DepthMap", "SurfaceTracker", "MagicMask", "DCTL"]
+
+    def test_all_present_and_balanced(self):
+        from depth.cli import ALL_TEMPLATES
+
+        self.assertEqual(len(ALL_TEMPLATES), 10)
+        for t in ALL_TEMPLATES:
             text = (self.DIR / f"{t}.setting").read_text()
-            self.assertEqual(text.count("{"), text.count("}"), t)
-            self.assertIn("Tools = ordered()", text)
-            self.assertIn("control-z Depth", text)
-            self.assertIn("ActiveTool", text)
+            self.assertEqual(text.count("{"), text.count("}"), f"{t}: unbalanced braces")
+            self.assertIn("Tools = ordered()", text, t)
 
     def test_expected_tools(self):
-        self.assertIn("VariBlur", (self.DIR / "rack-focus.setting").read_text())
-        self.assertIn("Displace", (self.DIR / "parallax.setting").read_text())
-        self.assertIn("SoftGlow", (self.DIR / "haze-light.setting").read_text())
+        for t, tools in self.EXPECTED.items():
+            text = (self.DIR / f"{t}.setting").read_text()
+            for tool in tools:
+                self.assertIn(tool + " {", text, f"{t}: missing tool {tool}")
+
+    def test_has_sticky_note(self):
+        from depth.cli import ALL_TEMPLATES
+
+        for t in ALL_TEMPLATES:
+            text = (self.DIR / f"{t}.setting").read_text()
+            self.assertIn("Note {", text, f"{t}: no sticky Note")
+            self.assertIn("control-z", text, f"{t}: Note missing brand line")
+
+    def test_no_studio_only_tools(self):
+        from depth.cli import ALL_TEMPLATES
+
+        for t in ALL_TEMPLATES:
+            text = (self.DIR / f"{t}.setting").read_text()
+            for bad in self.FORBIDDEN:
+                self.assertNotIn(bad, text, f"{t}: Studio-only/invalid tool {bad!r}")
+
+    def test_cz_node_names(self):
+        from depth.cli import ALL_TEMPLATES
+
+        for t in ALL_TEMPLATES:
+            text = (self.DIR / f"{t}.setting").read_text()
+            self.assertIn("CZ", text, f"{t}: node names should be CZ*-prefixed")
+
+    def test_cli_writes_all_ten(self):
+        import tempfile
+
+        from depth.cli import ALL_TEMPLATES, main
+
+        with tempfile.TemporaryDirectory() as d:
+            main(["templates", "-o", d])
+            written = list(Path(d).glob("*.setting"))
+            self.assertEqual(len(written), len(ALL_TEMPLATES))
+
+    def test_zip_lists_all_ten(self):
+        import zipfile
+
+        from depth.cli import ALL_TEMPLATES
+
+        zpath = self.DIR.parent.parent / "packs" / "control-z-fusion-templates.zip"
+        with zipfile.ZipFile(zpath) as z:
+            names = {n.replace(".setting", "") for n in z.namelist()}
+        self.assertEqual(names, set(ALL_TEMPLATES))
 
 
 if __name__ == "__main__":

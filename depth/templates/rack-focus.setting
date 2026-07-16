@@ -1,25 +1,95 @@
 {
 	Tools = ordered() {
 		CZRackNote = Note {
-			Inputs = { Comments = Input { Value = "control-z Depth · RACK FOCUS — wire: your image → CZRackFocus.Input; depth matte MediaIn → CZRackFocus.Blur. Animate FocalPoint 0..1 (uses depth as blur map after CZFocalShift).", } },
-			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
-		},
-		CZFocalShift = BrightnessContrast {
 			Inputs = {
-				Gain = Input { Value = 2.0, },
-				Lift = Input { Value = -0.5, },
-				ClipBlack = Input { Value = 1, }, ClipWhite = Input { Value = 1, },
+				Comments = Input { Value = "control-z Depth · RACK FOCUS — wire: your image -> CZRackFocus.Input; depth matte -> CZFocalPlane.Image1. Pull focus by animating CZFocalPlane NumberIn1 (the focal plane, 0..1 — 1 = nearest, matte white). NumberIn3 is the in-focus tolerance, NumberIn2 how fast defocus grows outside it. Max blur: CZRackFocus.XBlurSize.", }
 			},
-			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
+		},
+		CZFocalPlane = Custom {
+			Inputs = {
+				NumberIn1 = Input { Value = 0.8, },
+				NumberIn2 = Input { Value = 2, },
+				NumberIn3 = Input { Value = 0.12, },
+				LUTIn1 = Input {
+					SourceOp = "CustomTool1LUTIn1",
+					Source = "Value",
+				},
+				LUTIn2 = Input {
+					SourceOp = "CustomTool1LUTIn2",
+					Source = "Value",
+				},
+				LUTIn3 = Input {
+					SourceOp = "CustomTool1LUTIn3",
+					Source = "Value",
+				},
+				LUTIn4 = Input {
+					SourceOp = "CustomTool1LUTIn4",
+					Source = "Value",
+				},
+				RedExpression = Input { Value = "max(abs(r1-n1)-n3,0)*n2", },
+				GreenExpression = Input { Value = "max(abs(g1-n1)-n3,0)*n2", },
+				BlueExpression = Input { Value = "max(abs(b1-n1)-n3,0)*n2", }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
+		},
+		CustomTool1LUTIn1 = LUTBezier {
+			KeyColorSplines = {
+				[0] = {
+					[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+					[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+				}
+			},
+			SplineColor = { Red = 0, Green = 0, Blue = 0 },
+			CtrlWZoom = false,
+			NameSet = true,
+		},
+		CustomTool1LUTIn2 = LUTBezier {
+			KeyColorSplines = {
+				[0] = {
+					[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+					[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+				}
+			},
+			SplineColor = { Red = 0, Green = 0, Blue = 0 },
+			CtrlWZoom = false,
+			NameSet = true,
+		},
+		CustomTool1LUTIn3 = LUTBezier {
+			KeyColorSplines = {
+				[0] = {
+					[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+					[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+				}
+			},
+			SplineColor = { Red = 0, Green = 0, Blue = 0 },
+			CtrlWZoom = false,
+			NameSet = true,
+		},
+		CustomTool1LUTIn4 = LUTBezier {
+			KeyColorSplines = {
+				[0] = {
+					[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+					[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+				}
+			},
+			SplineColor = { Red = 0, Green = 0, Blue = 0 },
+			CtrlWZoom = false,
+			NameSet = true,
 		},
 		CZRackFocus = VariBlur {
 			Inputs = {
-				BlurSize = Input { Value = 24, },
-				Method = Input { Value = FuID { "Soft" }, },
-				Blur = Input { SourceOp = "CZFocalShift", Source = "Output", },
+				XBlurSize = Input { Value = 24, },
+				BlurImage = Input {
+					SourceOp = "CZFocalPlane",
+					Source = "Output",
+				}
 			},
-			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
-		},
-	},
-	ActiveTool = "CZRackFocus"
+			ViewInfo = OperatorInfo { Pos = { 55, 82.5 } },
+		}
+	}
 }

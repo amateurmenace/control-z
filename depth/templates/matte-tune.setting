@@ -1,0 +1,89 @@
+{
+	Tools = ordered() {
+		CZTuneNote = Note {
+			Inputs = {
+				Comments = Input { Value = "control-z · MATTE TUNE — grow / shrink / feather / despeckle any matte (Stencil, Depth, or Hush's confidence matte) and LOOK at it. Wire: matte -> CZMatteIn.Input; optionally your image -> CZTuneView.Background. View CZTuneFeather for the tuned matte alone, CZTuneView for the matte as a red tint over the image. Despeckle: CZTuneDespeckle XAmount a touch negative; grow/shrink: CZTuneGrow XAmount; feather: CZTuneFeather XBlurSize. All start neutral.", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
+		},
+		CZMatteIn = BrightnessContrast {
+			ViewInfo = OperatorInfo { Pos = { -165, 49.5 } },
+		},
+		CZTuneDespeckle = ErodeDilate {
+			Inputs = {
+				Input = Input {
+					SourceOp = "CZMatteIn",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
+		},
+		CZTuneGrow = ErodeDilate {
+			Inputs = {
+				Input = Input {
+					SourceOp = "CZTuneDespeckle",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 49.5 } },
+		},
+		CZTuneFeather = Blur {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				XBlurSize = Input { Value = 0, },
+				Input = Input {
+					SourceOp = "CZTuneGrow",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 49.5 } },
+		},
+		CZTuneAsMask = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Image = Input {
+					SourceOp = "CZTuneFeather",
+					Source = "Output",
+				},
+				Channel = Input { Value = FuID { "Luminance" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 82.5 } },
+		},
+		CZTintColor = Background {
+			Inputs = {
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				TopLeftRed = Input { Value = 1, },
+				TopLeftGreen = Input { Value = 0.1, },
+				TopLeftBlue = Input { Value = 0.1, },
+				TopLeftAlpha = Input { Value = 0.5, },
+				EffectMask = Input {
+					SourceOp = "CZTuneAsMask",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 82.5 } },
+		},
+		CZTuneView = Merge {
+			Inputs = {
+				Blend = Input { Value = 0.5, },
+				Foreground = Input {
+					SourceOp = "CZTintColor",
+					Source = "Output",
+				},
+				PerformDepthMerge = Input { Value = 0, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+		}
+	}
+}

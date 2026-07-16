@@ -1,28 +1,53 @@
 {
 	Tools = ordered() {
 		CZFogNote = Note {
-			Inputs = { Comments = Input { Value = "control-z Depth · FOG — wire: depth matte MediaIn → CZFogMask.Image; your image → CZFogMerge.Background. Color/level on CZFogColor.", } },
-			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
+			Inputs = {
+				Comments = Input { Value = "control-z Depth · FOG — wire: your image -> CZFogMerge.Background; depth matte -> CZFogMask.Image. Far end mists first (matte near=white, so the mask is inverted). Fog color + level: CZFogColor; amount: CZFogMerge.Blend; shape the falloff with CZFogMask Low/High.", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
 		},
-		CZFogMask = Bitmap {
-			Inputs = { Channel = Input { Value = FuID { "Luminance" }, }, },
-			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+		CZFogMask = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				Invert = Input { Value = 1, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Channel = Input { Value = FuID { "Luminance" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
 		},
 		CZFogColor = Background {
 			Inputs = {
-				TopLeftRed = Input { Value = 0.72, }, TopLeftGreen = Input { Value = 0.76, },
-				TopLeftBlue = Input { Value = 0.80, }, TopLeftAlpha = Input { Value = 1, },
-				EffectMask = Input { SourceOp = "CZFogMask", Source = "Mask", },
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				TopLeftRed = Input { Value = 0.72, },
+				TopLeftGreen = Input { Value = 0.76, },
+				TopLeftBlue = Input { Value = 0.8, },
+				EffectMask = Input {
+					SourceOp = "CZFogMask",
+					Source = "Mask",
+				}
 			},
-			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
+			ViewInfo = OperatorInfo { Pos = { 55, 49.5 } },
 		},
 		CZFogMerge = Merge {
 			Inputs = {
-				Foreground = Input { SourceOp = "CZFogColor", Source = "Output", },
 				Blend = Input { Value = 0.65, },
+				Foreground = Input {
+					SourceOp = "CZFogColor",
+					Source = "Output",
+				},
+				PerformDepthMerge = Input { Value = 0, }
 			},
-			ViewInfo = OperatorInfo { Pos = { 275, 45 } },
-		},
-	},
-	ActiveTool = "CZFogMerge"
+			ViewInfo = OperatorInfo { Pos = { 165, 82.5 } },
+		}
+	}
 }

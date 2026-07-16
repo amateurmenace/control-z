@@ -2,6 +2,63 @@
 
 ## unreleased
 
+### the Fusion template pack — ten setups, paste-tested — 2026-07-16
+- **The pack is now ten templates, and every one has been pasted into a live
+  Fusion comp in free Resolve** (build 21, via the scripting API) — the caveat
+  that said "not yet paste-tested" is gone because the test was actually run.
+  Real mattes drove each one: `depth-cli run` on the Pexels street clip,
+  `stencil-cli run` on the portrait.
+- **The existing five were broken in a way the tests couldn't see, and are
+  rebuilt.** `fog`, `depth-grade` and `haze-light` used a `Bitmap` node to key
+  the matte — but `Bitmap` is not a valid Fusion RegID; Resolve silently turns
+  it into a no-op **Dummy** on paste (no image input, no output), so those three
+  produced *nothing*. The correct node is **`BitmapMask`**. All three now key
+  through BitmapMask, and — because the depth matte is near=white — the fog and
+  haze masks are **inverted** so the *far* end mists/glows, which the old ones
+  got backwards too.
+- **`rack-focus` was wired to an input that isn't there.** Its note said to feed
+  the depth matte into `VariBlur.Blur`; VariBlur's blur-map input is actually
+  **`BlurImage`**, and driving real focus needs a distance-from-plane map, not
+  the raw depth. Replaced the `BrightnessContrast` gain hack with a **`Custom`**
+  node computing `max(abs(depth − focal) − tolerance, 0)` — an animatable focal
+  plane on `NumberIn1`, feeding `VariBlur.BlurImage`.
+- **`depth-grade` shipped masks and no grade.** It was three (Dummy) Bitmaps and
+  a note saying "feed these to a ColorCorrector yourself." Now it's a real
+  paste-and-go tree: three `BitmapMask` bands (near / mid via a subtract / far
+  via invert) each driving its own neutral **`ColorCorrector`**, chained.
+- **`parallax` and the tool ids we *assumed* were wrong turned out fine.**
+  `Displace` (`Type`, `XRefraction`, `YRefraction`) and `VariBlur` are real
+  free-edition nodes with the names we guessed; parallax only needed its
+  displacement source actually connected and subtler default refraction. Logged
+  so the next person doesn't re-audit them.
+- **Five new templates**, built and verified the same way:
+  - **`veil-blur`** (the headline): blur *inside* a Stencil matte with a
+    grow/feather so edges don't leak — plus a **mosaic** variant in the same
+    file, bypassed by default. The mosaic needed a `Scale`-down→`Scale`-up
+    (nearest) pair, **not** two `Transform`s: Fusion concatenates adjacent
+    Transforms into one clean resample, so the block pixelation vanished until
+    Scale (which changes real resolution) forced it. Honest note points at the
+    per-frame check.
+  - **`cutout`** — Stencil ProRes-4444 alpha over a new `Background`, alpha
+    tunable through a `MatteControl` rather than trusted.
+  - **`matte-tune`** — `ErodeDilate` + `Blur` on any matte, with two viewer
+    outputs: the tuned matte alone, and the matte as a red tint over the image
+    (the QC bench the other templates assume).
+  - **`confidence-grain`** — `FastNoise` grain merged (SoftLight) through Hush's
+    clean-confidence **alpha**, so grain lands where the denoiser averaged
+    deepest. Note points at Speak as the better path.
+  - **`social-vertical`** — 9:16 canvas, source full-width on a scaled+blurred
+    backdrop of itself. Tuned the fit once we saw a 16:9 source lands full-width
+    (Size 1.0) in a 1080×1920 comp and the backdrop needs ~3.2× to cover height.
+- Every template: `CZ*` node names, exactly one sticky `Note` naming each wire,
+  nothing auto-gains (grade/tune nodes are neutral, grain sits at Blend 0.35).
+- `depth-cli templates` writes all ten (`--pack depth|stencil|all`, descriptive
+  `cz-depth-` / `cz-stencil-` / `cz-hush-` filename prefixes). The zip is
+  rebuilt by a reproducible `packs/build_zip.py` (byte-stable). Tests extended:
+  per-template balanced braces, expected tool ids present, a `Note` present, and
+  **no Studio-only / `Bitmap`-Dummy tool ids** in any file — plus CLI-writes-ten
+  and zip-lists-ten. 146 green.
+
 ### loose ends — 2026-07-16
 - **Speaker labels install themselves now.** Scribe's diarization needed two
   files fetched by hand — one of them buried in a tarball — and because they
@@ -286,8 +343,9 @@
   planned), temporal EMA with shot-boundary resets, per-shot robust
   normalization, He-et-al guided-filter edge-aware upsampling, 10-bit gray
   ProRes matte export, false-color previews, five-template Fusion pack
-  (fog / rack focus / depth grade / parallax / haze light — NEEDS paste-test
-  in Resolve before release). Verified on 4K footage.
+  (fog / rack focus / depth grade / parallax / haze light). Verified on 4K
+  footage. (Pack later paste-tested + rebuilt + grown to ten — see the
+  unreleased entry at the top.)
 
 ### pivot 0.2.0.dev0 — 2026-07-16
 - Web UI (czcore.appshell: FastAPI + local page): open clip, analyze with

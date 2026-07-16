@@ -1,24 +1,176 @@
 {
 	Tools = ordered() {
 		CZGradeNote = Note {
-			Inputs = { Comments = Input { Value = "control-z Depth · DEPTH GRADE — wire depth matte → each Bitmap.Image. Three masks: NEAR/MID/FAR. Feed them to ColorCorrector EffectMask inputs (or export to Color page).", } },
-			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
+			Inputs = {
+				Comments = Input { Value = "control-z Depth · DEPTH GRADE — wire: your image -> CZGradeNear.Input; depth matte -> CZNear.Image, CZMidWide.Image, CZMid.Image and CZFar.Image (all four). Then grade in the three neutral ColorCorrectors: CZGradeNear / CZGradeMid / CZGradeFar — each only touches its depth band. Band edges: the Low values on CZNear (0.66) and CZMidWide (0.33).", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
 		},
-		CZNear = Bitmap {
-			Inputs = { Channel = Input { Value = FuID { "Luminance" }, },
-				Low = Input { Value = 0.66, }, },
-			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+		CZNear = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Channel = Input { Value = FuID { "Luminance" }, },
+				Low = Input { Value = 0.66, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
 		},
-		CZMid = Bitmap {
-			Inputs = { Channel = Input { Value = FuID { "Luminance" }, },
-				Low = Input { Value = 0.33, }, High = Input { Value = 0.66, }, },
-			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
+		CZMidWide = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Channel = Input { Value = FuID { "Luminance" }, },
+				Low = Input { Value = 0.33, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 82.5 } },
 		},
-		CZFar = Bitmap {
-			Inputs = { Channel = Input { Value = FuID { "Luminance" }, },
-				High = Input { Value = 0.33, }, },
-			ViewInfo = OperatorInfo { Pos = { 275, 45 } },
+		CZMid = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				PaintMode = Input { Value = FuID { "Subtract" }, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Channel = Input { Value = FuID { "Luminance" }, },
+				Low = Input { Value = 0.66, },
+				EffectMask = Input {
+					SourceOp = "CZMidWide",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 82.5 } },
 		},
-	},
-	ActiveTool = "CZNear"
+		CZFar = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				Invert = Input { Value = 1, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Channel = Input { Value = FuID { "Luminance" }, },
+				Low = Input { Value = 0.67, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 115.5 } },
+		},
+		CZGradeNear = ColorCorrector {
+			Inputs = {
+				ColorRanges = Input {
+					Value = ColorCurves {
+						Curves = {
+							{
+								Points = {
+									{ 0, 1 },
+									{ 0.4, 0.2 },
+									{ 0.6, 0 },
+									{ 1, 0 }
+								}
+							},
+							{
+								Points = {
+									{ 0, 0 },
+									{ 0.4, 0 },
+									{ 0.6, 0.2 },
+									{ 1, 1 }
+								}
+							}
+						}
+					},
+				},
+				HistogramIgnoreTransparent = Input { Value = 1, },
+				EffectMask = Input {
+					SourceOp = "CZNear",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 49.5 } },
+		},
+		CZGradeMid = ColorCorrector {
+			Inputs = {
+				ColorRanges = Input {
+					Value = ColorCurves {
+						Curves = {
+							{
+								Points = {
+									{ 0, 1 },
+									{ 0.4, 0.2 },
+									{ 0.6, 0 },
+									{ 1, 0 }
+								}
+							},
+							{
+								Points = {
+									{ 0, 0 },
+									{ 0.4, 0 },
+									{ 0.6, 0.2 },
+									{ 1, 1 }
+								}
+							}
+						}
+					},
+				},
+				HistogramIgnoreTransparent = Input { Value = 1, },
+				Input = Input {
+					SourceOp = "CZGradeNear",
+					Source = "Output",
+				},
+				EffectMask = Input {
+					SourceOp = "CZMid",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+		},
+		CZGradeFar = ColorCorrector {
+			Inputs = {
+				ColorRanges = Input {
+					Value = ColorCurves {
+						Curves = {
+							{
+								Points = {
+									{ 0, 1 },
+									{ 0.4, 0.2 },
+									{ 0.6, 0 },
+									{ 1, 0 }
+								}
+							},
+							{
+								Points = {
+									{ 0, 0 },
+									{ 0.4, 0 },
+									{ 0.6, 0.2 },
+									{ 1, 1 }
+								}
+							}
+						}
+					},
+				},
+				HistogramIgnoreTransparent = Input { Value = 1, },
+				Input = Input {
+					SourceOp = "CZGradeMid",
+					Source = "Output",
+				},
+				EffectMask = Input {
+					SourceOp = "CZFar",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+		}
+	}
 }

@@ -1,23 +1,41 @@
 {
 	Tools = ordered() {
 		CZHazeNote = Note {
-			Inputs = { Comments = Input { Value = "control-z Depth · HAZE LIGHT — wire: your image → CZHazeGlow.Input; depth matte → CZHazeMask.Image. Far side of the room glows like window haze.", } },
-			ViewInfo = StickyNoteInfo { Pos = { 55, -80 } },
+			Inputs = {
+				Comments = Input { Value = "control-z Depth · HAZE LIGHT — wire: your image -> CZHazeGlow.Input; depth matte -> CZHazeMask.Image. The far side of the shot blooms like window haze (matte near=white, so the mask is inverted; Low 0.5 keeps it off the foreground). Strength: CZHazeGlow Gain / Glow Size.", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
 		},
-		CZHazeMask = Bitmap {
-			Inputs = { Channel = Input { Value = FuID { "Luminance" }, },
-				Low = Input { Value = 0.5, }, },
-			ViewInfo = OperatorInfo { Pos = { 55, 45 } },
+		CZHazeMask = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				Invert = Input { Value = 1, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Channel = Input { Value = FuID { "Luminance" }, },
+				Low = Input { Value = 0.5, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
 		},
 		CZHazeGlow = SoftGlow {
 			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
 				Threshold = Input { Value = 0.6, },
 				Gain = Input { Value = 1.4, },
 				XGlowSize = Input { Value = 18, },
-				EffectMask = Input { SourceOp = "CZHazeMask", Source = "Mask", },
+				EffectMask = Input {
+					SourceOp = "CZHazeMask",
+					Source = "Mask",
+				}
 			},
-			ViewInfo = OperatorInfo { Pos = { 165, 45 } },
-		},
-	},
-	ActiveTool = "CZHazeGlow"
+			ViewInfo = OperatorInfo { Pos = { 55, 82.5 } },
+		}
+	}
 }

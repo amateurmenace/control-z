@@ -1,0 +1,64 @@
+{
+	Tools = ordered() {
+		CZGrainNote = Note {
+			Inputs = {
+				Comments = Input { Value = "control-z Hush · CONFIDENCE GRAIN — grain only where Hush actually cleaned. Hush >= 3.7 can export its clean-confidence matte in the output ALPHA: wire that clip -> CZGrainIn.Input (one wire; the mask reads the alpha). Amount: CZGrainMerge.Blend; size: CZGrain XScale. NOTE: Speak does this properly (in density, not on the output) — this template is the free-Fusion echo for when Speak isn't installed.", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
+		},
+		CZGrainIn = BrightnessContrast {
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
+		},
+		CZConfMask = BitmapMask {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, },
+				MaskWidth = Input { Value = 1920, },
+				MaskHeight = Input { Value = 1080, },
+				PixelAspect = Input { Value = { 1, 1 }, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				ClippingMode = Input { Value = FuID { "None" }, },
+				Image = Input {
+					SourceOp = "CZGrainIn",
+					Source = "Output",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 115.5 } },
+		},
+		CZGrain = FastNoise {
+			Inputs = {
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				Detail = Input { Value = 1.2, },
+				Contrast = Input { Value = 1.3, },
+				XScale = Input { Value = 60, },
+				SeetheRate = Input { Value = 0.4, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 82.5 } },
+		},
+		CZGrainMerge = Merge {
+			Inputs = {
+				Blend = Input { Value = 0.35, },
+				Background = Input {
+					SourceOp = "CZGrainIn",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "CZGrain",
+					Source = "Output",
+				},
+				ApplyMode = Input { Value = FuID { "SoftLight" }, },
+				PerformDepthMerge = Input { Value = 0, },
+				EffectMask = Input {
+					SourceOp = "CZConfMask",
+					Source = "Mask",
+				}
+			},
+			ViewInfo = OperatorInfo { Pos = { 165, 49.5 } },
+		}
+	}
+}

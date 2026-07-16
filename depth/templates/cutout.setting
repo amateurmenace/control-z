@@ -1,0 +1,45 @@
+{
+	Tools = ordered() {
+		CZCutNote = Note {
+			Inputs = {
+				Comments = Input { Value = "control-z Stencil · CUTOUT — composite a Stencil ProRes 4444 (RGB+alpha) over a new background. Wire: the rgba matte clip -> CZAlphaTune.Background. New backdrop: recolor CZBackdrop, or wire other footage into CZOver.Background. Tune the alpha in CZAlphaTune (Matte Blur / Matte Contract-Expand / Invert) rather than trusting it.", }
+			},
+			ViewInfo = StickyNoteInfo {
+				Flags = { Expanded = true },
+				Pos = { -55, 16.5 },
+				Size = { 196, 181.364 }
+			},
+		},
+		CZAlphaTune = MatteControl {
+			Inputs = {
+				Filter = Input { Value = FuID { "Fast Gaussian" }, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 49.5 } },
+		},
+		CZBackdrop = Background {
+			Inputs = {
+				Width = Input { Value = 1920, },
+				Height = Input { Value = 1080, },
+				UseFrameFormatSettings = Input { Value = 1, },
+				TopLeftRed = Input { Value = 0.08, },
+				TopLeftGreen = Input { Value = 0.08, },
+				TopLeftBlue = Input { Value = 0.09, }
+			},
+			ViewInfo = OperatorInfo { Pos = { -55, 82.5 } },
+		},
+		CZOver = Merge {
+			Inputs = {
+				Background = Input {
+					SourceOp = "CZBackdrop",
+					Source = "Output",
+				},
+				Foreground = Input {
+					SourceOp = "CZAlphaTune",
+					Source = "Output",
+				},
+				PerformDepthMerge = Input { Value = 0, }
+			},
+			ViewInfo = OperatorInfo { Pos = { 55, 49.5 } },
+		}
+	}
+}
