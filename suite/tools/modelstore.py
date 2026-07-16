@@ -123,4 +123,11 @@ def register_modelstore(app, jobs, frames):
             shutil.rmtree(target)
         else:
             target.unlink()
-        return {"ok": True, "note": f"removed — it re-downloads on next use"}
+        # only say it comes back if it comes back: a registry entry with no url
+        # is built locally, and nothing will fetch it for you
+        spec = reg.REGISTRY.get(name) if kind == "registry" else None
+        if spec is not None and spec.url is None:
+            return {"ok": True,
+                    "note": f"removed — nothing re-downloads this one; "
+                            f"{spec.hint or 'it has to be rebuilt'}"}
+        return {"ok": True, "note": "removed — it re-downloads on next use"}

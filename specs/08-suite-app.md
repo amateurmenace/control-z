@@ -140,7 +140,7 @@ texture over footage).
 ## Appendix: kickoff prompt for the build session
 
 > Build **control-z Suite v0.1** — the desktop app shell for the control-z tools — in
-> `/Users/stephen/control-z` (existing monorepo, venv at `.venv`, Python 3.14).
+> `/Users/amateurmenace/control-z` (existing monorepo, venv at `.venv`, Python 3.14).
 >
 > **Read first:** `specs/08-suite-app.md` (this plan — follow it), `specs/00-overview.md`
 > (shared architecture + covenant), `specs/01-pivot.md` and `specs/05-rise.md` (the two
@@ -174,5 +174,5 @@ texture over footage).
 > render ProRes 4444 → file verified frame-accurate; Rise batch runs through the queue
 > with cancel; unit tests for the job store, frame cache, and export-preset mapping;
 > verify the UI by driving it in a browser; update `CHANGELOG.md` and `README.md`.
-> Test footage: `/Users/stephen/Hush/Test Footage/NR Test SHort Sabby.mov`. Commit
+> Test footage: `/Users/amateurmenace/Movies/NR Test SHort Sabby.mov`. Commit
 > nothing without asking.
