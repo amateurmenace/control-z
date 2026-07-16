@@ -94,8 +94,13 @@ class FrameService:
 
     def frame_path(self, path: str, index: int, height: int = 540,
                    prefetch: bool = True) -> Optional[Path]:
-        """Path to the cached JPEG for (clip, frame, height); decodes on miss."""
-        f = clip_cache_dir(path, height) / f"f_{index:05d}.jpg"
+        """Path to the cached JPEG for (clip, frame, height); decodes on miss.
+        None when the frame can't be produced — past the end, or the clip is
+        no longer readable (unplugged mid-session), which reads as a miss."""
+        try:
+            f = clip_cache_dir(path, height) / f"f_{index:05d}.jpg"
+        except OSError:
+            return None
         if not f.exists():
             ok = self._decode_into_cache(path, index, height)
             if not ok:
@@ -163,21 +168,25 @@ class FrameService:
                 frame, got = reader.read(
                     index,
                     on_pass=lambda i, f: self._write_jpeg(f, path, i, height))
+                if frame is not None:
+                    self._write_jpeg(frame, path, got, height)
             except Exception:
-                # a broken reader must not wedge the service — drop it
+                # a broken reader — or a cache dir that vanished with the drive
+                # under it — must not wedge the service; drop it and miss
                 r = self._readers.pop(path, None)
                 if r:
                     self._order.remove(path)
                     r.close()
                 return False
-            if frame is not None:
-                self._write_jpeg(frame, path, got, height)
         if frame is None:
             return False
         if got != index:
             # CFR mismatch (or EOF short) — serve what the pts math says this is;
             # honesty: don't alias another frame under the asked-for index
-            return (clip_cache_dir(path, height) / f"f_{index:05d}.jpg").exists()
+            try:
+                return (clip_cache_dir(path, height) / f"f_{index:05d}.jpg").exists()
+            except OSError:
+                return False
         return True
 
     def _prefetch_loop(self):
@@ -188,11 +197,17 @@ class FrameService:
             if not want:
                 continue
             path, start, height = want
-            for i in range(start, start + self.prefetch_n):
-                if self._want != want:  # a newer request superseded this one
-                    break
-                f = clip_cache_dir(path, height) / f"f_{i:05d}.jpg"
-                if f.exists():
-                    continue
-                if not self._decode_into_cache(path, i, height):
-                    break
+            try:
+                for i in range(start, start + self.prefetch_n):
+                    if self._want != want:  # a newer request superseded this one
+                        break
+                    f = clip_cache_dir(path, height) / f"f_{i:05d}.jpg"
+                    if f.exists():
+                        continue
+                    if not self._decode_into_cache(path, i, height):
+                        break
+            except Exception:
+                # warming frames is a nicety; if the clip or its cache went away
+                # mid-session, stop warming this one and wait for the next scrub
+                # rather than killing prefetch for the rest of the session
+                continue

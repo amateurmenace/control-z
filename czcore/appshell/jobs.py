@@ -31,6 +31,28 @@ class JobCancelled(Exception):
     """Raised inside a job fn when cancel was requested (not an error)."""
 
 
+# The kinds we raise on purpose, each carrying a sentence someone wrote. An
+# OSError raised by the OS has errno set; one of ours (raise OSError("…")) does
+# not — that's how we tell a written sentence from a system code below.
+_WRITTEN = (RuntimeError, ValueError, OSError)
+
+
+def _sentence(e: BaseException) -> str:
+    """The job error as the UI shows it: a sentence, never a bare code. The
+    traceback still prints to the console for whoever is debugging."""
+    msg = str(e).strip()
+    if isinstance(e, OSError) and e.errno is not None:
+        what = (e.strerror or msg or "the operation failed").rstrip(".")
+        where = f": {e.filename}" if e.filename else ""
+        return f"the system wouldn't allow it — {what.lower()}{where}."
+    if isinstance(e, _WRITTEN) and msg:
+        return msg
+    if msg:
+        return f"this stopped on an unexpected {e.__class__.__name__} — {msg}"
+    return (f"this stopped on an unexpected {e.__class__.__name__} that came "
+            "with no message — the console has the traceback.")
+
+
 class _Con:
     """sqlite3 connection that commits AND closes on context exit."""
 
@@ -195,6 +217,14 @@ class JobManager:
             return sum(1 for j in self._jobs.values()
                        if j.status in ("queued", "running"))
 
+    def active(self, tool: Optional[str] = None) -> List[Job]:
+        """Jobs still queued or running, optionally only one tool's — callers
+        that are about to delete something a job is writing into ask first."""
+        with self._lock:
+            return [j for j in self._jobs.values()
+                    if j.status in ("queued", "running")
+                    and (tool is None or j.tool == tool)]
+
     def clear_finished(self) -> int:
         """Drop finished jobs from history (memory + DB). Active jobs stay."""
         done = ("done", "error", "cancelled")
@@ -233,7 +263,7 @@ class JobManager:
             job.message = "cancelled"
         except Exception as e:  # surfaced to the UI, never swallowed
             job.status = "error"
-            job.error = f"{e.__class__.__name__}: {e}"
+            job.error = _sentence(e)
             traceback.print_exc()
         job.finished_at = time.time()
         self._flush(job)

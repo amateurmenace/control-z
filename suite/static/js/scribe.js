@@ -120,12 +120,14 @@ const ScribePage = (() => {
   /* ---------- transcript rendering ---------- */
   function renderTranscript() {
     const box = $("#sc-transcript", el);
+    S.words = [];      // the clock reads this — never leave the last clip's words behind
+    S.curWord = -1;
+    $("#sc-speakernow", el).innerHTML = "";
     if (!S.t || !S.t.segments.length) {
       box.innerHTML = `<div class="empty-grain" style="padding:36px 8px;color:var(--cream-faint);text-align:center">
         no speech found — is this the right clip?</div>`;
       return;
     }
-    S.words = [];
     let html = "", lastSpeaker = null, wi = 0;
     S.t.segments.forEach((seg, si) => {
       if (seg.speaker !== lastSpeaker) {
@@ -161,6 +163,31 @@ const ScribePage = (() => {
     drawScopes();
   }
 
+  /* A paragraph edit has to reach seg.words, not just seg.text: the transcript
+     re-renders from words, and a segment too long for the caption preset is cut
+     into blocks by word (scribe/exports.py). Same token count keeps every word's
+     measured timing; a rewrite re-spreads the spoken span across the new tokens,
+     weighted by length — those timings are an estimate, and the toast says so. */
+  function respreadWords(seg, txt) {
+    const tokens = txt.split(/\s+/).filter(Boolean);
+    if (!seg.words || !seg.words.length || !tokens.length) return false;
+    if (tokens.length === seg.words.length) {
+      seg.words.forEach((w, i) => { if (w.w !== tokens[i]) { w.w = tokens[i]; w.p = 1; } });
+      return false;
+    }
+    const s = seg.words[0].s;
+    const e = Math.max(seg.words[seg.words.length - 1].e, s + 0.01);
+    const weights = tokens.map(t => t.length + 1);
+    const total = weights.reduce((a, b) => a + b, 0);
+    let acc = 0;
+    seg.words = tokens.map((tok, i) => {
+      const from = s + (e - s) * acc / total;
+      acc += weights[i];
+      return { w: tok, s: +from.toFixed(3), e: +(s + (e - s) * acc / total).toFixed(3), p: 1 };
+    });
+    return true;
+  }
+
   function editSegment(span) {
     const si = +span.dataset.seg;
     const seg = S.t.segments[si];
@@ -173,9 +200,12 @@ const ScribePage = (() => {
       span.style.outline = "";
       const txt = span.textContent.trim();
       if (txt && txt !== seg.text) {
+        const respread = respreadWords(seg, txt);
         seg.text = txt;
         await save();
-        toast("saved — captions use the corrected text");
+        toast(respread
+          ? "saved — captions use the corrected text; word timings re-spread across the edit"
+          : "saved — captions use the corrected text");
       }
       renderTranscript();
     };
@@ -377,7 +407,7 @@ const ScribePage = (() => {
       audio.src = `/api/scribe/audio?path=${encodeURIComponent(r.path)}`;
       $("#sc-play", el).disabled = !r.audio_streams;
       $("#sc-transcribe", el).disabled = !r.audio_streams;
-      S.t = null; S.pulls = []; S.curWord = -1;
+      S.t = null; S.words = []; S.pulls = []; S.curWord = -1;
       const side = await api("/api/scribe/load", { path: r.path });
       if (side.transcript) { applyTranscript(side.transcript); $("#sc-msg", el).textContent = "transcript sidecar loaded"; }
       else { renderTranscript(); $("#sc-msg", el).textContent = r.audio_streams ? "ready to transcribe" : "no audio track in this file"; }
@@ -488,6 +518,17 @@ const ScribePage = (() => {
     }
     dens.forEach(b => b.onclick = () => { applyDensity(b.dataset.d); setDensity("scribe", b.dataset.d); });
     applyDensity(density("scribe"));
+
+    /* the router only toggles .active — watch for it leaving so a tool switch
+       can't leave this transcript talking underneath the next tool */
+    new MutationObserver(() => { if (!el.classList.contains("active")) stop(); })
+      .observe(el, { attributes: true, attributeFilter: ["class"] });
+  }
+
+  /* stop playing and give up the clock: called when this page stops being current */
+  function stop() {
+    audio.pause();
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
   }
 
   let inited = false;
@@ -499,5 +540,5 @@ const ScribePage = (() => {
   }
 
   registerPage("scribe", el, onshow);
-  return { onshow };
+  return { onshow, stop };
 })();

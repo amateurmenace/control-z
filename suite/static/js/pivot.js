@@ -101,7 +101,10 @@ const PivotPage = (() => {
     </div>
   </div>`;
 
-  const P = { clip: null, analysis: null, aspect: null, backends: [] };
+  /* overrides: "<aspect>:<shot>" -> mode the user picked. renderShots runs on
+     every shot change under the playhead, so the select's choice has to be
+     remembered here — the DOM one is rebuilt out from under it. */
+  const P = { clip: null, analysis: null, aspect: null, backends: [], overrides: {} };
   let viewer, strip;
 
   /* ---------- helpers ---------- */
@@ -238,8 +241,7 @@ const PivotPage = (() => {
         <span>${subj}</span>
         ${row.fallback_center ? `<span class="warn" title="no subject found — static center crop">◦</span>` : ""}
         <select data-shot="${i}">
-          ${["auto", "punch", "follow", "center"].map(m =>
-            `<option ${m === "auto" && !["punch", "follow", "center"].includes(s.shot_modes[i]) ? "" : ""}>${m}</option>`).join("")}
+          ${["auto", "punch", "follow", "center"].map(m => `<option>${m}</option>`).join("")}
         </select></span>`;
     }).join("");
     $$(".shotchip", box).forEach(chip => {
@@ -251,17 +253,22 @@ const PivotPage = (() => {
     });
     $$("select", box).forEach(sel => {
       const i = +sel.dataset.shot;
-      sel.value = "auto";
+      sel.value = P.overrides[`${P.aspect}:${i}`] || "auto";
       sel.onchange = async () => {
+        const key = `${P.aspect}:${i}`, prev = P.overrides[key] || "auto", mode = sel.value;
         try {
           const r = await api("/api/pivot/override",
-            { path: P.clip.path, aspect: P.aspect, shot: i, mode: sel.value });
+            { path: P.clip.path, aspect: P.aspect, shot: i, mode });
           const [s0, e0] = a.shots[i];
           s.centers.splice(s0, e0 - s0, ...r.centers);
           s.shot_modes[i] = r.mode;
+          if (mode === "auto") delete P.overrides[key]; else P.overrides[key] = mode;
           renderShots(); updateScopes(); viewer.draw();
           toast(`shot #${i} → ${r.mode} (${r.moves} moves)`);
-        } catch (err) { toast(err.message, true); }
+        } catch (err) {
+          sel.value = prev;   // the solve didn't change; neither should the control
+          toast(err.message, true);
+        }
       };
     });
   }
@@ -277,7 +284,7 @@ const PivotPage = (() => {
         ? `<b>${esc(r.name)}</b> · ${v.width}×${v.height} @ ${v.fps.toFixed(2)} · ~${v.n_frames_estimate ?? "?"} frames · audio ${r.audio_streams ? "✓" : "—"}`
         : esc(r.name);
       $("#pv-analyze", el).disabled = false;
-      P.analysis = null; P.aspect = null;
+      P.analysis = null; P.aspect = null; P.overrides = {};
       viewer.setClip({ path: r.path, nFrames: v.n_frames_estimate || 1, fps: v.fps, w: v.width, h: v.height });
       strip.setClip(viewer.clip); strip.setMarks([]);
       renderShots(); updateScopes();
@@ -294,6 +301,7 @@ const PivotPage = (() => {
   function applyAnalysis(a) {
     P.analysis = a;
     P.aspect = Object.keys(a.aspects)[0];
+    P.overrides = {};   // a fresh solve is auto everywhere again
     viewer.clip.nFrames = a.n_frames;       // exact now, estimate before
     viewer.clip.fps = a.fps;
     strip.setClip(viewer.clip);

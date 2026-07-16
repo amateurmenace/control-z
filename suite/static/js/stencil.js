@@ -93,7 +93,14 @@ const StencilPage = (() => {
     return [0, ST.clip.nFrames];
   };
 
-  /* ---------- masks ---------- */
+  /* ---------- masks ----------
+     A decoded 720p mask is ~3.7 MB and its alpha canvas another ~3.7 MB, so
+     these two caches are held to the scrub window around the playhead rather
+     than the whole propagation, and evicted canvases hand their backing store
+     back (a.width = 0) instead of waiting for the GC. Re-fetching is cheap:
+     the masks are PNGs on disk one hop away. */
+  const MASK_WINDOW = 24, ALPHA_WINDOW = 12;
+
   function maskImg(i) {
     if (!ST.result) return null;
     const rel = i - ST.result.start;
@@ -103,9 +110,11 @@ const StencilPage = (() => {
     e = { img: new Image(), ok: false };
     e.img.onload = () => { e.ok = true; viewer.draw(); };
     e.img.src = `/api/stencil/mask?path=${encodeURIComponent(ST.clip.path)}` +
-      `&start=${ST.result.start}&end=${ST.result.end}&i=${rel}`;
+      `&start=${ST.result.start}&end=${ST.result.end}&i=${rel}` +
+      `&tag=${encodeURIComponent(ST.result.tag)}`;
     ST.maskCache.set(rel, e);
-    if (ST.maskCache.size > 200) ST.maskCache.delete(ST.maskCache.keys().next().value);
+    for (const [k, v] of ST.maskCache)
+      if (Math.abs(k - rel) > MASK_WINDOW) { v.img.src = ""; ST.maskCache.delete(k); }
     return null;
   }
 
@@ -145,9 +154,16 @@ const StencilPage = (() => {
     if (!a) {
       a = maskToAlpha(img);
       alphaCache.set(i, a);
-      if (alphaCache.size > 120) alphaCache.delete(alphaCache.keys().next().value);
+      for (const [k, c] of alphaCache)
+        if (Math.abs(k - i) > ALPHA_WINDOW) { c.width = c.height = 0; alphaCache.delete(k); }
     }
     return a;
+  }
+
+  function dropMasks() {
+    for (const e of ST.maskCache.values()) e.img.src = "";
+    for (const c of alphaCache.values()) c.width = c.height = 0;
+    ST.maskCache.clear(); alphaCache.clear();
   }
 
   /* ---------- overlay ---------- */
@@ -251,7 +267,7 @@ const StencilPage = (() => {
       $("#st-meta", el).innerHTML =
         `<b>${esc(r.name)}</b> · ${r.video.width}×${r.video.height} @ ${r.video.fps.toFixed(2)}`;
       ST.prompts = []; ST.result = null;
-      ST.maskCache.clear(); alphaCache.clear();
+      dropMasks();
       viewer.setClip(ST.clip);
       strip.setClip(viewer.clip);
       $("#st-run", el).disabled = !(ST.runtime && ST.runtime.available);
@@ -289,7 +305,7 @@ const StencilPage = (() => {
       if (done.status === "cancelled") { $("#st-msg", el).textContent = "cancelled"; return; }
       $("#st-msg", el).classList.remove("err");
       ST.result = done.result;
-      ST.maskCache.clear(); alphaCache.clear();
+      dropMasks();
       $("#st-exportsec", el).style.display = "";
       $("#st-msg", el).textContent = done.result.note;
       drawConf(); drawCov(); viewer.draw();
@@ -299,10 +315,11 @@ const StencilPage = (() => {
   }
 
   async function exportMatte(kind) {
-    const [s, e] = ST.result ? [ST.result.start, ST.result.end] : range();
+    if (!ST.result) { toast("propagate first — there's nothing to export", true); return; }
+    const [s, e] = [ST.result.start, ST.result.end];
     try {
       const job = await api("/api/stencil/export", {
-        path: ST.clip.path, start: s, end: e, kind,
+        path: ST.clip.path, start: s, end: e, kind, tag: ST.result.tag,
         post: {
           grow: parseInt($("#st-grow", el).value) || 0,
           feather: parseFloat($("#st-feather", el).value) || 0,

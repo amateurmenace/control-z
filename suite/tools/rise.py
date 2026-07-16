@@ -97,8 +97,12 @@ def register_rise(app, jobs, frames):
         scale = int(body.get("scale", 2))
         model = body.get("model") or "auto"
         use_denoise = bool(body.get("denoise", False))
+        tile = int(body.get("tile", 512))
         if scale not in (2, 4):
             return JSONResponse({"error": "scale must be 2 or 4"}, status_code=422)
+        if tile not in (256, 512, 768):
+            return JSONResponse({"error": "tile must be 256, 512 or 768"},
+                                status_code=422)
 
         img = frames.native_frame(path, i)
         if img is None:
@@ -121,7 +125,7 @@ def register_rise(app, jobs, frames):
                 next_f[y0:y0 + ph, x0:x0 + pw] if next_f is not None else None)
 
         name = resolve_model(model)
-        up, einfo = upscale_frame(patch, scale, model=name)
+        up, einfo = upscale_frame(patch, scale, model=name, tile=tile)
         bicubic = cv2.resize(patch, (patch.shape[1] * scale, patch.shape[0] * scale),
                              interpolation=cv2.INTER_CUBIC)
         diff = np.abs(up.astype(np.int16) - bicubic.astype(np.int16)).mean(axis=2)
@@ -148,8 +152,12 @@ def register_rise(app, jobs, frames):
         force = bool(body.get("force", False))
         denoise = "hush" if body.get("denoise", True) else "off"
         preset_id = body.get("preset", "prores-hq")
+        tile = int(body.get("tile", 512))
         if scale not in (2, 4):
             return JSONResponse({"error": "scale must be 2 or 4"}, status_code=422)
+        if tile not in (256, 512, 768):
+            return JSONResponse({"error": "tile must be 256, 512 or 768"},
+                                status_code=422)
         try:
             spec = resolve_preset(preset_id)
         except KeyError:
@@ -173,13 +181,20 @@ def register_rise(app, jobs, frames):
                     job.message = f"{n}/{total} frames · {spec['label']}"
 
                 try:
-                    return upscale_video(
-                        p, out, scale=scale, model=model, stabilize=stabilize,
-                        codec_spec=spec, force=force, denoise=denoise,
-                        progress=prog,
+                    report = upscale_video(
+                        p, out, scale=scale, model=model, tile=tile,
+                        stabilize=stabilize, codec_spec=spec, force=force,
+                        denoise=denoise, progress=prog,
                         should_stop=lambda: job.cancel_requested)
                 except InterlacedSourceError as e:
                     raise RuntimeError(str(e)) from None
+                # rise.video measures sigma on every frame but keeps only the
+                # last one's — name that frame rather than let the report read
+                # as if it spoke for the clip.
+                dn = report.get("denoise")
+                if isinstance(dn, dict):
+                    dn["measured_on_frame"] = report["frames"]
+                return report
 
             label = (f"{Path(p).name} ×{scale}"
                      f"{' · cleaned' if denoise == 'hush' else ''}"

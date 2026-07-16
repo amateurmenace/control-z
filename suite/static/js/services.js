@@ -9,6 +9,22 @@ const fmtBytes = n => {
   return (n / (1 << 30)).toFixed(2) + " GB";
 };
 
+/* Release tags come in shapes: "v3.7.0", "speak-v0.2.0", "0.2.0-beta.1". Compare
+   the first run of dotted numbers; anything without one is unknown, not equal. */
+const verNums = s => {
+  const m = String(s == null ? "" : s).match(/\d+(?:\.\d+)*/);
+  return m ? m[0].split(".").map(Number) : null;
+};
+function cmpVersions(a, b) {
+  const x = verNums(a), y = verNums(b);
+  if (!x || !y) return null;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
 /* ---------- Install OpenFX ---------- */
 const OfxPage = (() => {
   const el = document.createElement("div");
@@ -36,17 +52,22 @@ const OfxPage = (() => {
   function pluginCard(key, p) {
     const rel = releases && releases[key];
     const latest = rel && !rel.error ? rel.tag : null;
-    const behind = latest && p.installed &&
-      latest.replace(/^v/, "") !== p.installed.replace(/^v/, "");
+    const order = latest && p.installed ? cmpVersions(p.installed, latest) : null;
+    const behind = order === -1;
+    /* the plist can report "unknown" — don't dress that up as a version number */
+    const inst = verNums(p.installed) ? `v${esc(p.installed)}` : `version ${esc(p.installed)}`;
     let state;
     if (!p.installed) state = `<span class="badge warn">not installed</span>`;
-    else if (behind) state = `<span class="badge" style="color:var(--amber);border-color:var(--amber)">v${esc(p.installed)} → ${esc(latest)} available</span>`;
-    else state = `<span class="badge" style="color:var(--ok);border-color:var(--ok)">v${esc(p.installed)} installed${latest ? " · latest" : ""}</span>`;
+    else if (behind) state = `<span class="badge" style="color:var(--amber);border-color:var(--amber)">${inst} → ${esc(latest)} available</span>`;
+    else if (order === 1) state = `<span class="badge" style="color:var(--ok);border-color:var(--ok)">${inst} installed — newer than the latest release (${esc(latest)})</span>`;
+    else if (order === 0) state = `<span class="badge" style="color:var(--ok);border-color:var(--ok)">${inst} installed · latest</span>`;
+    else state = `<span class="badge" style="color:var(--ok);border-color:var(--ok)">${inst} installed${latest ? " — can't compare it to " + esc(latest) : ""}</span>`;
     const relLine = rel ? (rel.error
       ? `<div class="hint">${esc(rel.error)}</div>`
       : `<div class="hint">latest: ${esc(rel.tag)}${rel.prerelease ? ' <span class="badge synth">beta</span>' : ""} · <a href="${esc(rel.notes_url)}" target="_blank">release notes</a></div>`) : "";
     const btnLabel = !p.installed ? "Download installer"
-      : behind ? "Download update" : "Reinstall";
+      : behind ? "Download update"
+      : order === 1 ? "Download the release anyway" : "Reinstall";
     return `<div class="door" style="margin-top:10px;background:var(--ink-2)">
       <h2>${esc(p.name)} <span style="font-weight:400;color:var(--cream-dim);font-size:12.5px">— ${esc(p.one)}</span></h2>
       <div class="why">${state}</div>
@@ -111,8 +132,8 @@ const OfxPage = (() => {
     $("#ofx-clearcache", el).onclick = async () => {
       try {
         const r = await api("/api/ofx/clear-cache", {});
+        await refresh();   // the file on disk is the truth, not what we just asked for
         $("#ofx-cachemsg", el).textContent = r.note;
-        status.cache_file_present = false;
       } catch (err) { toast(err.message, true); }
     };
   }
@@ -142,8 +163,9 @@ const ModelsPage = (() => {
   function row(m) {
     const state = m.present
       ? `<span class="badge" style="color:var(--ok);border-color:var(--ok)">${fmtBytes(m.size)}</span>`
-      : `<span class="badge">not downloaded</span>`;
-    const act = m.present
+      : m.problem ? `<span class="badge warn">unusable</span>`
+                  : `<span class="badge">not downloaded</span>`;
+    const act = (m.present || m.problem)
       ? `<button data-del="${m.name}">remove</button>`
       : (m.downloadable ? `<button data-dl="${m.name}">download</button>`
                         : `<span class="hint">${esc(m.hint || "")}</span>`);
@@ -151,6 +173,7 @@ const ModelsPage = (() => {
       <div class="qtool">${esc(m.name)}</div>
       <div><div class="qlabel" style="font-size:12.5px">${esc(m.card)}</div>
         <div class="qmsg">${esc(m.license)}${m.pinned ? " · sha-256 pinned" : ""}</div>
+        ${m.problem ? `<div class="qmsg err">${esc(m.problem)}</div>` : ""}
         <div class="qmsg" data-mmsg="${m.name}"></div></div>
       <div>${state}</div>
       <div class="qact">${act}</div>
@@ -160,13 +183,17 @@ const ModelsPage = (() => {
   async function refresh() {
     const d = await api("/api/models/list");
     $("#md-store", el).innerHTML =
-      `shared store: <code style="font-family:var(--mono);font-size:11px">${esc(d.store)}</code> · ${fmtBytes(d.total_size)} total — every download shows its license and verifies its hash`;
+      `shared store: <code style="font-family:var(--mono);font-size:11px">${esc(d.store)}</code> · ${fmtBytes(d.total_size)} total — every model in the registry below names its license; the ones marked sha-256 pinned are verified as they download`;
     $("#md-registry", el).innerHTML =
       `<div class="tag" style="margin-bottom:6px">shared store (czcore registry)</div>` +
       d.registry.map(row).join("");
     const rt = d.stencil_runtime;
     $("#md-extra", el).innerHTML =
-      `<div class="tag" style="margin:16px 0 6px">whisper (scribe)</div>` +
+      `<div class="tag" style="margin:16px 0 6px">whisper (scribe)</div>
+       <div class="hint" style="margin-bottom:6px">not in the registry above: faster-whisper
+         fetches these from Hugging Face itself on the first transcribe — CTranslate2 int8
+         conversions of OpenAI's Whisper (MIT). No pinned hash, no license card, whatever
+         tag the library asks for. They live here so you can see and remove them.</div>` +
       (d.whisper.length ? d.whisper.map(w => `<div class="qrow" style="grid-template-columns:150px 1fr 110px 110px">
           <div class="qtool">${esc(w.name)}</div><div class="qlabel" style="font-size:12.5px">CTranslate2 int8</div>
           <div><span class="badge" style="color:var(--ok);border-color:var(--ok)">${fmtBytes(w.size)}</span></div>

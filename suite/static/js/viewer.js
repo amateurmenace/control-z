@@ -267,7 +267,7 @@ class Filmstrip {
     const seek = e => {
       if (!this.clip) return;
       const r = el.getBoundingClientRect();
-      const f = Math.round((e.clientX - r.left) / r.width * (this.clip.nFrames - 1));
+      const f = Math.round((e.clientX - r.left) / r.width * this._span());
       this.onSeek(Math.max(0, Math.min(this.clip.nFrames - 1, f)));
     };
     el.addEventListener("mousedown", e => {
@@ -278,15 +278,20 @@ class Filmstrip {
     });
   }
 
+  /* frames the strip spans; a 1-frame clip still has a whole strip to draw in */
+  _span() { return Math.max(1, this.clip.nFrames - 1); }
+
   setClip(clip) {
     this.clip = clip; this.thumbs = []; this.i = 0; this.marks = [];
     if (!clip) { this.draw(); return; }
     /* landscape-ish cells: fill the width without slicing faces into slivers */
     const w = this.el.getBoundingClientRect().width || 1100;
     const h = this.el.getBoundingClientRect().height || 62;
-    const n = Math.max(8, Math.min(40, Math.round(w / (h * 1.55))));
+    const n = clip.nFrames > 1
+      ? Math.max(8, Math.min(40, Math.round(w / (h * 1.55))))
+      : 1;   // one frame, one cell — not 40 requests for the same thumbnail
     for (let k = 0; k < n; k++) {
-      const fi = Math.round(k / (n - 1) * (clip.nFrames - 1));
+      const fi = n > 1 ? Math.round(k / (n - 1) * (clip.nFrames - 1)) : 0;
       const img = new Image();
       const t = { img, ok: false, fi };
       img.onload = () => { t.ok = true; this.draw(); };
@@ -320,10 +325,10 @@ class Filmstrip {
     });
     g.fillStyle = "rgba(25,25,33,.55)";
     this.marks.forEach(m => {
-      const x = m / (this.clip.nFrames - 1) * W;
+      const x = m / this._span() * W;
       g.fillRect(x - 1, 0, 2, H);
     });
-    const x = this.i / (this.clip.nFrames - 1) * W;
+    const x = this.i / this._span() * W;
     g.fillStyle = "#F5F3EE"; g.fillRect(x - 1.2, 0, 2.4, H);
   }
 }

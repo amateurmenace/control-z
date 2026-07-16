@@ -138,21 +138,32 @@ def register_ofx(app, jobs, frames):
                     ".pkg installer — grab the zip from "
                     f"{rel.get('notes_url')} and follow its install steps")
             pkg = rel["pkg"]
-            dest = Path.home() / "Downloads" / pkg["name"]
+            downloads = Path.home() / "Downloads"
+            downloads.mkdir(parents=True, exist_ok=True)
+            dest = downloads / pkg["name"]
+            # download beside the real name and rename only on success: an
+            # interrupted download must never look like a finished installer
+            part = dest.with_name(dest.name + ".part")
             job.message = f"downloading {pkg['name']} ({pkg['size'] // (1 << 20)} MB)…"
             req = urllib.request.Request(pkg["url"],
                                          headers={"User-Agent": "control-z-suite"})
-            with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
-                total = pkg["size"] or 1
-                got = 0
-                while True:
-                    chunk = r.read(1 << 18)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    got += len(chunk)
-                    job.progress = min(0.95, got / total)
-                    job.check_cancel()
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r, \
+                        open(part, "wb") as f:
+                    total = pkg["size"] or 1
+                    got = 0
+                    while True:
+                        chunk = r.read(1 << 18)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        got += len(chunk)
+                        job.progress = min(0.95, got / total)
+                        job.check_cancel()
+            except BaseException:
+                part.unlink(missing_ok=True)
+                raise
+            part.replace(dest)
             job.message = "opening the installer — finish in the system dialog"
             subprocess.run(["open", str(dest)], check=True)
             return {"pkg": str(dest), "tag": rel["tag"],
@@ -183,12 +194,14 @@ def register_ofx(app, jobs, frames):
         bundle = PLUGINS_DIR / PLUGINS[key]["bundle"]
         if not bundle.exists():
             return {"note": "not installed — nothing to remove"}
-        import os
         import shutil
-        if os.access(PLUGINS_DIR, os.W_OK):
+        # a writable /Library/OFX/Plugins doesn't mean the bundle inside it is
+        # ours to delete — try it, and hand over the sudo line if it isn't
+        try:
             shutil.rmtree(bundle)
-            return {"note": f"removed {bundle}"}
-        return {"needs_admin": True,
-                "command": f'sudo rm -rf "{bundle}"',
-                "note": "the plugins folder is admin-owned — run this in "
-                        "Terminal, then clear the OFX cache"}
+        except OSError:
+            return {"needs_admin": True,
+                    "command": f'sudo rm -rf "{bundle}"',
+                    "note": "this one is admin-owned — run that in Terminal, "
+                            "then clear the OFX cache"}
+        return {"note": f"removed {bundle}"}

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # NOTE: fastapi names used in ANNOTATIONS (WebSocket) must be module-level —
@@ -30,7 +31,19 @@ STATIC = Path(__file__).parent / "static"
 def create_suite_app():
     from czcore.media import presets_report, probe
 
-    app = FastAPI(title="control-z Suite", docs_url=None, redoc_url=None)
+    # job updates arrive on worker threads; they need the serving loop to hand
+    # the send off to, and the only place that knows it is a running server
+    sockets: set = set()
+    loop_box: dict = {}
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        loop_box["loop"] = asyncio.get_running_loop()
+        yield
+        loop_box.clear()
+
+    app = FastAPI(title="control-z Suite", docs_url=None, redoc_url=None,
+                  lifespan=lifespan)
     jobs = JobManager(db_path=str(app_support() / "jobs.db"), queued=True)
     frames = FrameService()
     session = Session()
@@ -40,13 +53,6 @@ def create_suite_app():
     app.state.session = session
 
     # -- job events over WebSocket ---------------------------------------------
-
-    sockets: set = set()
-    loop_box: dict = {}
-
-    @app.on_event("startup")
-    async def _capture_loop():
-        loop_box["loop"] = asyncio.get_running_loop()
 
     async def _send_all(payload: dict):
         dead = []

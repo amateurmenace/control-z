@@ -67,23 +67,37 @@ function toast(msg, isErr) {
 /* ---------- job events ---------- */
 function applyJob(job) {
   CZ.jobs.set(job.id, job);
-  (CZ.jobWatchers.get(job.id) || []).forEach(fn => { try { fn(job); } catch (e) {} });
+  /* copy: a watcher is allowed to unregister itself from inside the call */
+  (CZ.jobWatchers.get(job.id) || []).slice().forEach(fn => { try { fn(job); } catch (e) {} });
   if (window.QueuePage) QueuePage.onJob(job);
 }
 
+/* returns an unregister function; callers that only want progress can ignore it */
 function watchJob(id, fn) {
   if (!CZ.jobWatchers.has(id)) CZ.jobWatchers.set(id, []);
-  CZ.jobWatchers.get(id).push(fn);
+  const list = CZ.jobWatchers.get(id);
+  list.push(fn);
+  const off = () => {
+    const k = list.indexOf(fn);
+    if (k >= 0) list.splice(k, 1);
+    if (!list.length) CZ.jobWatchers.delete(id);
+  };
   const cur = CZ.jobs.get(id);
   if (cur) fn(cur);
+  return off;
 }
 
 /* wait for a job to finish; progress via watcher */
 function jobDone(id) {
   return new Promise(resolve => {
-    watchJob(id, job => {
-      if (["done", "error", "cancelled"].includes(job.status)) resolve(job);
+    let off = null, settled = false;
+    off = watchJob(id, job => {
+      if (!["done", "error", "cancelled"].includes(job.status)) return;
+      settled = true;
+      if (off) off();
+      resolve(job);
     });
+    if (settled) off();   // already terminal: watchJob fired before off existed
   });
 }
 
@@ -109,15 +123,27 @@ setInterval(async () => {
 async function loadSession() {
   try { CZ.session = await api("/api/session"); } catch (e) {}
 }
+/* mirrors sessions.py: 'tools' and 'ui' merge one level deeper; 'version' and
+   'recents' belong to the server and are never patched from here */
 async function patchSession(patch) {
-  Object.assign(CZ.session, patch.recents ? {} : {});
+  for (const [k, v] of Object.entries(patch)) {
+    if ((k === "tools" || k === "ui") && v && typeof v === "object") {
+      const cur = CZ.session[k] = CZ.session[k] || {};
+      for (const [k2, v2] of Object.entries(v)) {
+        if (v2 && typeof v2 === "object" && cur[k2] && typeof cur[k2] === "object") {
+          Object.assign(cur[k2], v2);
+        } else {
+          cur[k2] = v2;
+        }
+      }
+    } else if (k !== "version" && k !== "recents") {
+      CZ.session[k] = v;
+    }
+  }
   try { await api("/api/session", patch); } catch (e) {}
 }
 function density(tool) { return (CZ.session.ui?.density || {})[tool] || "easy"; }
 async function setDensity(tool, d) {
-  CZ.session.ui = CZ.session.ui || { density: {} };
-  CZ.session.ui.density = CZ.session.ui.density || {};
-  CZ.session.ui.density[tool] = d;
   await patchSession({ ui: { density: { [tool]: d } } });
 }
 

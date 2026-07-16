@@ -1,8 +1,34 @@
-# Pipeline deps (decode / detect / render). Core algorithm tests need none of these.
+# control-z — everything the Suite needs to run all six tools.
+#     python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#
+# The core algorithm tests need NONE of this (stdlib only):
+#     python3 -m unittest discover -s tests -t .
+
+# --- media pipeline (decode / detect / render) — every tool ---
 numpy
 av
 opencv-python
-# The Suite app (python -m suite) additionally needs:
+
+# --- the app shell (python -m suite) ---
 fastapi
 uvicorn[standard]
 pywebview
+
+# --- ML runtime: Rise, Depth, Scribe's diarization ---
+onnxruntime
+
+# --- Clear: dialogue rescue DSP ---
+scipy
+soundfile
+pyloudnorm
+
+# --- Scribe: transcription + speakers ---
+faster-whisper
+sherpa-onnx
+
+# Stencil's runtime is an OPTIONAL heavy (~1 GB) — the app runs fine without it
+# and its page says exactly this. To enable click-to-matte:
+#     .venv/bin/pip install torch sam2
+#
+# Clear's voice isolation needs the official DeepFilterNet binary (MIT/Apache).
+# Everything else in Clear works without it; the app prints the download line.

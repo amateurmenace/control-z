@@ -21,6 +21,17 @@ CACHES = {
                      Path.home() / "Library" / "Caches" / "control-z" / "pivot"),
 }
 
+# Tools whose running jobs write into each cache — clearing it under them would
+# throw away work in progress, so we refuse while one is active. None means any
+# tool (every job decodes preview frames); () means no job of ours writes there
+# (the legacy page is a separate process with its own cache).
+CACHE_OWNERS = {
+    "frames": None,
+    "clear": ("clear",),
+    "stencil": ("stencil",),
+    "pivot-legacy": (),
+}
+
 
 def _size(p: Path) -> int:
     if not p.exists():
@@ -57,6 +68,16 @@ def register_settings(app, jobs, frames):
         if which not in CACHES:
             return JSONResponse({"error": f"unknown cache {which!r}"},
                                 status_code=422)
+        owners = CACHE_OWNERS[which]
+        busy = jobs.active() if owners is None else [
+            j for t in owners for j in jobs.active(tool=t)]
+        if busy:
+            what = busy[0].label or busy[0].kind
+            return JSONResponse(
+                {"error": f"{CACHES[which][0]} is being written to right now by "
+                          f"{what} — clearing it would throw that work away. "
+                          "Let it finish (or cancel it in the queue) and try again."},
+                status_code=409)
         p = CACHES[which][2]
         if p.exists():
             shutil.rmtree(p, ignore_errors=True)

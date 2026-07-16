@@ -12,6 +12,9 @@ Detail). Constants and defaults match Hush v3.x.
 Honestly NOT ported (they live in the plugin): hierarchical shift-search
 motion tracking, the firefly zapper, Render Boost history, Deep Clean, the
 medium/coarse/blotch EQ bands, deband, and the whole refine texture stack.
+Differs on purpose: the NLM band's borders clamp twice (once in the shift,
+again in the 3x3 patch box) where the reference clamps once, so the outermost
+few pixels' patch distances are not bit-identical to the plugin's.
 The report from every caller names this backend "hush-core" — never plain
 "Hush".
 
@@ -198,7 +201,9 @@ def estimate_sigmas(cur_bgr, partner_bgr=None, adjust: float = 1.0) -> Sigmas:
     l2y = _lap_stride2(_block2(y))[slc]
     l2cb = _lap_stride2(_block2(cb))[slc]
     l2cr = _lap_stride2(_block2(cr))[slc]
-    live2 = ~((l2y == 0) & (l2cb == 0) & (l2cr == 0))
+    # the reference evaluates the coarse block INSIDE the fine loop, after the
+    # flat-sample skip — its coarse population is a subset of the fine one
+    live2 = live[::2, ::2] & ~((l2y == 0) & (l2cb == 0) & (l2cr == 0))
     a2y, a2cb, a2cr = np.abs(l2y[live2]), np.abs(l2cb[live2]), np.abs(l2cr[live2])
     sy_coarse = scb_coarse = scr_coarse = 0.0
     if a2y.size >= 64:
@@ -378,11 +383,11 @@ def _estimate_residual(ym, cbm, crm, eff_n, sig: Sigmas, adjust: float):
                          K_HIST_BINS, K_HIST_SCALE_C, 1, 2) * K_MEDIAN_CAL * adj
 
     # coarse residual on EVEN-aligned 2x2 blocks (4:2:0 blotch sits there)
-    slc = (slice(0, H, 4), slice(0, W, 4))
-    l2y = np.abs(_lap_stride2(_block2(ym))[slc]).ravel()
-    l2cb = np.abs(_lap_stride2(_block2(cbm))[slc]).ravel()
-    l2cr = np.abs(_lap_stride2(_block2(crm))[slc]).ravel()
-    live2 = ~((l2y == 0) & (l2cb == 0) & (l2cr == 0))
+    slc = (slice(0, H - 2, 4), slice(0, W - 2, 4))
+    l2y = np.abs(_lap_stride2(_block2(ym))[slc])
+    l2cb = np.abs(_lap_stride2(_block2(cbm))[slc])
+    l2cr = np.abs(_lap_stride2(_block2(crm))[slc])
+    live2 = live[::2, ::2] & ~((l2y == 0) & (l2cb == 0) & (l2cr == 0))
     if int(live2.sum()) >= 64:
         ry_c = 2.0 * _hist_quantile(_quant(l2y[live2], K_HIST_SCALE_Y, K_HIST_BINS),
                                     K_HIST_BINS, K_HIST_SCALE_Y, 1, 2) * K_MEDIAN_CAL * adj
@@ -504,7 +509,11 @@ def _spatial_nlm(ym, cbm, crm, ry, rcb, rcr, sig: Sigmas, p: HushParams):
 def denoise_trio(prev_bgr, cur_bgr, next_bgr, params: Optional[HushParams] = None):
     """Denoise the middle frame of an aligned trio (uint8 BGR in and out).
 
-    prev/next may be None (clip edges) — Hush's duplicate-frame semantics.
+    One of prev/next may be None (clip edge) — Hush's duplicate-frame
+    semantics, the same frames the host hands the plugin there. With BOTH
+    None there is no temporal stage at all (the reference's reach == 0), so
+    none runs and eff_n_med reports 1.06 — the effN histogram's half-bin
+    floor, which is what the reference reads when nothing was averaged.
     Returns (out_bgr, info) with the measured sigmas in the info dict.
     """
     p = params or HushParams()
@@ -513,8 +522,9 @@ def denoise_trio(prev_bgr, cur_bgr, next_bgr, params: Optional[HushParams] = Non
     sig = estimate_sigmas(cur_bgr, partner, adjust=p.profile_adjust)
 
     neighbors = []
-    for nb in (prev_bgr, next_bgr):
-        neighbors.append(bgr_to_ycc(nb) if nb is not None else cur)
+    if partner is not None:
+        for nb in (prev_bgr, next_bgr):
+            neighbors.append(bgr_to_ycc(nb) if nb is not None else cur)
     ym, cbm, crm, eff_n = _temporal_merge(cur, neighbors, sig, p)
     ry, rcb, rcr, eff_med = _estimate_residual(ym, cbm, crm, eff_n, sig,
                                                p.profile_adjust)

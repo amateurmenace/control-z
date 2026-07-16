@@ -134,8 +134,8 @@ def register_depth(app, jobs, frames):
                             if d > 0.14:      # probable cut: never smooth across
                                 eng.reset_temporal()
                         prev = gray
-                        depths.append(eng.estimate(img, ema=ema, refine=False)
-                                      .astype(np.float32))
+                        depths.append(eng.estimate(img, ema=ema, refine=False,
+                                                   native=True))
                         if i % 10 == 0:
                             job.message = f"pass 1/2: {i} frames estimated"
                         if job.cancel_requested:

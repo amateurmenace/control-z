@@ -62,6 +62,9 @@ const DepthPage = (() => {
               <option value="0.85">0.85 — steadier</option>
             </select>
           </div>
+          <div class="hint" style="margin-top:6px">depth here is relative, not measured —
+            the model ranks pixels near-to-far inside one frame, and each shot is normalized
+            to its own range, so a value is a place in this shot, never a distance</div>
           <div class="hint" style="margin-top:6px">scrub preview is a per-frame estimate —
             the render smooths temporally and resets at every cut, so the matte is steadier
             than what you scrub</div>
@@ -83,7 +86,7 @@ const DepthPage = (() => {
   </div>`;
 
   const D = { clip: null, prev: null, mode: "blend", lo: 0.0, hi: 1.0,
-              probe: null, fcImg: null, reqTimer: null, dragging: null };
+              probe: null, fcImg: null, reqTimer: null, reqId: 0, dragging: null };
   let viewer, strip;
 
   /* ---------- preview fetch (debounced on scrub/param change) ---------- */
@@ -91,6 +94,7 @@ const DepthPage = (() => {
     if (!D.clip) return;
     clearTimeout(D.reqTimer);
     D.reqTimer = setTimeout(async () => {
+      const id = ++D.reqId;   // a slow reply must never paint over a newer frame
       try {
         const r = await api("/api/depth/preview", {
           path: D.clip.path, i: viewer.i,
@@ -98,9 +102,10 @@ const DepthPage = (() => {
           gamma: (+$("#dp-gamma", el).value) / 100,
           lo: D.lo, hi: D.hi,
         });
+        if (id !== D.reqId) return;
         D.prev = r;
         const img = new Image();
-        img.onload = () => { D.fcImg = img; viewer.draw(); };
+        img.onload = () => { if (id !== D.reqId) return; D.fcImg = img; viewer.draw(); };
         img.src = r.falsecolor;
         drawHist(); drawStab();
       } catch (e) { /* frame may be past EOF while scrubbing — quiet */ }
@@ -134,7 +139,7 @@ const DepthPage = (() => {
     const x = Math.min(ds[0].length - 1, Math.max(0, Math.round(nx * (ds[0].length - 1))));
     D.probe = { nx, ny, v: ds[y][x] };
     $("#dp-probe", el).textContent =
-      `probe: depth ${ds[y][x].toFixed(3)} (${ds[y][x] > 0.5 ? "near" : "far"})`;
+      `relative depth ${ds[y][x].toFixed(3)} · ${ds[y][x] > 0.5 ? "nearer" : "farther"} — model estimate, this frame`;
     viewer.draw();
   }
 
@@ -200,7 +205,7 @@ const DepthPage = (() => {
       $("#dp-path", el).value = r.path;
       $("#dp-meta", el).innerHTML =
         `<b>${esc(r.name)}</b> · ${r.video.width}×${r.video.height} @ ${r.video.fps.toFixed(2)}`;
-      D.prev = null; D.fcImg = null; D.probe = null;
+      D.prev = null; D.fcImg = null; D.probe = null; D.reqId = 0;
       viewer.setClip(D.clip);
       strip.setClip(viewer.clip);
       $("#dp-render", el).disabled = false;

@@ -368,6 +368,17 @@ const ClearPage = (() => {
     applyDensity(density("clear"));
 
     new ResizeObserver(() => { drawWaves(); drawSpecPlayhead(); }).observe($("#cl-waves", el));
+
+    /* the router only toggles .active — watch for it leaving so a tool switch
+       can't leave the residual playing underneath the next tool */
+    new MutationObserver(() => { if (!el.classList.contains("active")) stop(); })
+      .observe(el, { attributes: true, attributeFilter: ["class"] });
+  }
+
+  /* stop playing: called when this page stops being current (the playhead here
+     is driven by timeupdate, so pausing is all it takes) */
+  function stop() {
+    audio.pause();
   }
 
   let inited = false;
@@ -378,5 +389,5 @@ const ClearPage = (() => {
   }
 
   registerPage("clear", el, onshow);
-  return { onshow };
+  return { onshow, stop };
 })();

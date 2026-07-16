@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import threading
 from pathlib import Path
 
@@ -25,9 +26,18 @@ def runtime_status() -> dict:
     except ImportError as e:
         return {"available": False,
                 "hint": f"Stencil's runtime isn't installed ({e.name} missing). "
-                        "In the suite's venv: pip install torch sam2 — "
-                        "~1 GB total; the SAM 2.1 checkpoint (176 MB, Apache-2.0) "
-                        "downloads on first use."}
+                        "In the suite's venv, in this order: "
+                        "pip install torch setuptools — with its dependencies "
+                        "torch is about 700 MB on Apple silicon and 2.5 GB or "
+                        "more on a CUDA machine — then "
+                        "pip install --no-build-isolation "
+                        "git+https://github.com/facebookresearch/sam2.git. That "
+                        "git URL is Meta's own SAM 2; the package called sam2 on "
+                        "PyPI is a different author's code and we don't send you "
+                        "there. --no-build-isolation builds against the torch you "
+                        "just installed instead of downloading a second copy. The "
+                        "SAM 2.1 checkpoint (176 MB, Apache-2.0) downloads on the "
+                        "first propagate."}
     from czcore import models
     try:
         models.model_path("sam21_small", auto_download=False)
@@ -37,7 +47,7 @@ def runtime_status() -> dict:
     return {"available": True, "checkpoint_present": ckpt,
             "hint": None if ckpt else
             "SAM 2.1 checkpoint (176 MB, Apache-2.0) downloads on the first "
-            "propagate — license card prints in the job log."}
+            "propagate — the queue shows its card and license while it does."}
 
 
 def _get_engine():
@@ -50,12 +60,25 @@ def _get_engine():
 
 
 def _cache_dir(path: str, start: int, end: int) -> Path:
+    """The clip's cache: analysis frames only. They depend on the clip and the
+    range, never on where you clicked, so every run of a shot reuses them."""
     p = Path(path)
     tag = hashlib.md5(f"{p.resolve()}:{p.stat().st_mtime_ns}:{start}:{end}"
                       .encode()).hexdigest()[:16]
     d = Path.home() / "Library" / "Caches" / "control-z" / "suite" / "stencil" / tag
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _run_tag(prompts: list, height: int) -> str:
+    """Mattes belong to the clicks that made them. Different points, or a
+    different analysis height, mean a different run: its own directory, its own
+    mask URLs. Without this a second propagate over the same range would land on
+    top of the first and any frame it couldn't matte would keep the old
+    subject's — an export silently mixing two subjects."""
+    key = json.dumps([[int(p["frame"]), float(p["x"]), float(p["y"]),
+                       int(p.get("label", 1))] for p in prompts] + [int(height)])
+    return hashlib.md5(key.encode()).hexdigest()[:12]
 
 
 def register_stencil(app, jobs, frames):
@@ -84,17 +107,23 @@ def register_stencil(app, jobs, frames):
         def work(job):
             import cv2
 
+            from czcore import models
             from czcore.appshell.jobs import JobCancelled
             from stencil.core import Prompt, extract_frames
 
             cache = _cache_dir(path, start, end)
+            tag = _run_tag(prompts_in, height)
             fdir = cache / f"frames{height}"
             job.message = "extracting analysis frames…"
             if not (fdir.exists() and any(fdir.glob("*.jpg"))):
                 extract_frames(path, start, end, fdir, height=height,
                                progress=lambda m: setattr(job, "message", m))
             job.check_cancel()
-            job.message = "loading SAM 2.1 (first run downloads the checkpoint)…"
+            spec = models.REGISTRY["sam21_small"]
+            job.message = f"{spec.card} · license: {spec.license}"
+            models.model_path("sam21_small", quiet=True)  # the card is on screen
+            job.check_cancel()
+            job.message = "loading SAM 2.1…"
             eng = _get_engine()
             prompts = [Prompt(frame=int(p["frame"]) - start,
                               xy=(float(p["x"]), float(p["y"])),
@@ -107,8 +136,9 @@ def register_stencil(app, jobs, frames):
                 raise JobCancelled()
             masks = sm.masks.get(1, [])
             conf = sm.confidence.get(1, [])
-            mdir = cache / "masks"
-            mdir.mkdir(exist_ok=True)
+            mdir = cache / f"masks-{tag}"
+            shutil.rmtree(mdir, ignore_errors=True)  # only once the run survived
+            mdir.mkdir()
             coverage = []
             for i, m in enumerate(masks):
                 if m is None:
@@ -118,7 +148,7 @@ def register_stencil(app, jobs, frames):
                 coverage.append(round(float((m > 127).mean()), 4))
             low = [i + start for i, c in enumerate(conf) if c < 0.85]
             result = {
-                "start": start, "end": end, "frames": len(masks),
+                "start": start, "end": end, "tag": tag, "frames": len(masks),
                 "confidence": [round(float(c), 4) for c in conf],
                 "coverage": coverage,
                 "low_confidence": low[:20],
@@ -127,7 +157,7 @@ def register_stencil(app, jobs, frames):
                          "those before export" if low else
                          "every frame ≥ 0.85 confidence"),
             }
-            (cache / "result.json").write_text(json.dumps(result))
+            (cache / f"result-{tag}.json").write_text(json.dumps(result))
             job.message = f"{len(masks)} mattes · {len(low)} low-confidence"
             return result
 
@@ -135,9 +165,10 @@ def register_stencil(app, jobs, frames):
                           label=f"{name} — matte [{start}:{end}]").to_dict()
 
     @app.get("/api/stencil/mask")
-    def api_mask(path: str, start: int, end: int, i: int):
+    def api_mask(path: str, start: int, end: int, i: int, tag: str):
         p = str(Path(path).expanduser())
-        f = _cache_dir(p, int(start), int(end)) / "masks" / f"m_{int(i):05d}.png"
+        f = (_cache_dir(p, int(start), int(end)) / f"masks-{tag}"
+             / f"m_{int(i):05d}.png")
         if not f.exists():
             return JSONResponse({"error": "no matte for that frame — propagate first"},
                                 status_code=404)
@@ -151,10 +182,11 @@ def register_stencil(app, jobs, frames):
         end = int(body["end"])
         kind = body.get("kind", "rgba")   # rgba (4444+alpha) | luma
         post = body.get("post", {})
+        tag = body.get("tag", "")
         name = Path(path).name
         cache = _cache_dir(path, start, end)
-        mdir = cache / "masks"
-        if not mdir.exists():
+        mdir = cache / f"masks-{tag}"
+        if not tag or not mdir.exists():
             return JSONResponse({"error": "propagate first — no mattes cached"},
                                 status_code=409)
 

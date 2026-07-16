@@ -6,9 +6,19 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+out/
+.pytest_cache/
+
+# editor/agent scratch
+.claude/
+
+# downloaded weights never live in the repo (see the Suite's Models page)
 models/
+
+# stray media: renders land beside the user's footage, not in here
 *.mov
 *.mp4
 *.mxf
-out/
-.pytest_cache/
+*.wav
+
+# NOTE: no *.setting rule — depth/templates/*.setting is shipped package data.

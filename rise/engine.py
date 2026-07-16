@@ -32,11 +32,19 @@ class EngineInfo:
 
 
 def available_backends() -> list:
+    """Backends that would load right now — registered *and* on disk with the
+    pinned hash. Being registered is not being usable, and this list is read as
+    a promise.
+    """
     out = ["lanczos"]
     for name in ("realesrgan-x2", "realesrgan-x4"):
-        key = name.replace("-", "_").replace("realesrgan", "realesrgan")
-        if name.replace("-", "_") in models.REGISTRY or name in models.REGISTRY:
-            out.append(name)
+        if name not in models.REGISTRY:
+            continue
+        try:
+            models.model_path(name, auto_download=False)
+        except FileNotFoundError:
+            continue
+        out.append(name)
     return out
 
 

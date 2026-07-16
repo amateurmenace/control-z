@@ -53,6 +53,14 @@ const HomePage = (() => {
     });
   }
 
-  registerPage("home", el, render);
+  /* the server owns the recents list — every tool's Open adds to it, so read it
+     back each time Home is shown rather than trusting the boot-time copy */
+  async function onshow() {
+    render();
+    await loadSession();
+    render();
+  }
+
+  registerPage("home", el, onshow);
   return { render };
 })();

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from scribe.transcript import Transcript
 
-from .clear import _audio_source
+from .clear import NoAudioError, _audio_source
 
 
 def _sidecar(path: str) -> Path:
@@ -49,6 +49,15 @@ def register_scribe(app, jobs, frames):
         name = Path(path).name
         if not Path(path).is_file():
             return JSONResponse({"error": f"no such file: {path}"}, status_code=404)
+        try:
+            # fail with a sentence NOW rather than queueing a doomed job
+            if probe(path).audio_streams == 0:
+                return JSONResponse(
+                    {"error": f"{name} has no audio track — there's nothing to "
+                              "transcribe. Open the clip that has the sound."},
+                    status_code=415)
+        except Exception:
+            pass  # unprobeable: let the job try and report honestly
 
         def work(job):
             from scribe.transcribe import transcribe
@@ -170,9 +179,12 @@ def register_scribe(app, jobs, frames):
             return JSONResponse({"error": "file moved or deleted"}, status_code=404)
         try:
             f = _audio_source(p)
+        except (NoAudioError, RuntimeError) as e:
+            return JSONResponse({"error": str(e)}, status_code=415)
         except Exception as e:
-            return JSONResponse({"error": f"couldn't extract audio: {e}"},
-                                status_code=415)
+            return JSONResponse(
+                {"error": f"couldn't pull audio out of {Path(p).name} "
+                          f"({e.__class__.__name__})"}, status_code=415)
         return FileResponse(str(f), media_type="audio/wav")
 
     @app.get("/api/scribe/status")

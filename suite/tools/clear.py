@@ -27,19 +27,48 @@ def _cache_dir(path: str) -> Path:
     return d
 
 
+class NoAudioError(RuntimeError):
+    """The source carries no audio track — a sentence, not an ffmpeg code."""
+
+
 def _audio_source(path: str) -> Path:
-    """Path to a soundfile-readable copy of the source's audio (cached)."""
+    """Path to a soundfile-readable copy of the source's audio (cached).
+
+    Raises NoAudioError (a sentence) rather than letting ffmpeg's exit code
+    reach the user — a silent clip is a normal thing to open by mistake.
+    """
+    from czcore.media import probe
+
     p = Path(path)
     if p.suffix.lower() in AUDIO_SUFFIXES:
         return p
     wav = _cache_dir(path) / "extracted.wav"
-    if not wav.exists():
-        exe = shutil.which("ffmpeg")
-        if not exe:
-            raise RuntimeError("ffmpeg not found — needed to extract audio "
-                               "from video sources")
-        subprocess.run([exe, "-y", "-v", "quiet", "-i", str(p), "-vn",
-                        "-acodec", "pcm_f32le", str(wav)], check=True)
+    if wav.exists():
+        return wav
+    exe = shutil.which("ffmpeg")
+    if not exe:
+        raise RuntimeError("ffmpeg isn't installed — Clear needs it to pull "
+                           "audio out of a video (brew install ffmpeg)")
+    try:
+        if probe(str(p)).audio_streams == 0:
+            raise NoAudioError(
+                f"{p.name} has no audio track — open the clip that has the "
+                "sound.")
+    except NoAudioError:
+        raise
+    except Exception:
+        pass  # unprobeable: let ffmpeg have its say below
+    r = subprocess.run([exe, "-y", "-v", "error", "-i", str(p), "-vn",
+                        "-acodec", "pcm_f32le", str(wav)],
+                       capture_output=True, text=True)
+    if r.returncode != 0 or not wav.exists():
+        wav.unlink(missing_ok=True)
+        detail = (r.stderr or "").strip().splitlines()
+        raise RuntimeError(
+            f"couldn't pull audio out of {p.name}"
+            + (f" — {detail[-1]}" if detail else "")
+            + ". If it plays sound elsewhere, please file this clip's format "
+              "at github.com/amateurmenace/control-z/issues")
     return wav
 
 
@@ -104,19 +133,33 @@ def _spectrogram_uri(audio, sr, width=1200, height=232) -> str:
 def _band_rms(audio, sr):
     """Residual null-test: each band's share of the removed energy, in dB
     relative to the whole residual. Words live in 'presence' — a strong
-    presence band in the residual means the pass is eating dialogue."""
+    presence band in the residual means the pass is eating dialogue.
+
+    Welch accumulation rather than one transform of the whole file: rfft
+    promotes to complex128, so a feature-length interview would ask for tens
+    of gigabytes to produce four numbers. Hann at 50% overlap keeps the
+    spectral leakage of a loud hum out of the presence band.
+    """
     import numpy as np
 
     mono = audio.mean(axis=1)
-    spec2 = np.abs(np.fft.rfft(mono)) ** 2
-    freqs = np.fft.rfftfreq(len(mono), 1 / sr)
-    total = float(spec2.sum()) or 1e-18
     bands = [("low", 0, 120), ("low-mid", 120, 1000),
              ("presence", 1000, 4000), ("high", 4000, sr / 2)]
+    block = min(65536, len(mono))
+    if block < 2:
+        return [{"band": name, "rel_db": -180.0} for name, _, _ in bands]
+    win = np.hanning(block).astype(np.float32)
+    freqs = np.fft.rfftfreq(block, 1 / sr)
+    masks = [(freqs >= lo) & (freqs < hi) for _, lo, hi in bands]
+    energy = [0.0] * len(bands)
+    for i in range(0, max(1, len(mono) - block + 1), block // 2):
+        spec2 = np.abs(np.fft.rfft(mono[i:i + block] * win)) ** 2
+        for k, m in enumerate(masks):
+            energy[k] += float(spec2[m].sum())
+    total = sum(energy) or 1e-18
     return [{"band": name,
-             "rel_db": round(float(10 * np.log10(
-                 max(spec2[(freqs >= lo) & (freqs < hi)].sum(), 1e-18) / total)), 1)}
-            for name, lo, hi in bands]
+             "rel_db": round(float(10 * np.log10(max(e, 1e-18) / total)), 1)}
+            for (name, _, _), e in zip(bands, energy)]
 
 
 def _overview(audio, sr) -> dict:
@@ -145,12 +188,24 @@ def register_clear(app, jobs, frames):
             return JSONResponse({"error": f"no such file: {path}"}, status_code=404)
         try:
             src = _audio_source(path)
-        except (RuntimeError, subprocess.CalledProcessError) as e:
-            return JSONResponse({"error": f"couldn't read audio: {e}"},
-                                status_code=415)
-        audio, sr = _read(src)
+            audio, sr = _read(src)
+        except NoAudioError as e:
+            return JSONResponse(
+                {"error": f"{e} There's nothing here for Clear to rescue."},
+                status_code=415)
+        except RuntimeError as e:
+            return JSONResponse({"error": str(e)}, status_code=415)
+        except Exception as e:
+            return JSONResponse(
+                {"error": f"couldn't read {Path(path).name} as audio "
+                          f"({e.__class__.__name__}) — if it plays elsewhere, "
+                          "please file its format at "
+                          "github.com/amateurmenace/control-z/issues"},
+                status_code=415)
         if len(audio) == 0:
-            return JSONResponse({"error": "no audio in that file"}, status_code=415)
+            return JSONResponse(
+                {"error": f"{Path(path).name}'s audio track is empty — "
+                          "nothing to rescue"}, status_code=415)
         has_video = False
         try:
             has_video = probe(path).video is not None

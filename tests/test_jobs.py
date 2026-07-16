@@ -32,10 +32,29 @@ class TestImmediateMode(unittest.TestCase):
     def test_error_surfaced(self):
         jm = JobManager()
         def boom(j):
-            raise ValueError("nope")
+            raise ValueError("that file has no audio track")
         job = jm.start("t", boom)
         self.assertTrue(wait_for(lambda: job.status == "error"))
-        self.assertIn("ValueError: nope", job.error)
+        # a sentence we wrote, alone — the class name is not the user's problem
+        self.assertEqual(job.error, "that file has no audio track")
+
+    def test_unexpected_error_still_reads_as_a_sentence(self):
+        jm = JobManager()
+        def boom(j):
+            raise KeyError("shots")
+        job = jm.start("t", boom)
+        self.assertTrue(wait_for(lambda: job.status == "error"))
+        self.assertIn("unexpected KeyError", job.error)
+        self.assertFalse(job.error.startswith("KeyError:"))
+
+    def test_system_error_reads_as_a_sentence(self):
+        jm = JobManager()
+        def boom(j):
+            open("/definitely/not/here.mov", "rb")
+        job = jm.start("t", boom)
+        self.assertTrue(wait_for(lambda: job.status == "error"))
+        self.assertNotIn("Errno", job.error)
+        self.assertIn("/definitely/not/here.mov", job.error)
 
     def test_to_dict_shape(self):
         jm = JobManager()
@@ -53,7 +72,17 @@ class TestQueuedMode(unittest.TestCase):
         self.db = str(Path(self.tmp.name) / "jobs.db")
 
     def tearDown(self):
-        self.tmp.cleanup()
+        # a job reads "done" in memory a beat before the worker's last sqlite
+        # write lands, so the directory has to outlive that write — rmtree
+        # otherwise races it and trips over the journal file reappearing
+        def cleaned():
+            try:
+                self.tmp.cleanup()
+                return True
+            except OSError:
+                return False
+
+        self.assertTrue(wait_for(cleaned), "the job db was still being written")
 
     def test_fifo_one_at_a_time(self):
         jm = JobManager(db_path=self.db, queued=True)

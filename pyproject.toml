@@ -1,6 +1,6 @@
 [project]
 name = "control-z-apps"
-version = "0.1.0"
+version = "0.4.0.dev0"
 description = "control-z: free cleaning, prepping, and finishing tools for DaVinci Resolve (standalone apps monorepo)"
 license = { text = "MIT" }
 requires-python = ">=3.10"
@@ -9,7 +9,18 @@ dependencies = []
 [project.optional-dependencies]
 pivot = ["numpy", "av", "opencv-python"]
 ui = ["fastapi", "uvicorn", "pywebview"]
-suite = ["numpy", "av", "opencv-python", "fastapi", "uvicorn[standard]", "pywebview"]
+# everything the Suite needs to run all six tools (mirrors requirements.txt)
+suite = ["numpy", "av", "opencv-python",
+         "fastapi", "uvicorn[standard]", "pywebview",
+         "onnxruntime",
+         "scipy", "soundfile", "pyloudnorm",
+         "faster-whisper", "sherpa-onnx"]
+# Stencil's click-to-matte runtime: optional by design, ~700 MB on Apple
+# silicon (more where torch's wheels bundle CUDA). SAM 2 comes from Meta's repo
+# because the `sam2` name on PyPI is an unaffiliated third-party fork; a direct
+# reference is fine here, but it would bar this extra from an index upload.
+stencil = ["torch", "sam2 @ git+https://github.com/facebookresearch/sam2.git"]
+site = ["jinja2", "pyyaml"]
 dev = []
 
 [project.scripts]
@@ -29,4 +40,5 @@ packages = ["czcore", "czcore.exports", "czcore.appshell",
 [tool.setuptools.package-data]
 pivot = ["static/*.html"]
 depth = ["templates/*.setting"]
-suite = ["static/*"]
+# static/* alone misses static/js/*.js — the whole UI. Both globs, explicitly.
+suite = ["static/*.html", "static/*.css", "static/js/*.js"]

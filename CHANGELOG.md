@@ -19,7 +19,9 @@
   and true on-disk sizes, download (through the queue, hash-verified) and
   remove per model; whisper cache and diarization pair listed and
   removable; Stencil runtime status. Verified: yunet removed and
-  re-downloaded with its hash checked.
+  re-downloaded with its hash checked. The diarization pair is the one
+  remove-only row — it isn't in the registry, so the page can show it and
+  delete it but not bring it back; that gap is named in the README.
 - **Settings page**: every cache with its real size and a clear button
   (all regenerable — the page says nothing here can lose work), job-history
   clear (active jobs never touched — unit-tested), model store and app-data
@@ -42,8 +44,12 @@
   low-confidence words tinted (proof those), inline segment edits saved to the
   sidecar, speaker rename everywhere, caption presets, SRT/VTT/TXT/marker-EDL
   exports, and the pull list → CMX3600 selects EDL in source TC. Diarization
-  models fetched into the shared store; verified: two TTS voices separated
-  perfectly, 23 s transcribed in 16 s (base), selects EDL honors embedded TC.
+  needs two models you place in the shared store yourself — nothing fetches
+  them, and they aren't in the czcore registry, so they get no hash pin and no
+  download button; Scribe checks for them and prints both URLs and the
+  destination when they're missing, and everything else works without them.
+  Verified with the pair placed by hand: two TTS voices separated perfectly,
+  23 s transcribed in 16 s (base), selects EDL honors embedded TC.
 - **v0.3, the GPU pair.** **Depth**: false-color scrub (source/blend/depth),
   click-to-probe crosshair reading the local map, histogram with draggable
   in/out handles, stability meter, matte render (10-bit gray ProRes,

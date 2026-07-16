@@ -72,7 +72,7 @@ const RisePage = (() => {
             <span>clean noise first (Hush core)
               <div class="hint">upscaling amplifies noise — knee-gated 3-frame temporal +
                 fine NLM at input scale, the Hush algorithm's core. Roughly halves speed;
-                measured σ lands in the report.</div></span>
+                the report names the σ measured on the last frame.</div></span>
           </div>
           <div class="checkrow"><input type="checkbox" id="rs-stab">
             <span>temporal stabilization
@@ -107,8 +107,10 @@ const RisePage = (() => {
     </div>
   </div>`;
 
+  /* reported: job ids already printed. Watchers re-fire on every poll, and a
+     terminal job stays terminal forever — without this the report grows. */
   const R = { clip: null, probe: null, cx: 0.5, cy: 0.5, preview: null,
-              batch: [], heatOn: true };
+              batch: [], heatOn: true, reported: new Set() };
   let viewer, strip;
 
   /* ---------- probe panel ---------- */
@@ -328,15 +330,16 @@ const RisePage = (() => {
         R.batch[k].jobId = j.id;
         watchJob(j.id, job => {
           renderBatch();
-          if (job.status === "done" && job.result) {
-            const rep = $("#rs-report", el);
-            rep.classList.add("show");
-            const dn = job.result.denoise;
-            const dnLine = dn && dn !== "off"
-              ? `\n   cleaned first: hush core, σY ${(dn.sigma_y * 100).toFixed(1)}% → residual ${(dn.residual_y * 100).toFixed(1)}%`
-              : "";
-            rep.innerHTML += `<b>→</b> ${esc(job.result.out)}\n   ${job.result.size[0]}×${job.result.size[1]} · ${job.result.frames} frames · backend ${esc(job.result.backend)}${job.result.synthesized ? " (synthesized)" : " (resampled)"}${dnLine}\n   ${esc(job.result.color)}\n`;
-          }
+          if (job.status !== "done" || !job.result) return;
+          if (R.reported.has(job.id)) return;
+          R.reported.add(job.id);
+          const rep = $("#rs-report", el);
+          rep.classList.add("show");
+          const dn = job.result.denoise;
+          const dnLine = dn && dn !== "off"
+            ? `\n   cleaned first: hush core, σY ${(dn.sigma_y * 100).toFixed(1)}% → residual ${(dn.residual_y * 100).toFixed(1)}% — measured on frame ${dn.measured_on_frame} of ${job.result.frames}, not the clip`
+            : "";
+          rep.innerHTML += `<b>→</b> ${esc(job.result.out)}\n   ${job.result.size[0]}×${job.result.size[1]} · ${job.result.frames} frames · backend ${esc(job.result.backend)}${job.result.synthesized ? " (synthesized)" : " (resampled)"}${dnLine}\n   ${esc(job.result.color)}\n`;
         });
       });
       renderBatch();
@@ -373,6 +376,7 @@ const RisePage = (() => {
         path: R.clip.path, i: viewer.i, cx: R.cx, cy: R.cy,
         scale, model: $("#rs-model", el).value,
         denoise: $("#rs-denoise", el).checked,
+        tile: +$("#rs-tile", el).value,
       });
       r.frame = viewer.i;
       R.preview = r;

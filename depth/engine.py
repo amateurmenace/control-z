@@ -54,13 +54,19 @@ class DepthEngine:
         """Call at every shot boundary — depth must never smooth across a cut."""
         self._ema = None
 
-    def estimate(self, bgr, ema: float = 0.7, refine: bool = True):
-        """HxWx3 uint8 -> float32 HxW relative depth (unnormalized)."""
+    def estimate(self, bgr, ema: float = 0.7, refine: bool = True,
+                 native: bool = False):
+        """HxWx3 uint8 -> float32 HxW relative depth (unnormalized).
+
+        native=True returns the 256x256 network map instead of one scaled to the
+        frame: a two-pass render holds a whole shot in memory, and a full-res
+        float32 per frame is gigabytes. Pass 2 does the resize and the refine.
+        """
         import cv2
         import numpy as np
 
         h, w = bgr.shape[:2]
-        rgb = cv2.cvtColor(cv2.resize(bgr, (256, 256), cv2.INTER_AREA),
+        rgb = cv2.cvtColor(cv2.resize(bgr, (256, 256), interpolation=cv2.INTER_AREA),
                            cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         rgb = (rgb - _IMAGENET_MEAN) / _IMAGENET_STD
         blob = rgb.transpose(2, 0, 1)[None].astype(np.float32)
@@ -68,6 +74,8 @@ class DepthEngine:
         if self._ema is not None and ema > 0:
             d = ema * self._ema + (1 - ema) * d
         self._ema = d
+        if native:
+            return d.copy()   # _ema keeps d; a caller holding a shot must own its own
         up = cv2.resize(d, (w, h), interpolation=cv2.INTER_LINEAR)
         if refine:
             gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)

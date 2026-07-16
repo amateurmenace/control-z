@@ -16,6 +16,14 @@ from pathlib import Path
 from typing import Optional
 
 
+class ModelUnusable(FileNotFoundError):
+    """This model can't be used right now — absent, or present with the wrong
+    hash. Subclasses FileNotFoundError so callers that already degrade on a
+    missing model degrade the same way on a corrupt one; str(e) is a sentence
+    that names which case it is and what to do about it.
+    """
+
+
 @dataclass(frozen=True)
 class ModelSpec:
     name: str
@@ -104,13 +112,19 @@ def model_path(name: str, auto_download: bool = True, quiet: bool = False) -> Pa
     dest = models_dir() / spec.filename
     if dest.exists():
         if spec.sha256 and _sha256(dest) != spec.sha256:
-            raise RuntimeError(
-                f"{dest} exists but its hash doesn't match the pinned release hash. "
-                "Delete it to re-download, or check where it came from."
-            )
+            if spec.url:
+                fix = ("Delete it and it downloads again on next use, or check "
+                       "where it came from.")
+            else:
+                fix = ("This one is built on your machine rather than downloaded, "
+                       "so delete it and build it again"
+                       + (f" — {spec.hint}." if spec.hint else "."))
+            raise ModelUnusable(
+                f"{dest} exists but its hash doesn't match the pinned release "
+                f"hash. {fix}")
         return dest
     if not auto_download or spec.url is None:
-        raise FileNotFoundError(
+        raise ModelUnusable(
             f"model {name!r} not present (expected at {dest})"
             + (f" — {spec.hint}" if spec.hint else ""))
     if not quiet:
