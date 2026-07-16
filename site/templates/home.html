@@ -7,7 +7,7 @@
   section.epic::after { content:""; position:absolute; z-index:1; left:-12%; top:-30%; width:64%; height:130%;
     background:radial-gradient(closest-side, rgba(229,168,53,.13), transparent 70%); pointer-events:none; }
   section.epic .wrap { position:relative; z-index:2; }
-  .hgrid { display:grid; grid-template-columns:1.02fr .98fr; gap:44px; align-items:center; }
+  .hgrid { display:grid; grid-template-columns:.92fr 1.08fr; gap:44px; align-items:center; }
   @media (max-width:900px){ .hgrid { grid-template-columns:1fr; } }
   .epic .kicker { color:var(--amber); max-width:44ch; }
   .epic h1 { font-size:clamp(44px,5.6vw,74px); line-height:.96; letter-spacing:-.03em; color:#F5F3EE; text-wrap:balance; }
@@ -22,17 +22,20 @@
     border:1px solid rgba(197,214,204,.22); box-shadow:0 24px 70px rgba(10,14,10,.5); }
   .caro .cslide { position:absolute; inset:0; opacity:0; transition:opacity .8s ease; }
   .caro .cslide.on { position:relative; opacity:1; }
-  .caro .cslide img { width:100%; display:block; aspect-ratio:16/9; object-fit:cover; }
+  .caro .cslide img { width:100%; display:block; aspect-ratio:880/620; object-fit:cover; }
   @media (prefers-reduced-motion:no-preference){
     .caro .cslide.on img { animation:kb 4.8s ease-out forwards; }
     @keyframes kb { from{transform:scale(1);} to{transform:scale(1.05);} }
   }
-  .caro figcaption { position:absolute; inset:auto 0 0 0; padding:36px 18px 13px;
-    background:linear-gradient(180deg, transparent, rgba(12,14,12,.86)); }
-  .caro figcaption b { font:700 19px "Space Grotesk"; letter-spacing:-.01em; }
-  .caro figcaption .stat { font:700 9.5px var(--mono); letter-spacing:.12em; text-transform:uppercase;
-    color:#cfcfda; border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:2px 8px; margin-left:8px; vertical-align:2px; }
-  .caro figcaption small { display:block; font:500 13px "DM Sans"; color:#D4E0D6; margin-top:2px; }
+  .caro figcaption { position:absolute; inset:auto 0 0 0; padding:64px 22px 18px;
+    background:linear-gradient(180deg, transparent, rgba(12,14,12,.55) 40%, rgba(12,14,12,.94)); }
+  .caro figcaption b { font:700 28px "Space Grotesk"; letter-spacing:-.015em;
+    text-shadow:0 1px 8px rgba(0,0,0,.55); }
+  .caro figcaption .stat { font:700 10.5px var(--mono); letter-spacing:.12em; text-transform:uppercase;
+    color:#F5F3EE; border:1.5px solid rgba(255,255,255,.42); border-radius:999px; padding:3px 10px; margin-left:10px; vertical-align:5px; }
+  .caro figcaption small { display:block; font:500 16.5px "DM Sans"; color:#EDF2ED; margin-top:4px;
+    line-height:1.4; text-shadow:0 1px 6px rgba(0,0,0,.5); }
+  @media (max-width:900px){ .caro figcaption b { font-size:22px; } .caro figcaption small { font-size:14.5px; } }
   .caro .cbar { position:absolute; top:0; left:0; right:0; height:3px; background:rgba(255,255,255,.12); z-index:3; }
   .caro .cbar i { display:block; height:100%; width:0; background:var(--amber); }
   @media (prefers-reduced-motion:no-preference){ .caro.auto .cbar i { animation:cb 4.8s linear forwards; } }
