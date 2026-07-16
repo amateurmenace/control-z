@@ -1,4 +1,8 @@
-# Pivot v0.1 pipeline (decode / detect / render). Core algorithm tests need none of these.
+# Pipeline deps (decode / detect / render). Core algorithm tests need none of these.
 numpy
 av
 opencv-python
+# The Suite app (python -m suite) additionally needs:
+fastapi
+uvicorn[standard]
+pywebview

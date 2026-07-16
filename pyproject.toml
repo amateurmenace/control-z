@@ -1,7 +1,7 @@
 [project]
 name = "control-z-apps"
 version = "0.1.0"
-description = "control-z: free finishing tools for DaVinci Resolve (standalone apps monorepo)"
+description = "control-z: free cleaning, prepping, and finishing tools for DaVinci Resolve (standalone apps monorepo)"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = []
@@ -9,9 +9,11 @@ dependencies = []
 [project.optional-dependencies]
 pivot = ["numpy", "av", "opencv-python"]
 ui = ["fastapi", "uvicorn", "pywebview"]
+suite = ["numpy", "av", "opencv-python", "fastapi", "uvicorn[standard]", "pywebview"]
 dev = []
 
 [project.scripts]
+suite = "suite.__main__:main"
 pivot-cli = "pivot.cli:main"
 stencil-cli = "stencil.cli:main"
 scribe-cli = "scribe.cli:main"
@@ -21,8 +23,10 @@ depth-cli = "depth.cli:main"
 
 [tool.setuptools]
 packages = ["czcore", "czcore.exports", "czcore.appshell",
-            "pivot", "stencil", "scribe", "clear", "rise", "depth"]
+            "pivot", "stencil", "scribe", "clear", "rise", "depth",
+            "suite", "suite.tools"]
 
 [tool.setuptools.package-data]
 pivot = ["static/*.html"]
 depth = ["templates/*.setting"]
+suite = ["static/*"]

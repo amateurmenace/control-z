@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "suite",
+      "runtimeExecutable": "/Users/amateurmenace/control-z/.venv/bin/python",
+      "runtimeArgs": ["-m", "suite", "--serve", "--port", "8300"],
+      "cwd": "/Users/amateurmenace/control-z",
+      "port": 8300
+    }
+  ]
+}
