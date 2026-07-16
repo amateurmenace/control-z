@@ -5,7 +5,7 @@ Every standalone tool serves a hand-written HTML UI at 127.0.0.1:<port>
 browser). No cloud, no accounts, no telemetry — covenant.
 """
 
-from .jobs import Job, JobManager
+from .jobs import Job, JobCancelled, JobManager
 from .server import create_app, run
 
-__all__ = ["Job", "JobManager", "create_app", "run"]
+__all__ = ["Job", "JobCancelled", "JobManager", "create_app", "run"]
