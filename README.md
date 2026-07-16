@@ -84,12 +84,16 @@ the Suite app is [`08-suite-app.md`](specs/08-suite-app.md).
 
 ## What each tool is for
 
-Home opens on two doors. **Prep** is before the edit — Clear (rescue the
-dialogue), Scribe (transcript, captions, paper edit), Rise (upscale the
-archive). **Finish** is after picture lock — Stencil (click an object, get a
-matte), Pivot (9:16 from your master), Depth (depth mattes + Fusion
-templates). The Queue runs one job at a time across all six and survives
-quitting; Install OpenFX puts Hush and Speak into Resolve.
+Home opens on two doors, split by which way the footage is travelling.
+**Prep** is what you do to footage on its way *into* your editor — Clear (hum,
+clicks and room out of the dialogue), Stencil (click an object, bring its
+matte in with the clip), Depth (a depth map to fog, grade or rack focus
+against). **Finish** is the cut on its way back *out* — Pivot (reframed to
+9:16 or 1:1), Scribe (captions and subtitles), Rise (pushed up to delivery
+resolution). Tools don't police the door you came through: Scribe will paper-
+edit raw interviews into a selects EDL, and Rise will take a tape master, both
+long before picture lock. The Queue runs one job at a time across all six and
+survives quitting; Install OpenFX puts Hush and Speak into Resolve.
 
 Every tool keeps its measurement surface on by default — that's the covenant,
 not a feature: Pivot draws the camera path it solved, Rise shows where the

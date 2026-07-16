@@ -59,11 +59,11 @@ Windows). This is the community-captioner / Pivot-v0.2 pattern, graduated.
 │ ◇ Clear       │ │ [filmstrip / timeline / transcript lane]           │ │
 │ ◇ Rise        │ │ [SCOPE RACK — per-tool set, always one visible]    │ │
 │ ◇ Depth       │ └─────────────────────────────────────────────────────┘
-│ ─ suite ─     │   Home = two doors: "Prep" (before the edit) and
-│ ≡ Queue       │   "Finish" (after picture lock), each listing the
-│ ⬇ Install OFX │   right tools with one-line whys + recent files.
-│ ◈ Models      │
-│ ⚙ Settings    │
+│ ─ suite ─     │   Home = two doors, by which way the footage is
+│ ≡ Queue       │   going: "Prep" (into your editor — Clear, Stencil,
+│ ⬇ Install OFX │   Depth) and "Finish" (the cut coming back out —
+│ ◈ Models      │   Pivot, Scribe, Rise), each with one-line whys
+│ ⚙ Settings    │   written for that door + recent files.
 └───────────────┘
 ```
 
