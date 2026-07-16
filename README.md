@@ -21,8 +21,8 @@ standalone tools and the suite site.
 | `site/` | control-z.org (bake: `python3 site/build.py`) | built, undeployed |
 
 Working = verified end-to-end on real footage this side of packaging. Not yet:
-signed installers, Windows builds, the v0.4 suite services (Install OpenFX,
-Models, Settings pages), Resolve paste-tests for the Fusion exports/templates.
+signed installers (the v1.0 gate: PyInstaller app, signing, notarization,
+DMG), Windows builds, Resolve paste-tests for the Fusion exports/templates.
 See CHANGELOG.md for honest detail.
 
 Specs live in [`specs/`](specs/) — start with [`00-overview.md`](specs/00-overview.md);

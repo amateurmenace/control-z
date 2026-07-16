@@ -195,6 +195,22 @@ class JobManager:
             return sum(1 for j in self._jobs.values()
                        if j.status in ("queued", "running"))
 
+    def clear_finished(self) -> int:
+        """Drop finished jobs from history (memory + DB). Active jobs stay."""
+        done = ("done", "error", "cancelled")
+        with self._lock:
+            gone = [jid for jid, j in self._jobs.items() if j.status in done]
+            for jid in gone:
+                del self._jobs[jid]
+                self._snapshots.pop(jid, None)
+        n = len(gone)
+        if self._db_path:
+            with self._db() as con:
+                cur = con.execute(
+                    "DELETE FROM jobs WHERE status IN ('done','error','cancelled')")
+                n = max(n, cur.rowcount)
+        return n
+
     # -- internals ------------------------------------------------------------
 
     def _db(self):

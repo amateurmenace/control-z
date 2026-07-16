@@ -7,11 +7,23 @@ const QueuePage = (() => {
   el.innerHTML = `<div class="page-pad">
     <div class="tag">suite</div>
     <h1 style="margin-top:6px">Queue</h1>
-    <div style="color:var(--cream-dim);font-size:12.5px;margin-top:4px">
-      one job at a time, in order — history survives quitting. Cancel is honest:
-      partial files are removed.</div>
+    <div style="color:var(--cream-dim);font-size:12.5px;margin-top:4px;display:flex;align-items:center;gap:12px">
+      <span>one job at a time, in order — history survives quitting. Cancel is honest:
+      partial files are removed.</span>
+      <button class="btn" style="width:auto;padding:4px 12px;font-size:11.5px;margin-left:auto"
+        id="q-clearhist">clear finished</button>
+    </div>
     <div id="q-rows" style="margin-top:18px"></div>
   </div>`;
+  $("#q-clearhist", el).onclick = async () => {
+    try {
+      const r = await api("/api/jobs/clear-history", {});
+      toast(`${r.removed} finished job(s) cleared`);
+      CZ.jobs.clear();
+      (await api("/api/jobs")).forEach(j => CZ.jobs.set(j.id, j));
+      render();
+    } catch (e) { toast(e.message, true); }
+  };
 
   const rows = () => $("#q-rows", el);
 

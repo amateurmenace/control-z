@@ -157,6 +157,23 @@ class TestQueuedMode(unittest.TestCase):
         job = jm.start("t", stops)
         self.assertTrue(wait_for(lambda: job.status == "cancelled"))
 
+    def test_clear_finished_keeps_active(self):
+        jm = JobManager(db_path=self.db, queued=True)
+        done_job = jm.start("t", lambda j: 1)
+        self.assertTrue(wait_for(lambda: done_job.status == "done"))
+        block = {"go": False}
+        active = jm.start("t", lambda j: wait_for(lambda: block["go"], timeout=5))
+        self.assertTrue(wait_for(lambda: active.status == "running"))
+        removed = jm.clear_finished()
+        self.assertGreaterEqual(removed, 1)
+        self.assertIsNone(jm.get(done_job.id))
+        self.assertIsNotNone(jm.get(active.id))       # active survives
+        ids = {r["id"] for r in jm.list()}
+        self.assertNotIn(done_job.id, ids)
+        self.assertIn(active.id, ids)
+        block["go"] = True
+        self.assertTrue(wait_for(lambda: active.status == "done"))
+
 
 if __name__ == "__main__":
     unittest.main()

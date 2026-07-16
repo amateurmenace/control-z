@@ -32,11 +32,11 @@
   railSuite.appendChild(railItem("queue", "Queue",
     g("M4 6h12M4 10h12M4 14h8"), null));
   railSuite.appendChild(railItem("ofx", "Install OpenFX",
-    g("M10 4v8m0 0 3-3m-3 3-3-3M4.5 15.5h11"), null, "v0.4"));
+    g("M10 4v8m0 0 3-3m-3 3-3-3M4.5 15.5h11"), null));
   railSuite.appendChild(railItem("models", "Models",
-    g("M10 3.5 16 7v6l-6 3.5L4 13V7zM10 10l6-3M10 10 4 7m6 3v6.5"), null, "v0.4"));
+    g("M10 3.5 16 7v6l-6 3.5L4 13V7zM10 10l6-3M10 10 4 7m6 3v6.5"), null));
   railSuite.appendChild(railItem("settings", "Settings",
-    g("M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM10 3v2m0 10v2m7-7h-2M5 10H3m11.9-4.9-1.4 1.4M6.5 13.5l-1.4 1.4m9.8 0-1.4-1.4M6.5 6.5 5.1 5.1"), null, "v0.4"));
+    g("M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM10 3v2m0 10v2m7-7h-2M5 10H3m11.9-4.9-1.4 1.4M6.5 13.5l-1.4 1.4m9.8 0-1.4-1.4M6.5 6.5 5.1 5.1"), null));
 
   /* queue badge: count of active jobs on the rail */
   setInterval(() => {

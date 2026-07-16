@@ -2,7 +2,32 @@
 
 ## unreleased
 
-### suite 0.3.0.dev0 — all six tools in — 2026-07-16
+### suite 0.4.0.dev0 — suite services — 2026-07-16
+- **Install OpenFX page** (specs/08 §5): detects Resolve and
+  /Library/OFX/Plugins, reads installed Hush/Speak versions from their
+  Info.plists, and checks the latest GitHub release on click — one GET to
+  the public API, nothing phones home on its own; prerelease-only repos
+  (Speak beta) resolve via the release list and wear a beta badge. Install
+  downloads the release .pkg to ~/Downloads and opens the system installer
+  (which owns the privileges — the plugins dir is root-owned and the page
+  says so instead of pretending). One-click OFXPluginCacheV2.xml clear for
+  the rescan gotcha; uninstall removes the bundle when the dir is writable
+  and otherwise prints the exact sudo command. Verified against this
+  machine's real state: Resolve found, Hush 3.3.0 → v3.7.0 update offered,
+  Speak not-installed → v0.2.0 beta offered.
+- **Models page**: the czcore registry with license + sha-256-pinned badges
+  and true on-disk sizes, download (through the queue, hash-verified) and
+  remove per model; whisper cache and diarization pair listed and
+  removable; Stencil runtime status. Verified: yunet removed and
+  re-downloaded with its hash checked.
+- **Settings page**: every cache with its real size and a clear button
+  (all regenerable — the page says nothing here can lose work), job-history
+  clear (active jobs never touched — unit-tested), model store and app-data
+  paths, about block.
+- Queue page grew a "clear finished" button; czcore JobManager grew
+  clear_finished().
+- The rail has no coming-soon states left: v0.4 closes the milestone list
+  short of v1.0 (packaging, signing, notarization, DMG).
 - **v0.2, sound + words.** **Clear**: audio workspace (waveform + amber-on-ink
   spectrogram with before/after A/B), rescue chain from the CLI's own calls
   (de-hum auto-detect, de-click, DF3 isolation when the binary exists — honest
