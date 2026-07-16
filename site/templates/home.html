@@ -6,9 +6,11 @@
   section.epic > canvas.grain { position:absolute; inset:0; width:100%; height:100%; opacity:.35; mix-blend-mode:screen; pointer-events:none; z-index:0; }
   section.epic .wrap { position:relative; z-index:2; }
   .epic .kicker { color:var(--amber); }
-  .epic h1 { font-size:clamp(58px,9vw,112px); line-height:.92; letter-spacing:-.032em; color:#F5F3EE; max-width:12ch; text-wrap:balance; }
+  .epic h1 { font-size:clamp(54px,8.4vw,104px); line-height:.94; letter-spacing:-.032em; color:#F5F3EE; max-width:14ch; text-wrap:balance; }
   .epic h1 .dot { color:var(--amber); }
-  .epic .why { font-size:clamp(18px,2.2vw,21px); line-height:1.6; color:#D4E0D6; max-width:62ch; margin-top:26px; }
+  .epic h1 .sub { display:block; font-size:.5em; color:var(--sage-lt); letter-spacing:-.02em; margin-top:10px; }
+  .epic .why { font-size:clamp(17.5px,2.1vw,20px); line-height:1.62; color:#D4E0D6; max-width:64ch; margin-top:26px; }
+  .epic .why + .why { margin-top:14px; }
   .epic .why b { color:#F5F3EE; }
   .values { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin:34px 0 8px; }
   .value { background:rgba(255,255,255,.045); border:1px solid rgba(197,214,204,.18); border-radius:var(--r-md); padding:15px 17px; backdrop-filter:blur(2px); }
@@ -58,14 +60,23 @@
   <canvas class="grain"></canvas>
   <div class="wrap">
     <div class="kicker">free finishing tools for davinci resolve — and everything around it</div>
-    <h1>Undo the paywall<span class="dot">.</span></h1>
-    <p class="why">Blackmagic gives everyone a world-class editor for free — then gates the
-    finishing. Noise reduction, AI masks, transcription, voice rescue, retiming: the
-    features that turn footage into <b>television</b> sit behind license keys and
-    subscriptions that a post house writes off and a <b>community newsroom simply cannot</b>.
-    control-z is the undo key for that arrangement: a suite of free, open-source tools that
-    do the paywalled jobs — built with community media centers, tested on real archives and
-    real city meetings, and released to everyone, forever.</p>
+    <h1>Undo the paywall<span class="dot">.</span>
+      <span class="sub">Make better media for free.</span></h1>
+    <p class="why">Journalists, artists, advocates, new filmmakers, and community media
+    stations shouldn't have quality gated behind a paywall.
+    <b>If the content is good, the form should match.</b> That's the guiding principle of
+    this project — because too often, the people with the most important stories to tell
+    have the least access to the professional, easy-to-use tools that would help those
+    stories reach more people and be taken more seriously.</p>
+    <p class="why">control-z is a suite of free, open-source tools — ranging from the
+    technical to the editorial to the creative — made to be used with the best free
+    editing software around, <b>DaVinci Resolve</b>. They simply catch you up to what
+    paying Studio users already get. Things like: quieting the noise in footage shot at a
+    dim city meeting. Transcribing an interview on your own laptop, then cutting it like
+    a document. Pulling one clean voice out of a roaring room. Tracing a subject's matte
+    from a single click. Reframing a whole program for phones. Sharpening a tape-era
+    archive back to life. Grading through depth, as if the scene were three-dimensional.
+    All free, all local, all yours — forever.</p>
     <div class="values">
       <div class="value"><span class="tn">the premise</span><b>Free is the feature.</b>
         <p>MIT-licensed, commercial use included. No tiers, trials, seats, or accounts.</p></div>
