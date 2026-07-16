@@ -22,12 +22,14 @@ Defended:
   (Python 3.14.6, arm64). Hook coverage in pyinstaller-hooks-contrib 2026.6 already handles
   `av`, `cv2`, `onnxruntime`, `torch`, `sam2`, `soundfile`, `uvicorn`, `websockets`,
   `webview`, `pydantic`. The interpreter risk everyone feared is retired: it builds.
-- **DMG, not pkg.** `security find-identity -v` on Stephen's Mac returns exactly two
-  identities: `Apple Development: Stephen Walter (597T4G6JU5)` and `Developer ID
-  Application: Stephen Walter (6M536MV7GT)`. There is **no Developer ID Installer**
-  identity — which is precisely why `OpenNR-3.7.0-macOS.pkg` reports `Status: no signature`
-  and `spctl --assess` rejects it today. A DMG is signed with the Application identity that
-  already exists. Choosing pkg would re-inherit the exact defect this milestone exists to fix.
+- **DMG, not pkg** — on merit, not necessity. When this was first written the machine had no
+  Developer ID **Installer** identity, which was precisely why `OpenNR-3.7.0-macOS.pkg`
+  reported `Status: no signature`; that cert now exists (2026-07-16) and both plugins ship
+  notarized, so pkg is no longer *blocked*. It is still wrong for this artifact: a pkg
+  installs to a system location and wants root, which is right for an OFX plugin dropping
+  into `/Library/OFX/Plugins` and pointless for an app the user drags to /Applications. The
+  Suite is a normal `.app`; a DMG signs with the Application identity, needs no privilege
+  escalation, and is what a user expects to drag.
 - **Apple silicon only, said out loud.** `lipo -archs` reports `arm64` for libavcodec,
   libtorch_cpu, libonnxruntime, and the venv's python. There are no universal2 wheels for
   this stack. Hush's `.ofx` is universal; the Suite cannot be. That is a **download-page
