@@ -170,8 +170,12 @@ def slide_depth():
 
 
 def slide_speak():
-    """Film-character concept treatment (Speak is an OFX plugin; this is a
-    look study on the same frame, and the site labels it as such)."""
+    """Film-character LOOK STUDY — not Speak's own render.
+
+    Speak is an OpenFX plugin, so its real output has to come out of Resolve;
+    this is an approximation of the look on the same frame, and the slide
+    caption says so. Replace with a true Speak render once one is exported.
+    """
     idx = 120
     sp = fit(grab(CELIA, {idx})[idx]).astype(np.float32) / 255
     sp = sp ** 0.92
