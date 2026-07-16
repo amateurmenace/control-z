@@ -60,8 +60,11 @@
   the queue, matte tint + onion skin overlays, the confidence-strip QC loop
   (0.85 threshold line, low frames named), coverage %, post chain
   (grow/feather/despeckle/temporal majority) and luma / ProRes-4444-alpha
-  exports. Runtime (torch + sam2) stays an honest optional — the page says
-  exactly what to install when it's missing.
+  exports. The runtime stays an honest optional — the page says exactly what
+  to install when it's missing. The ⌥-click exclude only works at all because
+  of the multi-point prompt fix below: on the old engine every click after the
+  first was silently discarded, so a prompt ending in an exclude produced an
+  empty matte.
 - New engine deps into the venv story: faster-whisper, sherpa-onnx, soundfile,
   scipy, pyloudnorm (+ torch/sam2 as Stencil's optional heavies).
 - Suite rail: no coming-soon states left among the tools — Install OpenFX,
@@ -148,6 +151,44 @@
   a function-local `WebSocket` import makes every /ws connect 403 silently
   (string annotations resolve against module globals) — keep FastAPI names
   imported at module level.
+### stencil — 2026-07-16 (bug fix)
+- **Multi-point prompts were broken and silently produced empty mattes.**
+  SAM2's `add_new_points_or_box` defaults to `clear_old_points=True`, so
+  sending one point per call kept only the last — a prompt ending in an
+  exclude point erased the matte entirely (confidence 0.00 on every frame).
+  Points are now grouped by (frame, object) and sent in one call:
+  the same prompt set went 0.00 → **0.98 mean confidence, 0 frames flagged**.
+  Found while re-shooting the site demos; regression test added
+  (`TestPromptGrouping`). The old single-point demo worked by luck.
+
+### site (licensed demo footage) — 2026-07-16
+- **No member footage on the site.** Every published demo frame was re-shot on
+  freely-licensed clips — the previous frames came from private member footage
+  we don't hold public rights to. `site/make_slides.py` documents the
+  licensing rule at the top so this can't regress. Hush's before/after stays
+  its own synthetic validation card.
+- The people-images are Pexels clips chosen so each is also a harder demo, and
+  so the people shown reflect the communities these tools are for (curly-hair
+  portrait for Stencil/Speak, freckled close-up for Rise, city street for
+  Pivot/Depth). The Pexels license asks for no attribution; the footer credits
+  them anyway, because a project about giving work away should say whose work
+  it borrowed. An earlier pass used Tears of Steel (© Blender Foundation,
+  CC-BY 3.0); it now stays in Test Footage as a spare scope-format source and
+  no longer ships.
+- Every frame is still real tool output: Stencil's matte is a genuine SAM 2.1
+  propagation (0.98 confidence), Pivot's box is a genuine solved 9:16 crop,
+  Depth is the shipping engine, Rise is real Real-ESRGAN vs Lanczos.
+- Rise demo re-sourced from an in-focus face crop — the old pair came from a
+  defocused region, so reconstruction read as blur; it now reads sharp AND
+  denoised, which is the actual behavior.
+- Pivot slide centre-crops the 2.4:1 scope frame to a true 16:9 first, so its
+  "16:9 → 9:16" label is literally what's drawn.
+- **Speak is live**: status `beta` (new status tier), real download links to
+  github.com/amateurmenace/Speak v0.2.0, copy/limitations taken from its
+  README (early beta, macOS-only binaries, no preset library yet).
+- Domain cutover: control-z.org released from Hush-OpenNR and claimed by this
+  repo; CNAME is now written by `site/build.py` on every bake so a deploy
+  can't drop it. hush-whitepaper.pdf carried alongside whitepaper.html.
 
 ### site (single-page rebuild) — 2026-07-16
 - One-page architecture: tool pages retired; each tool is a homepage section

@@ -3,7 +3,7 @@
     <div class="kicker">try the probe</div>
     <h2>Move your cursor. Read the scene.</h2>
     <div class="demo">
-      <div class="head"><span><b>real depth</b> · the 4K test frame, measured by the shipping engine</span><span>hover to probe · slider adds fog</span></div>
+      <div class="head"><span><b>real depth</b> · a street canyon, measured by the shipping engine</span><span>hover to probe · slider adds fog</span></div>
       <div style="position:relative">
         <canvas id="dpView" style="cursor:crosshair"></canvas>
       </div>
@@ -14,7 +14,7 @@
           <span id="dpNear"></span>
         </span>
       </div>
-      <div class="readout"><span class="live">● fog is depth-shaped: the far wall mists first — this is the Fog template from the pack, in your browser</span></div>
+      <div class="readout"><span class="live">● fog is depth-shaped: the far end of the street mists first, the near towers stay clear — this is the Fog template from the pack, in your browser</span></div>
     </div>
   </div>
 </section>
@@ -60,7 +60,7 @@
     var gy = Math.min(GRID.h - 1, Math.max(0, Math.round(y * GRID.h)));
     var d = GRID.d[gy * GRID.w + gx];
     val.textContent = d.toFixed(2);
-    near.textContent = d > .66 ? 'near — subject territory' : d > .33 ? 'mid — the room' : 'far — the street';
+    near.textContent = d > .66 ? 'near — the glass tower at the edge' : d > .33 ? 'mid — the subject' : 'far — the end of the street';
     draw();
   });
   c.addEventListener('pointerleave', function () { mouse = null; val.textContent = '—'; near.textContent = ''; draw(); });

@@ -58,6 +58,35 @@ class TestPostChain(unittest.TestCase):
         self.assertEqual(len(out), 5)
 
 
+class TestPromptGrouping(unittest.TestCase):
+    """Regression: every point for a frame+object must go in ONE SAM2 call.
+
+    SAM2 clears old points per call, so feeding them individually kept only the
+    last one — an exclude point alone produced an empty matte (found 2026-07-16
+    while re-shooting the site demos on Tears of Steel)."""
+
+    def test_points_grouped_by_frame_and_object(self):
+        from stencil.core import Prompt, group_prompts
+
+        g = group_prompts([
+            Prompt(frame=0, xy=(.5, .4), label=1, obj=1),
+            Prompt(frame=0, xy=(.6, .9), label=1, obj=1),   # same frame+obj
+            Prompt(frame=0, xy=(.1, .3), label=0, obj=1),   # the exclude
+            Prompt(frame=10, xy=(.5, .5), label=1, obj=1),  # later correction
+            Prompt(frame=0, xy=(.2, .2), label=1, obj=2),   # second object
+        ])
+        self.assertEqual(len(g[(0, 1)]), 3, "frame 0 object 1 must keep all 3 points")
+        self.assertEqual([p.label for p in g[(0, 1)]], [1, 1, 0])
+        self.assertEqual(len(g[(10, 1)]), 1)
+        self.assertEqual(len(g[(0, 2)]), 1)
+
+    def test_single_point_still_one_group(self):
+        from stencil.core import Prompt, group_prompts
+
+        g = group_prompts([Prompt(frame=0, xy=(.5, .5), label=1, obj=1)])
+        self.assertEqual(len(g), 1)
+
+
 class TestPromptSchema(unittest.TestCase):
     def test_prompt_validation(self):
         import json
