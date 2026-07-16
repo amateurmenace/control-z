@@ -57,11 +57,13 @@ def main() -> int:
         html = env.get_template(tpl).render(tools=tools, page=page)
         (DOCS / out_name).write_text(html)
         print(f"  {out_name}  ({len(html)//1024} KB)")
-    # carry the Hush design study over so /whitepaper.html survives the CNAME move
-    wp = Path.home() / "Hush" / "Hush-OpenNR" / "docs" / "whitepaper.html"
-    if wp.exists():
-        (DOCS / "whitepaper.html").write_text(wp.read_text())
-        print("  whitepaper.html  (carried from Hush-OpenNR/docs)")
+    # carry the Hush design study (+ its PDF) so those URLs survive the CNAME move
+    hush_docs = Path.home() / "Hush" / "Hush-OpenNR" / "docs"
+    for name in ("whitepaper.html", "hush-whitepaper.pdf"):
+        src = hush_docs / name
+        if src.exists():
+            (DOCS / name).write_bytes(src.read_bytes())
+            print(f"  {name}  (carried from Hush-OpenNR/docs)")
     print(f"baked → {DOCS}")
     return 0
 
