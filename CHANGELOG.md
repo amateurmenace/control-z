@@ -2,6 +2,24 @@
 
 ## unreleased
 
+### loose ends — 2026-07-16
+- **Speaker labels install themselves now.** Scribe's diarization needed two
+  files fetched by hand — one of them buried in a tarball — and because they
+  weren't in the registry the Models page could delete them but not bring them
+  back. Both are registered, hash-pinned and license-carded like every other
+  model; `czcore.models` learned to keep one named member out of a tarball
+  (by exact name — never a blanket extractall, which lets an archive write
+  where it likes). First use downloads ~44 MB and says whose weights they are.
+- **The depth CLI stopped hoarding frames.** `depth-cli run` held a
+  full-resolution float32 map for every frame of a shot, the same bug the
+  Suite's render had: 845 KB/frame at SD, gigabytes at 4K. It now keeps the
+  model's native 256×256 map like the Suite does — 256 KB/frame regardless of
+  source resolution, so a 659-frame 4K clip holds 165 MB where it used to ask
+  for 21.7 GB.
+- Home's doors split by direction of travel rather than by a timeline the
+  tools don't follow: Prep is footage on its way into your editor (Clear,
+  Stencil, Depth), Finish is the cut coming back out (Pivot, Scribe, Rise).
+
 ### suite 0.4.0.dev0 — suite services — 2026-07-16
 - **Install OpenFX page** (specs/08 §5): detects Resolve and
   /Library/OFX/Plugins, reads installed Hush/Speak versions from their
@@ -17,11 +35,10 @@
   Speak not-installed → v0.2.0 beta offered.
 - **Models page**: the czcore registry with license + sha-256-pinned badges
   and true on-disk sizes, download (through the queue, hash-verified) and
-  remove per model; whisper cache and diarization pair listed and
-  removable; Stencil runtime status. Verified: yunet removed and
-  re-downloaded with its hash checked. The diarization pair is the one
-  remove-only row — it isn't in the registry, so the page can show it and
-  delete it but not bring it back; that gap is named in the README.
+  remove per model; whisper cache and Stencil runtime status. Verified: yunet
+  removed and re-downloaded with its hash checked. Whisper is the one row the
+  registry doesn't own — faster-whisper fetches those from Hugging Face
+  itself, unpinned, and the page says so rather than implying otherwise.
 - **Settings page**: every cache with its real size and a clear button
   (all regenerable — the page says nothing here can lose work), job-history
   clear (active jobs never touched — unit-tested), model store and app-data
@@ -43,13 +60,9 @@
   the audio clock with the caption overlaid on video (current word amber),
   low-confidence words tinted (proof those), inline segment edits saved to the
   sidecar, speaker rename everywhere, caption presets, SRT/VTT/TXT/marker-EDL
-  exports, and the pull list → CMX3600 selects EDL in source TC. Diarization
-  needs two models you place in the shared store yourself — nothing fetches
-  them, and they aren't in the czcore registry, so they get no hash pin and no
-  download button; Scribe checks for them and prints both URLs and the
-  destination when they're missing, and everything else works without them.
-  Verified with the pair placed by hand: two TTS voices separated perfectly,
-  23 s transcribed in 16 s (base), selects EDL honors embedded TC.
+  exports, and the pull list → CMX3600 selects EDL in source TC. Verified: two
+  TTS voices separated perfectly, 23 s transcribed in 16 s (base), selects EDL
+  honors embedded TC.
 - **v0.3, the GPU pair.** **Depth**: false-color scrub (source/blend/depth),
   click-to-probe crosshair reading the local map, histogram with draggable
   in/out handles, stability meter, matte render (10-bit gray ProRes,

@@ -51,8 +51,8 @@ def cmd_run(args) -> int:
                 if d > 0.14:          # probable cut: don't smooth across it
                     engine.reset_temporal()
             prev = gray
-            depths.append(engine.estimate(img, ema=args.ema, refine=False)
-                          .astype(np.float32))
+            depths.append(engine.estimate(img, ema=args.ema, refine=False,
+                                          native=True))
             if i % 25 == 0:
                 say(f"  …{i}", end="\r", flush=True)
     n = len(depths)

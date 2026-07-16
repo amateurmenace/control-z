@@ -199,11 +199,6 @@ const ModelsPage = (() => {
           <div><span class="badge" style="color:var(--ok);border-color:var(--ok)">${fmtBytes(w.size)}</span></div>
           <div class="qact"><button data-delw="${esc(w.path)}">remove</button></div></div>`).join("")
         : `<div class="hint">none yet — the first transcribe downloads the size you pick</div>`) +
-      `<div class="tag" style="margin:16px 0 6px">diarization (scribe)</div>` +
-      d.diarization.map(x => `<div class="qrow" style="grid-template-columns:1fr 110px 110px">
-          <div class="qlabel" style="font-size:12.5px">${esc(x.name)}</div>
-          <div>${x.present ? `<span class="badge" style="color:var(--ok);border-color:var(--ok)">${fmtBytes(x.size)}</span>` : `<span class="badge">missing</span>`}</div>
-          <div class="qact">${x.present ? `<button data-deld="${esc(x.filename)}">remove</button>` : ""}</div></div>`).join("") +
       `<div class="tag" style="margin:16px 0 6px">stencil runtime</div>
        <div class="hint">${rt.torch
          ? `torch ${esc(rt.torch)} (${rt.mps ? "MPS" : "CPU"}) + sam2 ${rt.sam2 ? "✓" : "missing"} — installed in the suite's venv`
@@ -228,11 +223,6 @@ const ModelsPage = (() => {
     $$("button[data-delw]", el).forEach(b => b.onclick = async () => {
       if (!confirm("Remove this whisper model? It re-downloads on next transcribe.")) return;
       await api("/api/models/delete", { name: b.dataset.delw, kind: "whisper" });
-      refresh();
-    });
-    $$("button[data-deld]", el).forEach(b => b.onclick = async () => {
-      if (!confirm("Remove this diarization model? Speaker labeling stops until it's back.")) return;
-      await api("/api/models/delete", { name: b.dataset.deld, kind: "diarization" });
       refresh();
     });
   }

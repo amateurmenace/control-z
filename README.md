@@ -68,7 +68,7 @@ runs several times larger.
 | `czcore/` | shared core (media IO, encode presets, shots, exports, app shell + job queue, model store, Hush-core denoise) | working |
 | `pivot/` | **Pivot** — smart reframe (9:16/1:1 from your masters) | CLI + Suite UI working |
 | `stencil/` | **Stencil** — AI roto mattes (SAM 2.1) | CLI + Suite UI working (torch is an optional heavy) |
-| `scribe/` | **Scribe** — transcription, captions, text-based cuts | CLI + Suite UI working (diarization needs two hand-placed models) |
+| `scribe/` | **Scribe** — transcription, captions, text-based cuts | CLI + Suite UI working (incl. speaker labels) |
 | `clear/` | **Clear** — dialogue rescue (DF3 + DSP) | CLI + Suite UI working |
 | `rise/` | **Rise** — super-resolution (engine also lives inside Pivot) | engine + CLI + Suite UI working |
 | `depth/` | **Depth** — depth mattes + Fusion template pack | CLI + Suite UI working |
@@ -120,13 +120,6 @@ on your PATH; without it they don't exist, and every one of them also runs as
 
 ### Known gaps
 
-- **Diarization models aren't fetched for you.** Scribe's speaker separation
-  needs two files — pyannote segmentation-3.0 (MIT) and 3D-Speaker embeddings
-  (Apache-2.0) — that aren't in the czcore model registry, so nothing downloads
-  or hash-verifies them. Scribe checks whether they're present and prints the
-  two URLs and the destination when they aren't; transcription, captions and
-  every export work without them, and the Models page lists the pair (and can
-  remove it, which is a one-way door until you fetch them by hand again).
 - **Rise's Real-ESRGAN weights are converted, not downloaded**: run
   `.venv/bin/python -m rise.convert`. Until then Rise falls back to lanczos,
   labeled as a scaler, never as synthesis.

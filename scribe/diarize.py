@@ -16,34 +16,35 @@ from czcore import models as model_store
 
 from .transcript import Transcript
 
-SEG_FILE = "pyannote-segmentation-3-0.onnx"
-EMB_FILE = "3dspeaker_speech_eres2net_base_sv.onnx"
-
-SEG_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
-           "speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2")
-EMB_URL = ("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
-           "speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx")
+SEG_MODEL = "pyannote_seg"
+EMB_MODEL = "speaker_embed"
 
 
 def _paths():
+    """Where the pair lives — without downloading anything."""
     d = model_store.models_dir()
-    return d / SEG_FILE, d / EMB_FILE
+    return (d / model_store.REGISTRY[SEG_MODEL].filename,
+            d / model_store.REGISTRY[EMB_MODEL].filename)
 
 
 def available() -> bool:
-    seg, emb = _paths()
-    return seg.exists() and emb.exists()
+    """True when both are on disk and match their pinned hashes."""
+    for name in (SEG_MODEL, EMB_MODEL):
+        try:
+            model_store.model_path(name, auto_download=False)
+        except FileNotFoundError:
+            return False
+    return True
 
 
 def install_hint() -> str:
-    seg, emb = _paths()
+    seg = model_store.REGISTRY[SEG_MODEL]
+    emb = model_store.REGISTRY[EMB_MODEL]
     return (
-        "diarization models not installed. Two files go in "
-        f"{seg.parent}:\n"
-        f"  1. {SEG_FILE} — from {SEG_URL} (extract model.onnx from the tar, "
-        "rename)\n"
-        f"  2. {EMB_FILE} — from {EMB_URL}\n"
-        "Licenses: MIT (pyannote weights) / Apache-2.0 (3D-Speaker)."
+        "speaker labels need two models — they download on first use "
+        f"({seg.license.split('(')[0].strip()} / "
+        f"{emb.license.split('(')[0].strip()}, ~44 MB together), or from the "
+        "Suite's Models page. Everything else in Scribe works without them."
     )
 
 
@@ -54,9 +55,11 @@ def diarize(transcript: Transcript, wav_path: str,
     import sherpa_onnx
     import soundfile  # ships with sherpa-onnx dependency chain
 
-    seg_path, emb_path = _paths()
-    if not available():
-        raise FileNotFoundError(install_hint())
+    # first use downloads the pair (license card printed, hash verified)
+    if progress and not available():
+        progress("fetching the speaker models (~44 MB, first use only)…")
+    seg_path = model_store.model_path(SEG_MODEL)
+    emb_path = model_store.model_path(EMB_MODEL)
 
     config = sherpa_onnx.OfflineSpeakerDiarizationConfig(
         segmentation=sherpa_onnx.OfflineSpeakerSegmentationModelConfig(

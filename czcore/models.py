@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import sys
 import urllib.request
 from dataclasses import dataclass
@@ -29,10 +30,11 @@ class ModelSpec:
     name: str
     filename: str
     url: Optional[str]     # None = produced locally (e.g. rise.convert)
-    sha256: Optional[str]  # None only during development; releases must pin
+    sha256: Optional[str]  # of the FILE WE KEEP; None only during development
     license: str
     card: str  # one-line honest description
     hint: str = ""         # how to obtain when url is None
+    archive_member: str = ""  # url is a .tar.*: keep this member as `filename`
 
 
 REGISTRY = {
@@ -72,6 +74,30 @@ REGISTRY = {
         sha256="c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063",
         license="Apache-2.0 (Megvii)",
         card="YOLOX-s person detector — finds people when faces aren't visible. 34 MB, on-device.",
+    ),
+    "pyannote_seg": ModelSpec(
+        name="pyannote_seg",
+        filename="pyannote-segmentation-3-0.onnx",
+        url=("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+             "speaker-segmentation-models/"
+             "sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"),
+        archive_member="sherpa-onnx-pyannote-segmentation-3-0/model.onnx",
+        sha256="220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079",
+        license="MIT (pyannote segmentation-3.0 weights, via sherpa-onnx)",
+        card="pyannote segmentation 3.0 — finds where each voice starts and "
+             "stops. Half of Scribe's speaker labels. 6 MB, on-device.",
+    ),
+    "speaker_embed": ModelSpec(
+        name="speaker_embed",
+        filename="3dspeaker_speech_eres2net_base_sv.onnx",
+        url=("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+             "speaker-recongition-models/"
+             "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"),
+        sha256="1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b",
+        license="Apache-2.0 (3D-Speaker, Alibaba DAMO)",
+        card="3D-Speaker embeddings — tells one voice from another so the turns "
+             "get names. The other half of Scribe's speaker labels. 38 MB, "
+             "on-device.",
     ),
     "yunet": ModelSpec(
         name="yunet",
@@ -134,6 +160,8 @@ def model_path(name: str, auto_download: bool = True, quiet: bool = False) -> Pa
         print(f"            from: {spec.url}")
     tmp = dest.with_suffix(".part")
     urllib.request.urlretrieve(spec.url, tmp)  # nosec - pinned URL, hash-verified below
+    if spec.archive_member:
+        tmp = _extract(tmp, spec, dest)
     got = _sha256(tmp)
     if spec.sha256 and got != spec.sha256:
         tmp.unlink(missing_ok=True)
@@ -145,3 +173,35 @@ def model_path(name: str, auto_download: bool = True, quiet: bool = False) -> Pa
     if not quiet:
         print(f"            ok, sha256 verified → {dest}")
     return dest
+
+
+def _extract(archive: Path, spec: ModelSpec, dest: Path) -> Path:
+    """Pull spec.archive_member out of a downloaded tarball; return the temp
+    file holding it (hashed by the caller, exactly like a direct download).
+
+    Some upstreams only publish a model inside a tarball. Extraction is by
+    exact member name — never a blanket extractall, which would let an archive
+    write anywhere it likes.
+    """
+    import tarfile
+
+    out = dest.with_suffix(".member")
+    try:
+        with tarfile.open(archive) as tf:
+            try:
+                member = tf.getmember(spec.archive_member)
+            except KeyError:
+                raise RuntimeError(
+                    f"{spec.name}: the download doesn't contain "
+                    f"{spec.archive_member!r} — upstream changed the archive's "
+                    "layout, so this needs a code fix rather than a retry."
+                ) from None
+            if not member.isfile():
+                raise RuntimeError(
+                    f"{spec.name}: {spec.archive_member!r} isn't a regular file")
+            src = tf.extractfile(member)
+            with open(out, "wb") as f:
+                shutil.copyfileobj(src, f)
+    finally:
+        archive.unlink(missing_ok=True)
+    return out

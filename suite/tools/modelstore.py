@@ -57,16 +57,6 @@ def register_modelstore(app, jobs, frames):
                 whisper.append({"name": d.name.split("--")[-1],
                                 "size": _size(d), "path": d.name})
 
-        diar = []
-        for label, fn in (("pyannote segmentation-3.0 (MIT)",
-                           "pyannote-segmentation-3-0.onnx"),
-                          ("3D-Speaker embeddings (Apache-2.0)",
-                           "3dspeaker_speech_eres2net_base_sv.onnx")):
-            f = store / fn
-            diar.append({"name": label, "filename": fn,
-                         "present": f.exists(),
-                         "size": _size(f) if f.exists() else None})
-
         stencil_rt = {"torch": None, "sam2": False}
         try:
             import torch
@@ -85,7 +75,6 @@ def register_modelstore(app, jobs, frames):
             "total_size": _size(store),
             "registry": registry,
             "whisper": whisper,
-            "diarization": diar,
             "stencil_runtime": stencil_rt,
         }
 
@@ -126,11 +115,6 @@ def register_modelstore(app, jobs, frames):
             if (Path(str(name)).name != str(name) or str(name) in ("", ".", "..")
                     or target.resolve().parent != wdir):
                 return JSONResponse({"error": "bad path"}, status_code=422)
-        elif kind == "diarization":
-            if name not in ("pyannote-segmentation-3-0.onnx",
-                            "3dspeaker_speech_eres2net_base_sv.onnx"):
-                return JSONResponse({"error": "bad name"}, status_code=422)
-            target = store / str(name)
         else:
             return JSONResponse({"error": f"unknown kind {kind!r}"}, status_code=422)
         if not target.exists():
