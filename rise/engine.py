@@ -44,6 +44,10 @@ def resolve_model(model: str) -> str:
     if model == "auto":
         for m in ("realesrgan-x4", "realesrgan-x2"):
             if m in models.REGISTRY:
+                try:
+                    models.model_path(m, auto_download=False)
+                except FileNotFoundError:
+                    continue  # registered but not converted yet — not available
                 return m
         return "lanczos"
     if model != "lanczos" and model not in models.REGISTRY:

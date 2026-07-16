@@ -34,83 +34,46 @@ def cmd_probe(args) -> int:
 
 
 def cmd_up(args) -> int:
-    import av
-    import cv2
-    import numpy as np
-
     from czcore.media import probe
 
-    from .engine import resolve_model, upscale_frame
+    from .engine import resolve_model
+    from .video import InterlacedSourceError, upscale_video
 
     info = probe(args.input)
     v = info.video
-    field = next((s.get("field_order") for s in info.raw.get("streams", [])
-                  if s.get("codec_type") == "video"), None)
-    if field and field not in ("progressive",):
-        if not args.force:
-            print(f"refusing: field_order={field} looks interlaced — deinterlace "
-                  "first, or pass --force if you know better. (Honesty > silence.)")
-            return 2
-        print(f"  ! proceeding on possibly-interlaced source (--force)")
-
     model = resolve_model(args.model)
     scale = args.scale
-    ow, oh = v.width * scale, v.height * scale
     ext = ".mov" if args.codec == "prores" else ".mp4"
     out_path = args.output or str(Path(args.input).with_name(
         f"{Path(args.input).stem}.rise-x{scale}{ext}"))
-    print(f"Rise — {Path(args.input).name} {v.width}x{v.height} → {ow}x{oh} "
+    print(f"Rise — {Path(args.input).name} {v.width}x{v.height} → "
+          f"{v.width * scale}x{v.height * scale} "
           f"({model}{', stabilized' if args.stabilize else ''})")
     if model == "lanczos":
         print("  note: lanczos backend = honest resampling, no reconstruction "
               "(convert the model with `python -m rise.convert` for synthesis).")
+    if args.force:
+        print("  ! interlace guard bypassed (--force)")
 
-    CODECS = {"h264": ("libx264", "yuv420p", {"crf": "16", "preset": "medium"}),
-              "hevc": ("libx265", "yuv420p", {"crf": "18", "preset": "medium"}),
-              "prores": ("prores_ks", "yuv422p10le", {"profile": "3"})}
-    codec, pix, opts = CODECS[args.codec]
+    # the CLI's long-standing codec table (suite uses czcore export presets)
+    CODECS = {"h264": dict(codec="libx264", pix_fmt="yuv420p",
+                           options={"crf": "16", "preset": "medium"}),
+              "hevc": dict(codec="libx265", pix_fmt="yuv420p",
+                           options={"crf": "18", "preset": "medium"}),
+              "prores": dict(codec="prores_ks", pix_fmt="yuv422p10le",
+                             options={"profile": "3"})}
 
-    prev_out = None
-    prev_small = None
-    n = 0
-    with av.open(args.input) as inp, av.open(out_path, "w") as out:
-        vin = inp.streams.video[0]
-        vin.thread_type = "AUTO"
-        vout = out.add_stream(codec, rate=vin.average_rate or 24, options=opts)
-        vout.width, vout.height = ow, oh
-        vout.pix_fmt = pix
-        for packet in inp.demux(vin):
-            for frame in packet.decode():
-                img = frame.to_ndarray(format="bgr24")
-                up, _ = upscale_frame(img, scale, model=model, tile=args.tile)
-                if args.stabilize and prev_out is not None:
-                    # flow on quarter-res input frames, gate by warp error
-                    small = cv2.resize(img, (v.width // 4, v.height // 4))
-                    flow = cv2.calcOpticalFlowFarneback(
-                        cv2.cvtColor(prev_small, cv2.COLOR_BGR2GRAY),
-                        cv2.cvtColor(small, cv2.COLOR_BGR2GRAY),
-                        None, 0.5, 3, 21, 3, 5, 1.2, 0)
-                    flow_up = cv2.resize(flow, (ow, oh)) * (4 * scale)
-                    grid = np.mgrid[0:oh, 0:ow].astype(np.float32)
-                    map_x = grid[1] - flow_up[..., 0]
-                    map_y = grid[0] - flow_up[..., 1]
-                    warped = cv2.remap(prev_out, map_x, map_y, cv2.INTER_LINEAR,
-                                       borderMode=cv2.BORDER_REPLICATE)
-                    err = np.abs(warped.astype(np.int16) - up.astype(np.int16)
-                                 ).mean(axis=2, keepdims=True)
-                    gate = np.clip(1.0 - err / 24.0, 0.0, 1.0) * 0.5
-                    up = (up * (1 - gate) + warped * gate).astype(np.uint8)
-                if args.stabilize:
-                    prev_small = cv2.resize(img, (v.width // 4, v.height // 4))
-                    prev_out = up
-                vf = av.VideoFrame.from_ndarray(up, format="bgr24")
-                for pkt in vout.encode(vf):
-                    out.mux(pkt)
-                n += 1
-                print(f"  …{n} frames", end="\r", flush=True)
-        for pkt in vout.encode():
-            out.mux(pkt)
-    print(f"\n  {n} frames → {out_path}")
+    try:
+        report = upscale_video(
+            args.input, out_path, scale=scale, model=model, tile=args.tile,
+            stabilize=args.stabilize, codec_spec=CODECS[args.codec],
+            force=args.force,
+            denoise="hush" if args.denoise else "off",
+            progress=lambda n, total: print(f"  …{n} frames", end="\r", flush=True))
+    except InterlacedSourceError as e:
+        print(str(e).replace("force if", "pass --force if"))
+        return 2
+    print(f"\n  {report['frames']} frames → {report['out']}")
     return 0
 
 
@@ -133,6 +96,9 @@ def main(argv=None) -> int:
     pu.add_argument("--tile", type=int, default=512)
     pu.add_argument("--stabilize", action="store_true",
                     help="flow-gated temporal blend (kills per-frame shimmer)")
+    pu.add_argument("--denoise", action="store_true",
+                    help="clean noise BEFORE scaling (Hush core: 3-frame "
+                         "temporal + fine NLM) — upscaling amplifies noise")
     pu.add_argument("--codec", choices=["h264", "hevc", "prores"], default="prores")
     pu.add_argument("--force", action="store_true")
     pu.add_argument("-o", "--output")
