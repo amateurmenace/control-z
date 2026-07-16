@@ -2,6 +2,25 @@
 
 ## unreleased
 
+### site (single-page rebuild) — 2026-07-16
+- One-page architecture: tool pages retired; each tool is a homepage section
+  (`#t-<id>`) with its live simulation, feature list, brief how-to, and a
+  `<details>` technical expander (architecture, model card, honest limitations,
+  replaces). Node tree + chips now anchor-jump. Stale pages cleaned at bake.
+- Epic dark hero (white-paper band promoted): philosophy/why + four value
+  cards over live grain; CTA row (suite download, tools, design study).
+- New sections: Downloads (Suite app card, Hush/Speak OpenFX, white paper —
+  carried into the bake from Hush-OpenNR/docs), DaVinci + Premiere guide
+  cards, "Who is this for?" (stations section retired into it), free-toolbox
+  grid on the homepage (9 tools with blurbs/links).
+- Topline: "A Weird Machine project in collaboration with Brookline
+  Interactive Group" (linked). Footer: designed/developed credit (Stephen
+  Walter × Claude Code · 2026), Weird Machine logo, Community AI Project
+  (communityai.studio) + BIG partnership line, MIT license link.
+- specs/08-suite-app.md: the control-z Suite desktop app scoped (architecture,
+  IA, per-tool workspaces, export contract incl. ProRes 4444+alpha, OpenFX
+  installer page, design language, milestones, risks, build-session prompt).
+
 ### site (interactive redesign) — 2026-07-16
 - Rebuilt on the Hush site's actual component vocabulary (studied
   `Hush-OpenNR/site/index.template.html`): Space Grotesk/DM Sans, mono topline,
