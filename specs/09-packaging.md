@@ -41,13 +41,20 @@ evidence. If a later dependency defeats it, the fallback is *not* a packager swa
 
 ## 2. What actually transfers from Hush and Speak (and what does not)
 
-The program's own notes call OpenNR/Speak a "proven, shipping signing pipeline." Measured:
+The program's own notes called OpenNR/Speak a "proven, shipping signing pipeline." As
+measured on 2026-07-16 — **all three rows have since been fixed, and the fix is the reason
+this section is worth reading**:
 
-| Claim | Reality |
-|---|---|
-| Notarization pipeline works | **Never executed once.** `xcrun notarytool history --keychain-profile opennr-notary` exits **69**: "No Keychain password item found." No keychain item matches. Both releases took the script's silent skip branch. |
-| The shipped pkg is signed | `pkgutil --check-signature` → "Status: no signature". `spctl -a -t install` → **rejected, no usable signature**. |
-| The payload is signed | **True.** `codesign -dvvv` on `OpenNR.ofx.bundle` → Authority `Developer ID Application: Stephen Walter (6M536MV7GT)`, `flags=0x10000(runtime)`, timestamped, passes `--verify --strict`. |
+| Claim | Reality when measured | Now |
+|---|---|---|
+| Notarization pipeline works | **Never executed once.** `notarytool history` exited **69**: "No Keychain password item found." Both releases took the script's silent skip branch. | Profile `opennr-notary` stored; Hush 3.7.0 and Speak 0.2.0 notarized and stapled. |
+| The shipped pkg is signed | `pkgutil --check-signature` → "Status: no signature". `spctl -a -t install` → **rejected**. | Developer ID **Installer** cert created; both pkgs signed, notarized, stapled. |
+| The payload is signed | **True** all along: Developer ID Application, `flags=0x10000(runtime)`, timestamped. | Unchanged — and now carries a stapled ticket too. |
+
+The lesson worth keeping: **both guards failed open.** `if profile exists … else skip` and
+`if installer-cert exists … else ship unsigned` each printed one line and moved on, so two
+releases shipped Gatekeeper-rejected while the script reported success. A guard around a
+release step should fail loudly or not exist.
 
 **Transfers:** the Developer ID Application identity; the identity-autodetect idiom
 (`security find-identity | grep -o '"Developer ID Application: [^"]*"'` — grep the literal
@@ -55,13 +62,20 @@ string, never `head -1`, because the *first* identity on this machine is a diffe
 597T4G6JU5); the `--timestamp --options runtime` flags; the notarize-if-profile-exists guard
 and the ad-hoc fallback, so a credential-less machine still produces artifacts.
 
-**Does not transfer:** any notarization experience, and `--deep`. The siblings sign one
+**Does not transfer:** `--deep`, and the *shape* of the payload. The siblings sign one
 Mach-O inside an `.ofx.bundle` that Resolve dlopens under *Resolve's* entitlements. The
-Suite is 500-odd Mach-O files in its own process. §4 is new work with no precedent in the
-family. **The Suite will be the first thing Stephen has ever notarized.** Budget for the
-unknown-unknowns of a first submission, and for reading `xcrun notarytool log <id>` — that
-log is the only thing that says what Apple actually objected to; `codesign --verify` does
-not predict it.
+Suite is 500-odd Mach-O files in its own process — §4 is new work with no precedent in the
+family. Notarization itself is no longer unknown territory (the plugins and, before them,
+the ATEM projects have all been Accepted), but **this dependency set** has never been
+submitted. Budget for reading `xcrun notarytool log <id>`: that log is the only thing that
+says what Apple actually objected to; `codesign --verify` does not predict it.
+
+**One ordering lesson, learned the hard way and worth inheriting:** ticket the *bundle*
+first, then build the pkg and the zip from the stapled copy. The sibling scripts built the
+zip *after* notarizing, from an unstapled stage, so the zip would have shipped a ticket-less
+payload even on a successful run — which is why Hush's docs still tell users to
+`xattr -dr com.apple.quarantine`. And never submit an unsigned pkg: Apple rejects it, and the
+error blames the profile rather than the missing certificate.
 
 ## 3. FFmpeg and the license (settled)
 
@@ -323,11 +337,16 @@ today means the tests depend on the GPL encoder. Fixing them is part of v1.0-a.
 
 ## 8. Risks, named
 
-- **First notarization, ever.** No profile exists; both siblings have only ever taken the
-  skip branch. `codesign --verify` passing does not predict what Apple objects to. Mitigation:
-  submit early — a throwaway submission of a minimal PyInstaller app with this stack, the day
-  the profile exists, converts three of §9's open questions into facts for the price of one
-  upload.
+- **First notarization *of this stack*.** Not the first ever — that claim was in an earlier
+  draft of this spec and it was wrong. `notarytool history` shows this team notarizing since
+  2026-06-13 (ATEM IP Patchbay `.dmg`, `atem-net-diag` `.app.zip`, all Accepted), and Hush
+  3.7.0 and Speak 0.2.0 were notarized and stapled on 2026-07-16 — the plugins had only ever
+  taken the skip branch because no profile was stored, not because anything was broken. What
+  is *actually* unproven is this **dependency set**: a 500-Mach-O PyInstaller tree with
+  onnxruntime, ctranslate2, sherpa-onnx and PyAV. `codesign --verify` passing does not predict
+  what Apple objects to. Mitigation: submit early — a throwaway submission of a minimal
+  PyInstaller app with this stack converts three of §9's open questions into facts for the
+  price of one upload.
 - **GPL contamination is physical and already in the tree.** libx264 ×2 and libx265 ×2, linked
   by libavcodec per `otool`. It cannot be fixed by deleting the dylibs — avcodec links them at
   load; it needs a rebuild. Rebuilding PyAV against a custom FFmpeg is real work, not a flag
