@@ -57,6 +57,11 @@ def main() -> int:
         html = env.get_template(tpl).render(tools=tools, page=page)
         (DOCS / out_name).write_text(html)
         print(f"  {out_name}  ({len(html)//1024} KB)")
+    # the custom domain lives here, not in GitHub's UI: every deploy rebuilds the
+    # gh-pages branch from this folder, so a UI-only setting would be wiped.
+    (DOCS / "CNAME").write_text("control-z.org\n")
+    print("  CNAME  (control-z.org)")
+
     # carry the Hush design study (+ its PDF) so those URLs survive the CNAME move
     hush_docs = Path.home() / "Hush" / "Hush-OpenNR" / "docs"
     for name in ("whitepaper.html", "hush-whitepaper.pdf"):
