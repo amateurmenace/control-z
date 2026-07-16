@@ -7,7 +7,7 @@ and color science, and given away.
 🌐 **[control-z.org](https://control-z.org)** — the site, the live demos, and the design study.
 
 This repository is the **shared downloads hub** for both tools. Grab installers from
-the [**Releases**](https://github.com/amateurmenace/weirdmachine-resolve/releases) page.
+the [**Releases**](https://github.com/amateurmenace/control-z/releases) page.
 
 ---
 
@@ -37,7 +37,7 @@ exactly where the image was cleaned most.
 
 ## Install (macOS)
 
-1. Download the `.pkg` from [Releases](https://github.com/amateurmenace/weirdmachine-resolve/releases) and double-click.
+1. Download the `.pkg` from [Releases](https://github.com/amateurmenace/control-z/releases) and double-click.
 2. Restart DaVinci Resolve.
 3. Find the plugin under **Effects → OpenFX → Filters** and drag it onto a node.
 
