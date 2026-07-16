@@ -1,5 +1,5 @@
 # The single source of truth for control-z.org — one block per tool.
-# status: shipped | in-progress | proposed (proposed appears ONLY on /roadmap)
+# status: shipped | beta | in-progress | proposed (proposed appears ONLY on /roadmap)
 
 - id: hush
   name: Hush
@@ -42,19 +42,18 @@
   - 'Noise EQ cuts noise by size: fine grain, clumps, stains, color blotches'
   - Live scopes and a Noise Removed view — watch exactly what's being taken
   - Exports a clean-confidence matte Speak (and your grade) can key on
-  tech: 'Three noise estimators run per frame (temporal difference, fine and coarse Laplacian) into
-    robust histograms, producing separate spatial and temporal sigmas plus a 16-band brightness gain
-    curve. The temporal stage compares 3×3 patches against up to ±3 frames with a hierarchical ±8
-    px motion search; a hard-knee gate reaches exactly zero past the knee, so mismatches cannot ghost
-    by construction. Spatial cleanup is noise-adaptive NLM with a size-banded Noise EQ, bounded by
-    Detail Rescue. The refine stack (v3.6) rebuilds optical character: coring, acutance, chroma-speckle,
-    and film-matched grain. GPU kernels (Metal/CUDA/OpenCL) are line-by-line ports of one CPU reference,
-    held to ~2×10⁻⁵ agreement by a parity test suite.'
+  tech: 'Three noise estimators run per frame (temporal difference, fine and coarse Laplacian) into robust
+    histograms, producing separate spatial and temporal sigmas plus a 16-band brightness gain curve. The
+    temporal stage compares 3×3 patches against up to ±3 frames with a hierarchical ±8 px motion search;
+    a hard-knee gate reaches exactly zero past the knee, so mismatches cannot ghost by construction. Spatial
+    cleanup is noise-adaptive NLM with a size-banded Noise EQ, bounded by Detail Rescue. The refine stack
+    (v3.6) rebuilds optical character: coring, acutance, chroma-speckle, and film-matched grain. GPU kernels
+    (Metal/CUDA/OpenCL) are line-by-line ports of one CPU reference, held to ~2×10⁻⁵ agreement by a parity
+    test suite.'
 - id: pivot
   name: Pivot
   verbline: Pivot follows the subject.
-  oneliner: Auto-reframe your 16:9 masters to 9:16, 1:1, 4:5 — with an editor's eye, not a cropping
-    algorithm's.
+  oneliner: Auto-reframe your 16:9 masters to 9:16, 1:1, 4:5 — with an editor's eye, not a cropping algorithm's.
   status: in-progress
   accent: '#5B7A9E'
   stage: deliver
@@ -76,8 +75,8 @@
   - Open a clip, pick your aspects, hit Analyze — shots, faces, and a solved camera path.
   - Scrub the path trace; override any shot to punch / follow / center.
   - Render natively (no silent upscale) or export a keyframed .setting for the Fusion page.
-  shows_its_work: The path trace draws every detection, the chosen subject, and each camera move —
-    plus a per-shot report of what it did and why.
+  shows_its_work: The path trace draws every detection, the chosen subject, and each camera move — plus
+    a per-shot report of what it did and why.
   limitations:
   - Faces and people only so far — sports and wildlife will miss (saliency model on the roadmap).
   - Punch-ins past native resolution are honest resampling until you enable the Rise engine.
@@ -94,18 +93,18 @@
   - Path-trace view shows every detection and every camera decision
   - 'Per-shot overrides: punch, follow, or center — re-solved instantly'
   - Renders natively or exports keyframed Fusion .setting for free Resolve
-  tech: 'Analysis decodes once at 360p: shot detection (adaptive luma-diff), YuNet face detection
-    every 2nd frame, YOLOX-s persons only where faces are absent, greedy IoU/distance tracking. Per
-    shot, a subject is selected (size × centrality × persistence) and solved: shots under 2 s or under
-    the motion floor become static punches at a trimmed median; the rest get the follow controller
-    — deadzone with hysteresis, 12-frame lookahead anticipation, braking-parabola velocity setpoint
-    clamped by v-max/a-max. Overshoot is pinned ≤ 4 acceleration quanta by golden tests. Renders are
-    frame-accurate (EOF flush handled) with audio stream-copied, never re-encoded.'
+  tech: 'Analysis decodes once at 360p: shot detection (adaptive luma-diff), YuNet face detection every
+    2nd frame, YOLOX-s persons only where faces are absent, greedy IoU/distance tracking. Per shot, a
+    subject is selected (size × centrality × persistence) and solved: shots under 2 s or under the motion
+    floor become static punches at a trimmed median; the rest get the follow controller — deadzone with
+    hysteresis, 12-frame lookahead anticipation, braking-parabola velocity setpoint clamped by v-max/a-max.
+    Overshoot is pinned ≤ 4 acceleration quanta by golden tests. Renders are frame-accurate (EOF flush
+    handled) with audio stream-copied, never re-encoded.'
 - id: stencil
   name: Stencil
   verbline: Stencil traces the subject.
-  oneliner: Click an object once, get a matte for the whole shot — delivered as matte clips any page
-    of free Resolve can use.
+  oneliner: Click an object once, get a matte for the whole shot — delivered as matte clips any page of
+    free Resolve can use.
   status: in-progress
   accent: '#8E6A9E'
   stage: color
@@ -126,8 +125,8 @@
   - 'Point at the thing: one include click (add excludes if needed).'
   - Propagate — SAM 2.1 tracks it across the shot on your GPU.
   - Export a luma matte (Color page → Add Matte) or ProRes 4444 with alpha.
-  shows_its_work: The confidence timeline glows amber on every frame the model is unsure about — you
-    QC the minutes that need it, not the hour that doesn't.
+  shows_its_work: The confidence timeline glows amber on every frame the model is unsure about — you QC
+    the minutes that need it, not the hour that doesn't.
   limitations:
   - Soft-matte quality on hair and motion blur — it's a roto assistant, not a keyer.
   - Heavyweight install (PyTorch) until the ONNX port lands.
@@ -143,10 +142,10 @@
   - Grow / feather / de-flicker post chain, tuned for grading mattes
   - Exports luma mattes and ProRes 4444 alpha that free Resolve just uses
   tech: 'SAM 2.1 hiera-small propagates prompted masklets bidirectionally through a shot at 720p analysis
-    resolution (PyTorch on Metal/CUDA; ONNX port planned). Confidence per frame is the model''s mean
-    in-mask probability — the amber QC strip. Post chain: 3-frame morphological majority (de-flicker),
-    despeckle, grow/shrink, gaussian feather; mattes upsample to source res on export. Shot-bounded
-    by the shared cut detector so propagation never crosses an edit.'
+    resolution (PyTorch on Metal/CUDA; ONNX port planned). Confidence per frame is the model''s mean in-mask
+    probability — the amber QC strip. Post chain: 3-frame morphological majority (de-flicker), despeckle,
+    grow/shrink, gaussian feather; mattes upsample to source res on export. Shot-bounded by the shared
+    cut detector so propagation never crosses an edit.'
 - id: scribe
   name: Scribe
   verbline: Scribe writes it all down.
@@ -195,11 +194,10 @@
   - Marker EDL puts speaker-colored markers on your Resolve timeline
   - 'Paper edits: select text, export a CMX3600 selects EDL, conform'
   tech: 'faster-whisper (CTranslate2 int8) with Silero VAD and word timestamps; diarization via sherpa-onnx
-    (pyannote segmentation 3.0 + 3D-Speaker embeddings, clustered), majority-overlap assigned per
-    segment. Exports are pure, golden-tested writers: SRT/VTT with word-timed re-blocking to caption
-    presets, speaker-colored marker EDLs (Resolve''s Timeline Markers From EDL), and CMX3600 selects
-    EDLs with accumulating record TC and handles. NDF timecode throughout, 23.976 drift documented
-    rather than hidden.'
+    (pyannote segmentation 3.0 + 3D-Speaker embeddings, clustered), majority-overlap assigned per segment.
+    Exports are pure, golden-tested writers: SRT/VTT with word-timed re-blocking to caption presets, speaker-colored
+    marker EDLs (Resolve''s Timeline Markers From EDL), and CMX3600 selects EDLs with accumulating record
+    TC and handles. NDF timecode throughout, 23.976 drift documented rather than hidden.'
 - id: clear
   name: Clear
   verbline: Clear rescues the voice.
@@ -242,18 +240,17 @@
   - Second-difference de-click that refuses to eat sibilants
   - Room-tone synthesis from a 2-second profile — endless matching tone
   - Loudness to broadcast/podcast/streaming spec, with true-peak honesty
-  tech: Isolation runs the official DeepFilterNet 3 binary as a subprocess (48 kHz, real-time class)
-    with our mix-back blend. De-hum detects the mains fundamental by harmonic-sum test against the
-    spectral floor, then zero-phase notch cascades. De-click flags second-difference outliers (no
-    IIR ringing), interpolates runs ≤ 2 ms, and bails honestly if more than 1% of samples flag. Room
-    tone is random-phase resynthesis of a Welch PSD profile — exact spectral envelope, loop-safe tail.
-    Loudness is BS.1770 via pyloudnorm; if the true-peak ceiling fights the target, it says so instead
-    of limiting.
+  tech: Isolation runs the official DeepFilterNet 3 binary as a subprocess (48 kHz, real-time class) with
+    our mix-back blend. De-hum detects the mains fundamental by harmonic-sum test against the spectral
+    floor, then zero-phase notch cascades. De-click flags second-difference outliers (no IIR ringing),
+    interpolates runs ≤ 2 ms, and bails honestly if more than 1% of samples flag. Room tone is random-phase
+    resynthesis of a Welch PSD profile — exact spectral envelope, loop-safe tail. Loudness is BS.1770
+    via pyloudnorm; if the true-peak ceiling fights the target, it says so instead of limiting.
 - id: rise
   name: Rise
   verbline: Rise restores the detail.
-  oneliner: SD→HD/4K reconstruction for tape-era archives and punch-in rescue — with a heatmap of
-    what it invented.
+  oneliner: SD→HD/4K reconstruction for tape-era archives and punch-in rescue — with a heatmap of what
+    it invented.
   status: in-progress
   accent: '#C99A3A'
   stage: restore
@@ -275,9 +272,8 @@
   - rise-cli probe tape.mov — interlace check first (combs + AI = garbage, we refuse politely).
   - rise-cli up tape.mov --scale 2 --stabilize
   - 'In Pivot: tick ''enhance punch-ins'' and crops route through the same engine.'
-  shows_its_work: Every render reports which backend actually ran — synthesized texture is labeled
-    synthesis, never 'recovered detail.' The A/B wipe and detail heatmap show you exactly what was
-    made up.
+  shows_its_work: Every render reports which backend actually ran — synthesized texture is labeled synthesis,
+    never 'recovered detail.' The A/B wipe and detail heatmap show you exactly what was made up.
   limitations:
   - Per-frame model + temporal stabilization ≠ Topaz's temporal models on fast motion.
   - Faces can go uncanny; face restore is opt-in and off by default for journalism.
@@ -292,16 +288,15 @@
   - 'Detail heatmap + A/B wipe: see exactly what was synthesized'
   - The same engine powers Pivot's punch-in enhancement
   tech: Official Real-ESRGAN x4plus weights converted to a pinned ONNX (the conversion script ships),
-    run through ONNX Runtime (CoreML/DirectML/CUDA) with 512 px tiles and ramped overlap blending
-    — golden-tested seam-free vs whole-frame. Temporal stabilization warps the previous output by
-    Farneback flow and blends where warp error is low. The engine is a frozen API consumed by both
-    the app and Pivot; every result carries which backend actually ran, and synthesis is always labeled
-    synthesis.
+    run through ONNX Runtime (CoreML/DirectML/CUDA) with 512 px tiles and ramped overlap blending — golden-tested
+    seam-free vs whole-frame. Temporal stabilization warps the previous output by Farneback flow and blends
+    where warp error is low. The engine is a frozen API consumed by both the app and Pivot; every result
+    carries which backend actually ran, and synthesis is always labeled synthesis.
 - id: depth
   name: Depth
   verbline: Depth measures the scene.
-  oneliner: A depth matte for every clip — fog, rack focus, and depth-graded atmosphere through a
-    paste-in Fusion template pack.
+  oneliner: A depth matte for every clip — fog, rack focus, and depth-graded atmosphere through a paste-in
+    Fusion template pack.
   status: in-progress
   accent: '#5E5A8C'
   stage: color
@@ -318,11 +313,11 @@
   - Fusion templates
   quickstart:
   - depth-cli run scene.mov → a 10-bit gray depth matte clip beside your footage.
-  - 'depth-cli templates → five paste-ready Fusion setups: Fog, Rack Focus, Depth Grade, Parallax
-    2.5D, Haze Light.'
+  - 'depth-cli templates → five paste-ready Fusion setups: Fog, Rack Focus, Depth Grade, Parallax 2.5D,
+    Haze Light.'
   - 'Color page: Add Matte, key through the depth bands.'
-  shows_its_work: False-color previews with a click-anywhere probe, per-shot range readouts, and a
-    temporal-stability meter that flags flicker before you grade.
+  shows_its_work: False-color previews with a click-anywhere probe, per-shot range readouts, and a temporal-stability
+    meter that flags flicker before you grade.
   limitations:
   - Relative depth, not metric — mattes and atmosphere, not measurement.
   - Mirrors, glass, and scale tricks fool it.
@@ -337,11 +332,11 @@
   - 10-bit gray ProRes mattes the Color page keys through directly
   - 'Five paste-in Fusion templates: fog, rack focus, depth grade, parallax, haze'
   - False-color probe view with per-shot range readouts
-  tech: MiDaS-small (256 px, MIT) behind a model-agnostic engine — Video-Depth-Anything-Small is the
-    planned v0.2 backend. Temporal EMA resets at every cut; per-shot normalization uses 2/98 percentiles
-    so hot pixels can't crush the range. Upsampling is a He-style guided filter against the source
-    luma, keeping depth edges on image edges. Export packs 0–1 depth into 10-bit gray ProRes 4444
-    (near = white by default, invertible, gamma-mappable).
+  tech: MiDaS-small (256 px, MIT) behind a model-agnostic engine — Video-Depth-Anything-Small is the planned
+    v0.2 backend. Temporal EMA resets at every cut; per-shot normalization uses 2/98 percentiles so hot
+    pixels can't crush the range. Upsampling is a He-style guided filter against the source luma, keeping
+    depth edges on image edges. Export packs 0–1 depth into 10-bit gray ProRes 4444 (near = white by default,
+    invertible, gamma-mappable).
 - id: level
   name: Level
   status: proposed
@@ -388,8 +383,7 @@
   name: Minutes
   status: proposed
   stage: edit
-  oneliner: 'Civic-meeting engine: agenda-aligned chapters, who-spoke-when, clip pull-lists, draft
-    minutes.'
+  oneliner: 'Civic-meeting engine: agenda-aligned chapters, who-spoke-when, clip pull-lists, draft minutes.'
   replaces:
   - name: nothing exists
     price: —
@@ -512,9 +506,9 @@
 - id: speak
   name: Speak
   verbline: Speak gives the image its voice.
-  oneliner: 'Film character for the last node: stock density, subtractive color, halation, bloom,
-    grain placed by Hush''s confidence matte.'
-  status: in-progress
+  oneliner: 'Film character for the last node: Hurter–Driffield tone curves, subtractive color, halation
+    and grain — with every curve on screen.'
+  status: beta
   accent: '#E89D6B'
   stage: color
   audiences:
@@ -527,24 +521,39 @@
     price: ~$140
   platforms:
   - macOS
-  - Windows
-  - OpenFX · last node
+  - OpenFX · Color/Edit/Fusion pages
+  - Windows build next
   links:
-    github: https://github.com/amateurmenace/Hush-OpenNR
+    github: https://github.com/amateurmenace/Speak
+    download: https://github.com/amateurmenace/Speak/releases/latest
   quickstart:
-  - Hush first node, Speak last node. Grade in between.
-  - Speak reads Hush's clean-confidence matte and lays grain exactly where the image was cleaned most.
-  shows_its_work: Works in DaVinci Wide Gamut with the optical steps in linear light — one look, every
-    deliverable.
+  - Install Speak, then put it on the LAST node of your grade — Hush opens the tree, Speak closes it.
+  - Pick a tone scale and printer lights; the H&D scope plots the exact curve your pixels are using.
+  - 'For the handoff: enable "Export Clean Matte to Alpha" in Hush ≥ 3.7 and "Use Incoming Matte" in Speak''s
+    grain.'
+  shows_its_work: H&D curves plotted live with the frame's own exposure histogram, a Status-M density
+    parade measured from the true result, and isolated halation/grain views that are never auto-gained
+    — a subtle effect correctly looks subtle.
   limitations:
-  - In development — the texture-reconstruction stack (Hush v3.6) ships first.
+  - 'Early beta (v0.2): machine-verified module by module, but not yet field-tested through a full Resolve
+    grade — don''t cut a feature on it this week.'
+  - macOS binaries only so far; the Windows/OpenCL build follows.
+  - No film-stock preset library yet — you build the look from the curves themselves.
   models: []
   features:
-  - Film-stock density and subtractive color, built in DaVinci Wide Gamut
-  - Halation and bloom computed in linear light, like the optics they imitate
-  - Grain placed by Hush's confidence matte — texture where cleaning happened
-  - 'One look, every deliverable: RCM converts to Rec.709, P3, or HDR'
-  tech: 'In development on Hush''s texture-reconstruction stack. Color architecture: density and split-toning
-    operate in DaVinci Wide Gamut; halation and bloom in linear light; grain amplitude follows Hush''s
-    clean-confidence matte so texture returns exactly where denoising worked. Ships when the look
-    holds across Rec.709, P3, and HDR trims from one setting.'
+  - 'Real Hurter–Driffield curves: negative stage, printer-light timing in genuine printer points, print
+    stage'
+  - Subtractive color in the density domain — highlight chroma self-compresses toward paper white
+  - Halation injected as exposure BEFORE the curve, so blown highlights go white-hot in the core and red
+    at the edges
+  - 'Grain as density noise per dye layer: loud in shadows, grainless at paper white, never negative'
+  - The Hush handoff — grain lands exactly where the denoiser cleaned deepest
+  tech: Speak models the photochemical chain rather than filtering the picture. A negative stage applies
+    closed-form Hurter–Driffield characteristic curves, printer lights time the color in genuine printer
+    points, and a print stage lands the result — all plotted live from the same math the pixels take,
+    so the scope cannot disagree with the render. Saturation happens in the density domain (dye density
+    adds where light multiplies), with an inter-image coupler for dye cross-talk. Halation is injected
+    as exposure before the curve on a multi-scale scatter field with a power-law skirt, making it physically
+    self-limiting. Grain is per-RGB-layer density noise, bandpassed at a physical pitch and boiling every
+    frame, optionally keyed to Hush's clean-confidence matte. Metal on macOS, OpenCL on Windows/Linux,
+    all agreeing with a CPU reference to ~2e-5; identity at default and alpha always passes through untouched.

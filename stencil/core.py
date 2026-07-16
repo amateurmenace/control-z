@@ -28,6 +28,19 @@ class Prompt:
     obj: int = 1
 
 
+def group_prompts(prompts: List[Prompt]) -> Dict[Tuple[int, int], List[Prompt]]:
+    """Group points by (frame, object).
+
+    SAM2's add_new_points_or_box defaults to clear_old_points=True, so every
+    point for one frame+object MUST go in a single call — feeding them one at a
+    time silently keeps only the last (an exclude point alone = empty matte).
+    """
+    grouped: Dict[Tuple[int, int], List[Prompt]] = {}
+    for p in prompts:
+        grouped.setdefault((p.frame, p.obj), []).append(p)
+    return grouped
+
+
 @dataclass
 class ShotMattes:
     start: int
@@ -93,13 +106,14 @@ class StencilEngine:
 
         n_frames = len(list(frames_dir.glob("*.jpg")))
         state = self.predictor.init_state(video_path=str(frames_dir))
-        for p in prompts:
+        scale = np.array([[state["video_width"], state["video_height"]]],
+                         dtype=np.float32)
+        for (frame_idx, obj_id), pts in sorted(group_prompts(list(prompts)).items()):
             self.predictor.add_new_points_or_box(
-                state, frame_idx=p.frame, obj_id=p.obj,
-                points=np.array([[p.xy[0], p.xy[1]]], dtype=np.float32) *
-                np.array([[state["video_width"], state["video_height"]]],
-                         dtype=np.float32),
-                labels=np.array([p.label], dtype=np.int32),
+                state, frame_idx=frame_idx, obj_id=obj_id,
+                points=np.array([[p.xy[0], p.xy[1]] for p in pts],
+                                dtype=np.float32) * scale,
+                labels=np.array([p.label for p in pts], dtype=np.int32),
             )
         out = ShotMattes(0, n_frames)
         with torch.inference_mode():

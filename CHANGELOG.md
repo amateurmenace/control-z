@@ -2,6 +2,37 @@
 
 ## unreleased
 
+### stencil — 2026-07-16 (bug fix)
+- **Multi-point prompts were broken and silently produced empty mattes.**
+  SAM2's `add_new_points_or_box` defaults to `clear_old_points=True`, so
+  sending one point per call kept only the last — a prompt ending in an
+  exclude point erased the matte entirely (confidence 0.00 on every frame).
+  Points are now grouped by (frame, object) and sent in one call:
+  the same prompt set went 0.00 → **0.98 mean confidence, 0 frames flagged**.
+  Found while re-shooting the site demos; regression test added
+  (`TestPromptGrouping`). The old single-point demo worked by luck.
+
+### site (licensed demo footage) — 2026-07-16
+- **All published demo frames re-shot on Tears of Steel** (© Blender
+  Foundation, CC-BY 3.0) — the previous frames came from private member
+  footage we don't have public rights to. Attribution added to the footer;
+  `site/make_slides.py` documents the licensing rule at the top so this can't
+  regress. Hush's before/after stays its own synthetic validation card.
+- Every frame is still real tool output: Stencil's matte is a genuine SAM 2.1
+  propagation (0.98 confidence), Pivot's box is a genuine solved 9:16 crop,
+  Depth is the shipping engine, Rise is real Real-ESRGAN vs Lanczos.
+- Rise demo re-sourced from an in-focus face crop — the old pair came from a
+  defocused region, so reconstruction read as blur; it now reads sharp AND
+  denoised, which is the actual behavior.
+- Pivot slide centre-crops the 2.4:1 scope frame to a true 16:9 first, so its
+  "16:9 → 9:16" label is literally what's drawn.
+- **Speak is live**: status `beta` (new status tier), real download links to
+  github.com/amateurmenace/Speak v0.2.0, copy/limitations taken from its
+  README (early beta, macOS-only binaries, no preset library yet).
+- Domain cutover: control-z.org released from Hush-OpenNR and claimed by this
+  repo; CNAME is now written by `site/build.py` on every bake so a deploy
+  can't drop it. hush-whitepaper.pdf carried alongside whitepaper.html.
+
 ### site (single-page rebuild) — 2026-07-16
 - One-page architecture: tool pages retired; each tool is a homepage section
   (`#t-<id>`) with its live simulation, feature list, brief how-to, and a

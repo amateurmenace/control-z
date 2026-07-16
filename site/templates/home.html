@@ -135,7 +135,7 @@
           <a class="cslide {{ 'on' if loop.first }}" href="#t-{{ id }}">
             <img src="{{ b64('slide-' ~ id ~ '.jpg') }}" alt="{{ name }} — {{ line }}">
             <figcaption>
-              <b style="color:{{ t.accent if id != 'hush' else '#9BD3A6' }}">{{ name }}</b><span class="stat">{{ "shipped" if t.status == "shipped" else "soon" }}</span>
+              <b style="color:{{ t.accent if id != 'hush' else '#9BD3A6' }}">{{ name }}</b><span class="stat">{{ "shipped" if t.status == "shipped" else "beta" if t.status == "beta" else "soon" }}</span>
               <small>{{ line }}</small>
             </figcaption>
           </a>
@@ -182,11 +182,12 @@
         <a class="btn btn-green" href="https://github.com/amateurmenace/Hush-OpenNR/releases/latest">Download Hush →</a>
       </div>
       <div class="pcard" style="--pc:#C06A32">
-        <div class="pc-top"><span class="pc-tag">openfx · in progress</span><span class="pc-free">100% FREE</span></div>
-        <h3>Speak<span style="color:var(--amber)">.</span></h3><span class="sub">film character · last node · follows hush v3.6</span>
-        <p>The film look for the end of the tree. Ships when the look holds across
-        Rec.709, P3 and HDR from a single setting.</p>
-        <a class="btn btn-line" href="#t-speak">Preview Speak →</a>
+        <div class="pc-top"><span class="pc-tag">openfx · early beta</span><span class="pc-free">100% FREE</span></div>
+        <h3>Speak<span style="color:var(--amber)">.</span></h3><span class="sub">film character · last node · macOS · v0.2 beta</span>
+        <p>The film look for the end of the tree — H&amp;D curves, subtractive color,
+        halation and grain. Built and machine-verified; not yet field-tested through
+        a full grade, and we say so.</p>
+        <a class="btn btn-line" href="https://github.com/amateurmenace/Speak/releases/latest">Download Speak →</a>
       </div>
       <div class="pcard" style="--pc:var(--amber)">
         <div class="pc-top"><span class="pc-tag">the paper</span><span class="pc-free">FREE, OBVIOUSLY</span></div>
@@ -262,11 +263,11 @@
         <div class="nt io"><span class="st">media</span><b>IN</b><small>any footage</small></div>
         {% for t in live %}
         <div class="wire"><i></i></div>
-        <div class="nt tool {{ 'plan' if t.status != 'shipped' }} {{ 'start' if t.id == 'hush' }}"
+        <div class="nt tool {{ 'plan' if t.status not in ('shipped', 'beta') }} {{ 'start' if t.id == 'hush' }}"
              style="--nc:{{ t.accent }}"
              data-t="{{ t.name }} — {{ t.verbline }}"
              data-b="{{ t.oneliner }} <a href='#t-{{ t.id }}'>Jump to {{ t.name }} ↓</a>">
-          <span class="st">{{ t.stage }} · {{ "shipped" if t.status == "shipped" else "soon" }}</span>
+          <span class="st">{{ t.stage }} · {{ "shipped" if t.status == "shipped" else "beta" if t.status == "beta" else "soon" }}</span>
           <b>{{ t.name }}</b><small>{{ t.verbline|replace(t.name ~ " ", "")|replace(".","") }}</small>
         </div>
         {% endfor %}
