@@ -311,6 +311,11 @@
   .subhead span { font:500 12.5px var(--mono); color:var(--text-lt); white-space:nowrap; }
   .subhead .sh-rule { flex:1; height:1px; background:linear-gradient(90deg, var(--border-lt), transparent); }
   @media (max-width:640px){ .subhead { flex-wrap:wrap; gap:6px; } .subhead span { white-space:normal; } }
+  /* big colorful step numbers on the three download tiers (app / plugins / resources) */
+  .subhead.num { align-items:center; gap:16px; }
+  .subhead .dlnum { flex:none; font:800 52px/.82 "Space Grotesk",sans-serif; letter-spacing:-.045em;
+    color:var(--dn,var(--green)); text-shadow:0 3px 0 color-mix(in srgb, var(--dn,var(--green)) 22%, transparent); }
+  @media (max-width:640px){ .subhead .dlnum { font-size:42px; } .subhead.num { gap:12px; } }
 
   /* the Suite: one wide dark bar with a spotlight that follows the cursor */
   .suitebar { position:relative; display:block; margin-top:26px; overflow:hidden;
@@ -558,6 +563,13 @@
         fill="none" stroke="#E5A835" stroke-width="3.5" stroke-linecap="round"/></svg>
     <p class="lede">Plugins that live inside Resolve's node tree, apps that run beside any
     editor, and the scaffolding to put them to work. All free, all MIT.</p>
+
+    <div class="subhead num" style="--dn:#E5A835">
+      <span class="dlnum">1</span>
+      <h3>The app</h3>
+      <span>one window · runs beside any editor</span>
+      <span class="sh-rule"></span>
+    </div>
     <a class="suitebar" id="suiteBar" href="https://github.com/amateurmenace/control-z">
       <div class="sb-top">
         <span class="sb-kicker">the desktop app · macOS first, Windows next</span>
@@ -579,7 +591,8 @@
       <span class="sb-cta">Watch releases <span aria-hidden="true">→</span></span>
     </a>
 
-    <div class="subhead">
+    <div class="subhead num" style="--dn:#5B8C65">
+      <span class="dlnum">2</span>
       <h3>OpenFX plugins</h3>
       <span>they live inside Resolve's node tree · free edition</span>
       <span class="sh-rule"></span>
@@ -604,7 +617,8 @@
     <p class="dncap">macOS and Windows for Hush; macOS for Speak so far. Hush v3.7 hands its
     clean-confidence matte to Speak's grain — the handoff, working.</p>
 
-    <div class="subhead">
+    <div class="subhead num" style="--dn:#8E6A9E">
+      <span class="dlnum">3</span>
       <h3>Resources</h3>
       <span>scaffolding, recipes, and the thinking behind it</span>
       <span class="sh-rule"></span>
