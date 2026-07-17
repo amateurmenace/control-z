@@ -16,9 +16,15 @@ PY="$REPO/.venv/bin/python"
 CV_VERSION="${CV_VERSION:-5.0.0.93}"
 
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
-# Only FFmpeg goes. Everything else stays at the wheel's defaults so runtime
-# behaviour (dnn, objdetect/FaceDetectorYN, imgproc) does not drift.
-export CMAKE_ARGS="-DWITH_FFMPEG=OFF"
+# FFmpeg goes (the GPL second-copy hazard), and so does every Homebrew
+# autodetect: a source build on a dev Mac happily links /opt/homebrew's
+# libavif/OpenEXR, which (a) couples the app to whatever Homebrew had that
+# day and (b) set the app's macOS floor to 26.0 via libaom/dav1d — measured,
+# it cost a rebuild. Codecs the suite actually uses (jpeg/png/webp/tiff)
+# build from the sdist's own bundled sources.
+export CMAKE_ARGS="-DWITH_FFMPEG=OFF -DWITH_AVIF=OFF -DWITH_OPENEXR=OFF \
+ -DWITH_JPEGXL=OFF -DWITH_OPENJPH=OFF -DWITH_OPENJPEG=OFF \
+ -DOPENCV_FORCE_3RDPARTY_BUILD=ON"
 
 echo "== build opencv-python $CV_VERSION from sdist (long — tens of minutes) =="
 "$PIP" install "opencv-python==$CV_VERSION" --no-binary opencv-python \
@@ -46,5 +52,11 @@ while IFS= read -r -d '' so; do
     if otool -L "$so" | grep -qE "x264|x265|avcodec"; then
         echo "FATAL: GPL/FFmpeg linkage in $so"; exit 1
     fi
+    # Hermeticity gate: a /opt/homebrew load command means the build reached
+    # outside its own sources — brittle on this machine, broken on any other.
+    if otool -L "$so" | tail -n +2 | grep -q "/opt/homebrew"; then
+        echo "FATAL: Homebrew linkage in $so:"
+        otool -L "$so" | grep "/opt/homebrew"; exit 1
+    fi
 done < <(find "$SITE" \( -name "*.so" -o -name "*.dylib" \) -type f -print0)
-echo "cv2 rebuilt with no FFmpeg — one FFmpeg in the app, ours."
+echo "cv2 rebuilt with no FFmpeg and no Homebrew reach — hermetic."

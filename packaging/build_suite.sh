@@ -22,11 +22,29 @@ fi
     echo "FATAL: PyInstaller not in the repo venv: .venv/bin/pip install -e '.[packaging]'"; exit 1; }
 
 echo "== freeze (onedir) =="
+# Two attempts: Finder drops .DS_Store into a browsed dist/ mid-delete and
+# rm reports "Directory not empty" — a race, not a permission problem.
+rm -rf build dist 2>/dev/null || true
 rm -rf build dist
 "$VENV/bin/python" -m PyInstaller suite.spec --noconfirm --distpath dist --workpath build
 
-echo "== gate: the app tree carries no GPL library =="
+echo "== gate: the venv reaches for no Homebrew library =="
+# This must run against the VENV, not the frozen tree: PyInstaller rewrites
+# collected /opt/homebrew paths to @loader_path, so an app-tree grep for the
+# string is a gate that cannot fire. Pre-collection load commands are where
+# the truth lives. (The Homebrew AVIF stack once rode in via cv2 exactly this
+# way and set the app's macOS floor to 26.)
 FAIL=0
+while IFS= read -r -d '' so; do
+    if otool -L "$so" 2>/dev/null | tail -n +2 | grep -q "/opt/homebrew"; then
+        echo "HOMEBREW LINKAGE: $so"
+        otool -L "$so" | grep "/opt/homebrew" | head -3
+        FAIL=1
+    fi
+done < <(find "$SITE/.." -maxdepth 4 \( -name "*.so" -o -name "*.dylib" \) -type f -print0)
+[ "$FAIL" -eq 0 ] || exit 1
+
+echo "== gate: the app tree carries no GPL library =="
 while IFS= read -r -d '' f; do
     if file -b "$f" | grep -q "Mach-O"; then
         if otool -L "$f" 2>/dev/null | tail -n +2 | grep -qE "x264|x265|libpostproc|libvidstab"; then

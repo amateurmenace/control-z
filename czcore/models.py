@@ -41,17 +41,18 @@ REGISTRY = {
     "realesrgan-x4": ModelSpec(
         name="realesrgan-x4",
         filename="realesrgan-x4.onnx",
-        url=None,  # converted locally from official BSD-3 weights until we host our own
+        # Hosted as a control-z release asset since v1.0.0: converted from the
+        # official BSD-3 weights by `python -m rise.convert` (deterministic —
+        # the sha below is both the pin and the reproducibility proof).
+        url=("https://github.com/amateurmenace/control-z/releases/download/"
+             "v1.0.0/realesrgan-x4.onnx"),
         sha256="dd1d2f07a16673d1ae02ae9576ff8465ceb87f7bc2f2fa7c99fe3c9eebd42750",
         license="BSD-3-Clause (xinntao/Real-ESRGAN)",
         card="Real-ESRGAN x4 — reconstructs detail when upscaling. Synthesizes texture (labeled).",
-        # An honest hint, not a command a packaged app can't run: rise.convert
-        # needs torch, which the .app deliberately doesn't bundle (specs/09
-        # §5). Until the converted ONNX is hosted as a release asset, only a
-        # source checkout can produce it — and Rise says what it falls back to.
-        hint=("not hosted for download yet. From a source checkout: "
-              "python -m rise.convert (needs torch). Without it, Rise "
-              "upscales with plain Lanczos resampling and says so."),
+        hint=("downloads from the v1.0.0 release (sha256-pinned). Or convert "
+              "it yourself from a source checkout: python -m rise.convert "
+              "(needs torch). Without it, Rise upscales with plain Lanczos "
+              "resampling and says so."),
     ),
     "midas_small": ModelSpec(
         name="midas_small",

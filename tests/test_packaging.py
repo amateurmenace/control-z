@@ -144,6 +144,22 @@ class TestGPLLinkage(unittest.TestCase):
             f"multiple FFmpeg majors reachable: {sorted(majors)} — "
             "the second one usually rides in via the cv2 wheel")
 
+    def test_no_homebrew_linkage(self):
+        """No shipped binary may satisfy a dependency from /opt/homebrew:
+        it works on the dev Mac and dies on the user's — and it imports that
+        library's macOS floor (the Homebrew AVIF stack once set this app's
+        minimum to macOS 26 by riding in through cv2's autodetect). Checked
+        pre-collection: PyInstaller rewrites the paths inside the bundle,
+        so the venv's load commands are where the truth lives."""
+        offenders = []
+        for tree in _shipped_trees():
+            for macho in _machos(tree):
+                for ref, _ in _referenced_paths(macho):
+                    if ref.startswith("/opt/homebrew"):
+                        offenders.append(f"{macho}: {ref}")
+        self.assertEqual(offenders, [],
+                         "Homebrew-linked binaries:\n" + "\n".join(offenders))
+
     def test_av_is_our_build_when_vendor_exists(self):
         """Once packaging/vendor/ffmpeg exists, av must link against it —
         a PyPI-wheel av (with its .dylibs dir) means someone reinstalled."""

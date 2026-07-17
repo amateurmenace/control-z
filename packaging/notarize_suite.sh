@@ -19,9 +19,21 @@ NOTARY_PROFILE="${NOTARY_PROFILE:-opennr-notary}"
 # The app must be Developer-ID signed already; notarizing an ad-hoc app is a
 # guaranteed rejection with a misleading error. TeamIdentifier is the check:
 # `codesign -dv` prints it always, whereas Authority= lines only appear at
-# -dvv (that mismatch false-failed this guard once — loudly, as designed).
-codesign -dv "$APP" 2>&1 | grep -q "TeamIdentifier=6M536MV7GT" || {
-    echo "FATAL: app is not signed by team 6M536MV7GT — run sign_suite.sh"; exit 1; }
+# -dvv (that mismatch false-failed this guard once). One retry, and the
+# guard shows codesign's actual words: a transient codesign failure (e.g.
+# the app still shutting down from a smoke run) is not "unsigned", and a
+# guard that swallows its evidence into grep -q misleads exactly when it
+# matters.
+SIGINFO=$(codesign -dv "$APP" 2>&1) || true
+if ! echo "$SIGINFO" | grep -q "TeamIdentifier=6M536MV7GT"; then
+    sleep 3
+    SIGINFO=$(codesign -dv "$APP" 2>&1) || true
+    if ! echo "$SIGINFO" | grep -q "TeamIdentifier=6M536MV7GT"; then
+        echo "FATAL: app is not signed by team 6M536MV7GT — run sign_suite.sh"
+        echo "codesign said:"; echo "$SIGINFO" | sed 's/^/    /'
+        exit 1
+    fi
+fi
 
 if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
     echo "FATAL: no notarytool profile '$NOTARY_PROFILE'."
