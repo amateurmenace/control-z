@@ -28,3 +28,4 @@ models/
 *.wav
 
 # NOTE: no *.setting rule — depth/templates/*.setting is shipped package data.
+out_*.ppm
