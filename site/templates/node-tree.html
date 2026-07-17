@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block title %}The node tree · control-z{% endblock %}
-{% block desc %}A blank DaVinci Resolve grading scaffold — a working grade's skeleton with none of the grade in it. What each node is for, how to install it as a PowerGrade, and the thinking behind it.{% endblock %}
+{% block desc %}A blank DaVinci Resolve grading scaffold — a working grade's skeleton with none of the grade in it. Two of its stages are compound nodes that give you a Studio-or-free choice: use a Studio feature if you have it, or combine free effects to match it. What each node is for, how to install it, and the thinking behind it.{% endblock %}
 {% block style %}
   .nt-hero { padding:52px 0 8px; }
   .dlbar { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin:22px 0 6px; }
   .zip-note { font:500 12.5px var(--mono); color:var(--text-lt); letter-spacing:.03em; }
 
-  /* ---- the grade tree diagram (Resolve node-editor look) ---- */
+  /* ---- node-editor look ---- */
   .gtree { background:#191921; border:1px solid #2c2c34; border-radius:var(--r-lg); padding:24px 20px 20px; margin:8px 0 6px; }
+  .gtree.sub { padding:20px 20px 18px; }
   .gscroll { overflow-x:auto; padding-bottom:6px; }
   .gflow { display:flex; align-items:center; gap:0; min-width:900px; }
+  .gflow.mini { min-width:560px; }
   .gn { flex:none; position:relative; width:98px; box-sizing:border-box; background:#26262f;
     border:1.5px solid #45454f; border-radius:8px; padding:8px 9px 7px; cursor:pointer; text-align:left;
     color:#b9b9c6; transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease; font:inherit; }
@@ -20,12 +22,23 @@
   .gn.sel { box-shadow:0 0 0 1px var(--nc,#6a6a78), 0 0 18px color-mix(in srgb, var(--nc,#6a6a78) 26%, transparent); }
   .gn.hush { --nc:#5B8C65; border-color:#5B8C65; } .gn.hush b { color:#8FBF9A; }
   .gn.speak { --nc:#E0A94A; border-color:#C99A3A; } .gn.speak b { color:#E4BA6A; }
+  .gn.free { --nc:#5B8C65; border-color:#5B8C65; } .gn.free b { color:#8FBF9A; }
+  .gn.studio { border-style:dashed; opacity:.66; } .gn.studio b { color:#b9b9c6; }
+  .gn.studio small { color:#7a7a88; }
   .gn.mix { width:56px; text-align:center; padding:10px 6px; }
   .gn.mix b { font-size:19px; margin:0; }
   .gn.io { flex:none; width:auto; background:transparent; border:1.5px dashed #3a3a44; color:#8a8a98;
     cursor:default; font:700 10px var(--mono); letter-spacing:.14em; padding:16px 10px; }
   .gn.io:hover { transform:none; }
+  /* compound node: a stack of plates behind it, Resolve-style */
+  .gn.compound::before, .gn.compound::after { content:""; position:absolute; inset:0; z-index:-1;
+    border:1.5px solid var(--nc,#45454f); border-radius:8px; background:#20202a; }
+  .gn.compound::before { transform:translate(4px,5px); opacity:.85; }
+  .gn.compound::after { transform:translate(8px,10px); opacity:.5; }
+  .gn .cbadge { position:absolute; top:-9px; right:-6px; font:700 8px var(--mono); letter-spacing:.08em;
+    background:var(--nc,#45454f); color:#12140f; padding:2px 6px; border-radius:999px; text-transform:uppercase; }
   .gw { flex:none; width:26px; height:2px; background:#45454f; position:relative; overflow:hidden; }
+  .gw.sm { width:20px; }
   .gw i { position:absolute; top:-2px; left:-6px; width:6px; height:6px; border-radius:50%; background:var(--amber); animation:gflow 3s linear infinite; }
   @keyframes gflow { from{left:-6px;} to{left:26px;} }
   @media (prefers-reduced-motion:reduce){ .gw i { display:none; } }
@@ -38,8 +51,17 @@
   .gn-detail .dt.hush { color:#8FBF9A; } .gn-detail .dt.speak { color:#E4BA6A; }
   .ghint { font:500 11px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--text-lt); margin:2px 0 0; }
   .ghint::before { content:"▸ "; color:var(--amber); }
+  .clab { font:700 11px var(--mono); letter-spacing:.12em; text-transform:uppercase; color:#8a8a98; margin:0 0 12px; }
+  .clab b { color:#e6e6ee; }
 
-  /* plug-point cards */
+  /* the two-path (studio | free) explainer cards */
+  .paths { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+  @media (max-width:700px){ .paths { grid-template-columns:1fr; } }
+  .path { border:1px solid var(--border); border-top-width:4px; border-radius:var(--r-md); background:var(--card); padding:16px 18px; }
+  .path .pk { font:700 10.5px var(--mono); letter-spacing:.13em; text-transform:uppercase; }
+  .path h4 { font:700 17px "Space Grotesk"; margin:3px 0 6px; }
+  .path p { font-size:14px; margin:0; }
+
   .plugs { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
   @media (max-width:700px){ .plugs { grid-template-columns:1fr; } }
   .plug { border:1px solid var(--border); border-left-width:4px; border-radius:var(--r-md); background:var(--card); padding:18px 20px; }
@@ -54,34 +76,38 @@
     <span class="k" style="color:#5B8C65">powergrade · a blank scaffold</span>
     <h1 style="font-size:clamp(34px,5vw,52px);letter-spacing:-.02em;color:var(--green)">
       The grade, without the grade in it.</h1>
-    <p class="lede" style="max-width:60ch;margin-top:10px">A DaVinci Resolve PowerGrade that carries the
-      <b>structure</b> of a working grade and none of the look — nine nodes, labelled, wired, and empty.
-      Import it once and start every clip on a real tree instead of a blank Node&nbsp;01.</p>
+    <p class="lede" style="max-width:62ch;margin-top:10px">A DaVinci Resolve PowerGrade that carries the
+      <b>structure</b> of a working grade and none of the look — labelled, wired, and empty. Import it once
+      and start every clip on a real tree. And two of its stages are <b>compound nodes</b> that hold a
+      Studio-or-free choice: use a Studio feature if you have it, or combine free effects to match it.</p>
     <div class="dlbar">
       <a class="btn btn-green" href="https://github.com/amateurmenace/control-z/raw/main/grades/control-z-node-tree.zip">Download the tree (.zip) ↓</a>
       <span class="zip-note">.drx + .dpx · ~31 MB · MIT</span>
     </div>
-    <p class="meta">Free-edition safe — zero OFX / ResolveFX in the grade data. The tree below is the
-      real thing, read straight out of the .drx with Resolve's own API.</p>
+    <p class="meta">Free-edition safe — every node is empty of corrections, and there are no Studio effects
+      baked into the data (the Studio nodes are labelled placeholders). Read straight out of the .drx with
+      Resolve's own API.</p>
   </section>
 
   <section style="padding:26px 0 0">
     <div class="kicker">the tree</div>
-    <h2>Nine nodes, all empty.</h2>
-    <p>Signal runs left to right. Clean-up first, creative look last, with a foreground / background split
-      in the middle for when a shot needs its subject and its world graded apart. Tap any node to read
-      what it's there to hold.</p>
+    <h2>Nine stages, two of them doors.</h2>
+    <p>Signal runs left to right — clean-up first, creative look last, with a foreground / background split
+      in the middle. The <b>Noise Reduction</b> and <b>Look</b> stages are <b>compound nodes</b> (the
+      stacked ones): double-click them in Resolve and they open into a small Studio-or-free tree. Tap any
+      node here to read what it holds.</p>
     <div class="gtree">
       <div class="gscroll">
         <div class="gflow" id="gflow">
           <span class="gn io">IN</span>
           <span class="gw"><i></i></span>
-          <button class="gn hush" data-t="Noise Reduction" data-k="hush"
-            data-b="First in the tree — clean before anything else touches the image. This is the node Resolve's own spatial/temporal NR would occupy, except that NR is Studio-only, which is the whole reason Hush exists. Drop <b>Hush</b> here and clean at the top of the stack.">
-            <span class="gx">01 · NR</span><b>Noise&nbsp;Reduction</b><small>Free NR → Hush</small></button>
+          <button class="gn hush compound" data-t="Noise Reduction — compound" data-k="hush"
+            data-b="First in the tree, and a <b>compound node</b>: it opens into three — <b>Studio NR</b> (Resolve's built-in spatial/temporal NR, Studio-only, off by default), <b>Free NR</b> (empty — drop Hush here), and <b>Sat v Lum Curves</b> (a free chroma-noise move). Have Studio? Turn Studio NR on. Don't? The free two do the same job. See it opened up below.">
+            <span class="cbadge">▤ compound</span>
+            <span class="gx">01 · NR</span><b>Noise&nbsp;Reduction</b><small>Studio or free</small></button>
           <span class="gw"><i></i></span>
           <button class="gn" data-t="Exposure"
-            data-b="Set the base level — lift the shadows, place the highlights — before you shape contrast, so every node above it works on a sane exposure.">
+            data-b="Set the base level — lift the shadows, place the highlights — before you shape contrast, so every node above it works on a sane exposure. Empty by default.">
             <span class="gx">02</span><b>Exposure</b><small>base level</small></button>
           <span class="gw"><i></i></span>
           <button class="gn" data-t="Contrast"
@@ -111,9 +137,10 @@
             data-b="Combines the FG and BG layers back into one image — the recombine point of the split. The one node in the tree that carries a tool instead of a label, because the structure needs it.">
             <span class="gx">08</span><b>⧉</b></button>
           <span class="gw"><i></i></span>
-          <button class="gn speak" data-t="Look" data-k="speak"
-            data-b="The final creative layer, last in the tree. Film tone, subtractive colour, halation, grain — reconstruct late, once everything below is clean and balanced. This is where <b>Speak</b> goes.">
-            <span class="gx">09 · look</span><b>Look</b><small>Look → Speak</small></button>
+          <button class="gn speak compound" data-t="Look — compound" data-k="speak"
+            data-b="Last in the tree, and the other <b>compound node</b>: it opens into three nodes for the film look. Studio's one-node answer is <b>Film Look Creator</b>; the free answer is to build it from stock effects — subtractive colour, halation, grain — which is exactly where <b>Speak</b> goes. See it opened up below.">
+            <span class="cbadge">▤ compound</span>
+            <span class="gx">09 · look</span><b>Look</b><small>Studio or free</small></button>
           <span class="gw"><i></i></span>
           <span class="gn io">OUT</span>
         </div>
@@ -121,11 +148,85 @@
       <p class="ghint">click a node</p>
       <div class="gn-detail" id="gnDetail"></div>
     </div>
-    <p style="font-size:13.5px;color:var(--text-lt);max-width:64ch">Read live from the exported grade with
-      Resolve's scripting API: nine nodes, eight labelled plus the Parallel Mixer, every one carrying zero
-      corrections — the scaffold, not a look.</p>
+    <p style="font-size:13.5px;color:var(--text-lt);max-width:66ch">Read live from the exported grade with
+      Resolve's API. The seven single nodes are empty. The two stacked ones — Noise Reduction and Look —
+      each open into three, below.</p>
   </section>
 </div>
+
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker" style="color:var(--amber)">what's inside the two compound nodes</div>
+    <h2 style="color:#fff">The paywall, undone in two places.</h2>
+    <p style="color:var(--sage);max-width:66ch">This is the whole idea, in miniature. Resolve's best
+      cleanup and film-look tools are Studio-only. So the two stages that would reach for them are built as
+      compound nodes with <b>both paths inside</b>: a slot for the Studio feature if you own it, and the
+      free combination that matches it if you don't. Nothing is applied — every node is an empty, labelled
+      slot. Double-click the stage in Resolve to open it.</p>
+
+    <div class="gtree sub" style="margin-top:24px">
+      <p class="clab"><b>Inside · Noise Reduction</b> &nbsp;—&nbsp; node 01, opened</p>
+      <div class="gscroll">
+        <div class="gflow mini">
+          <span class="gn io">IN</span>
+          <span class="gw sm"><i></i></span>
+          <span class="gn studio"><span class="gx">01</span><b>Studio&nbsp;NR</b><small>Studio · off</small></span>
+          <span class="gw sm"><i></i></span>
+          <span class="gn free"><span class="gx">02</span><b>Free&nbsp;NR</b><small>← drop Hush</small></span>
+          <span class="gw sm"><i></i></span>
+          <span class="gn free"><span class="gx">03</span><b>Sat&nbsp;v&nbsp;Lum</b><small>free chroma</small></span>
+          <span class="gw sm"><i></i></span>
+          <span class="gn io">OUT</span>
+        </div>
+      </div>
+      <div class="paths">
+        <div class="path" style="border-top-color:#8a8a98">
+          <span class="pk" style="color:#8a8a98">have Studio</span>
+          <h4 style="color:var(--green)">Enable Studio NR</h4>
+          <p>Turn on the first node — Resolve's spatial + temporal noise reduction. It ships off, so the
+            grade opens clean in the free edition instead of erroring on a tool you can't run.</p>
+        </div>
+        <div class="path" style="border-top-color:#5B8C65">
+          <span class="pk" style="color:#3D5A47">free path</span>
+          <h4 style="color:var(--green)">Hush + a Sat-vs-Lum curve</h4>
+          <p>Drop <b>Hush</b> on Free NR for measured, transparent denoise, then let the Sat-vs-Lum node
+            pull the last of the colour noise out of the shadows — both free-edition tools, same result.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="gtree sub" style="margin-top:18px">
+      <p class="clab"><b>Inside · Look</b> &nbsp;—&nbsp; node 09, opened</p>
+      <div class="gscroll">
+        <div class="gflow mini">
+          <span class="gn io">IN</span>
+          <span class="gw sm"><i></i></span>
+          <span class="gn"><span class="gx">01</span><b>Look</b><small>tone</small></span>
+          <span class="gw sm"><i></i></span>
+          <span class="gn"><span class="gx">02</span><b>Look</b><small>colour</small></span>
+          <span class="gw sm"><i></i></span>
+          <span class="gn speak"><span class="gx">03</span><b>Look</b><small>← grain / Speak</small></span>
+          <span class="gw sm"><i></i></span>
+          <span class="gn io">OUT</span>
+        </div>
+      </div>
+      <div class="paths">
+        <div class="path" style="border-top-color:#8a8a98">
+          <span class="pk" style="color:#8a8a98">have Studio</span>
+          <h4 style="color:var(--green)">Film Look Creator</h4>
+          <p>Resolve's one-node film answer — film response, halation and grain together. Studio-only, so
+            it's a slot here, not a baked-in effect.</p>
+        </div>
+        <div class="path" style="border-top-color:#C99A3A">
+          <span class="pk" style="color:#B07A28">free path</span>
+          <h4 style="color:var(--green)">Free effects — or Speak</h4>
+          <p>Build the look from stock nodes — subtractive colour, a glow for halation, grain — or drop
+            <b>Speak</b> in and get film tone, H&amp;D curves, halation and grain in one free plugin.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section class="alt">
   <div class="wrap">
@@ -140,10 +241,11 @@
       <li><b>Right-click a PowerGrade album → Import.</b> Pick the <code>.drx</code>. The still lands in
         the album.</li>
       <li><b>Apply it to a clip.</b> Drag the still onto a clip, or right-click it → <b>Apply Grade</b>.
-        The whole node tree appears on the clip, wired and empty, ready to build on.</li>
+        The whole node tree appears on the clip, ready to build on. Double-click Noise Reduction or Look
+        to step inside the compound.</li>
     </ol>
-    <p style="margin-top:4px">Works in the <b>free</b> edition — there are no Studio-only effects in the
-      grade, by design (verified: zero OFX / ResolveFX references in the data).</p>
+    <p style="margin-top:4px">Imports and applies in the <b>free</b> edition — the Studio slots are empty
+      and off, so nothing errors on a tool you can't run.</p>
   </div>
 </section>
 
@@ -156,41 +258,40 @@
       shipping that skeleton, empty, saves you rebuilding it on every project and starting each clip
       staring at a single blank node.</p>
     <div class="tips">
+      <div class="tipcard"><span class="tn">pay-optional, by node</span>
+        <b>Studio or free, your call.</b>
+        <p>The two stages that would reach for Studio-only tools — noise reduction and the film look — hold
+          both options inside. Own Studio? Flip on Studio NR or Film Look Creator. Don't? The free path is
+          right there, labelled, and it lands in the same place. That's the whole project, in two nodes.</p></div>
       <div class="tipcard"><span class="tn">clean early, reconstruct late</span>
         <b>The two ends are the suite.</b>
-        <p>Noise Reduction sits first, Look sits last — and those are exactly where Hush and Speak plug
-          in. Take the noise out at the top of the tree; put the optical character back at the bottom.
-          The scaffold is shaped around that order on purpose.</p></div>
+        <p>Noise Reduction sits first, Look sits last — and those are exactly where Hush and Speak plug in.
+          Take the noise out at the top of the tree; put the optical character back at the bottom. The
+          scaffold is shaped around that order on purpose.</p></div>
       <div class="tipcard"><span class="tn">the split, pre-wired</span>
         <b>Subject and world, apart.</b>
         <p>The FG / BG parallel branch is the move most grades reach for eventually — key the subject,
           grade it separately from its background, recombine. It's here from the start so you add a
           window, not a whole node structure, when the shot needs it.</p></div>
-      <div class="tipcard"><span class="tn">honest by construction</span>
-        <b>Nothing to mistranslate.</b>
-        <p>The tree carries no corrections, so there's nothing that can look wrong in your colour space
-          when you import it — but the look <i>you</i> build on it will be space-dependent, like every
-          grade. And with no Studio effects inside, it opens in the free edition the same as ours.</p></div>
     </div>
   </section>
 
   <section style="padding:20px 0 8px">
     <div class="kicker">where the suite plugs in</div>
-    <h2>Two nodes are doors.</h2>
+    <h2>Two compounds, two doors.</h2>
     <div class="plugs">
       <div class="plug" style="border-left-color:#5B8C65">
-        <span class="pk" style="color:#5B8C65">node 01 · Free NR</span>
+        <span class="pk" style="color:#5B8C65">inside Noise Reduction · Free NR</span>
         <h4 style="color:#3D5A47">→ Hush</h4>
-        <p>The node Resolve's own noise reduction would occupy — except its NR is Studio-only, which is
-          the entire reason Hush exists. Drop Hush on it and clean at the top of the tree, measured and
-          showing its work.</p>
+        <p>The free path's denoise node. Resolve's own NR is Studio-only — which is the entire reason Hush
+          exists. Drop it here and clean at the top of the tree, measured and showing its work.</p>
         <a class="btn btn-green" href="index.html#t-hush">Get Hush ↓</a>
       </div>
       <div class="plug" style="border-left-color:#C99A3A">
-        <span class="pk" style="color:#B07A28">node 09 · Look</span>
+        <span class="pk" style="color:#B07A28">inside Look · the free path</span>
         <h4 style="color:#9A6F1D">→ Speak</h4>
-        <p>Film tone, subtractive colour, halation and grain, at the end of the tree. Where the image gets
-          its voice back after everything else has cleaned and balanced it.</p>
+        <p>The free answer to Film Look Creator: film tone, subtractive colour, halation and grain, at the
+          end of the tree. Where the image gets its voice back after everything else has cleaned it.</p>
         <a class="btn btn-amber" href="https://github.com/amateurmenace/Speak">Get Speak ↓</a>
       </div>
     </div>
@@ -219,8 +320,8 @@
   <div class="wrap" style="text-align:center">
     <div class="kicker" style="color:var(--amber)">start on a real tree</div>
     <h2 style="color:#fff">The scaffold. One import.</h2>
-    <p style="color:var(--sage);max-width:52ch;margin:0 auto 22px">Free, MIT, free-edition safe. Build your
-      look on it — and drop Hush and Speak on the two nodes shaped for them.</p>
+    <p style="color:var(--sage);max-width:52ch;margin:0 auto 22px">Free, MIT, free-edition safe — with a
+      Studio-or-free choice built into the two stages that need it. Drop Hush and Speak on the free paths.</p>
     <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center">
       <a class="btn btn-amber" href="https://github.com/amateurmenace/control-z/raw/main/grades/control-z-node-tree.zip">Download the tree (.zip) ↓</a>
       <a class="btn btn-lt" href="index.html#downloads">All the downloads</a>
@@ -239,9 +340,7 @@
     var k = n.getAttribute('data-k') || '';
     detail.innerHTML = '<div class="dt ' + k + '">' + n.getAttribute('data-t') + '</div>' + n.getAttribute('data-b');
   }
-  nodes.forEach(function (n) {
-    n.addEventListener('click', function () { select(n); });
-  });
+  nodes.forEach(function (n) { n.addEventListener('click', function () { select(n); }); });
   select(flow.querySelector('.gn.hush') || nodes[0]);
 })();
 {% endblock %}
