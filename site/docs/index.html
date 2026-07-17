@@ -396,7 +396,9 @@
   /* whole card opens the joint Hush + Speak page (stretched link); the small
      release link on each side escapes above it to its own repo */
   .dn { text-decoration:none; }
-  .dn-main { position:static; }
+  /* transform would make the pill the containing block for the overlay —
+     the stretch only works with it off */
+  .dn .dn-main { position:static; transform:none; }
   .dn-main::after { content:""; position:absolute; inset:0; z-index:3; }
   .dnrel { position:relative; z-index:4; align-self:flex-start; margin-top:9px;
     font:600 11px var(--mono); letter-spacing:.02em; text-decoration:none; }
