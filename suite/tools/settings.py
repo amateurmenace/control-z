@@ -101,6 +101,8 @@ def register_settings(app, jobs, frames):
     @app.post("/api/settings/proxy")
     def api_proxy_set(body: dict = Body(...)):
         from czcore import proxy
+        if "relay" in body and "username" not in body:
+            return proxy.set_relay(bool(body["relay"]))
         st = proxy.get_config()
         if st["source"] == "env" and body.get("username"):
             return JSONResponse(

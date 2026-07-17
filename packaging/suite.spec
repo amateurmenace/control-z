@@ -47,8 +47,13 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     # The Cocoa backend is reached by a static function-level import and is
-    # already in the TOC; naming it is belt-and-braces (specs/09 §5).
-    hiddenimports=["webview.platforms.cocoa"],
+    # already in the TOC; naming it is belt-and-braces (specs/09 §5). The
+    # Make-wave packages and Pillow arrive through suite.server's own
+    # imports; named here for the same reason.
+    hiddenimports=["webview.platforms.cocoa",
+                   "highlighter", "grabber", "indexer", "slate",
+                   "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont",
+                   "PIL.ImageFilter"],
     excludes=[
         # Stencil's torch/SAM2 runtime is the v1.1 on-demand component:
         # torch alone triples the bundle (364 MB -> 1.1 GB, measured). The
@@ -80,6 +85,7 @@ app = BUNDLE(
     coll,
     name="control-z Suite.app",
     bundle_identifier="org.control-z.suite",
+    icon=str(REPO / "packaging" / "icon.icns"),   # make_icon.py, committed
     version=VERSION,
     info_plist={
         "CFBundleDisplayName": "control-z Suite",

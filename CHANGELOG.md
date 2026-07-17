@@ -2,6 +2,29 @@
 
 ## unreleased
 
+### 1.1.0 prep: the icon, the DMG's face, and zero-setup captions — 2026-07-17
+- **The suite has an icon**: a cream caret over the amber z — *control z* as
+  a rebus. `packaging/make_icon.py` renders it (ink squircle, 2× supersample,
+  the suite's own font discovery) and compiles `icon.icns`; the spec wires it
+  onto the .app, and the DMG volume wears it too (the custom-icon Finder bit
+  does NOT survive `hdiutil -srcfolder` — measured — so the script builds RW,
+  sets the bit on the mounted root, converts to UDZO).
+- **Version 1.1.0** in both truths; the spec names the Make-wave packages +
+  Pillow as belt-and-braces hiddenimports.
+- **Community caption service**: when YouTube gates a machine and no proxy is
+  set, Highlighter's ingest falls back to the community-highlighter web app's
+  own public transcript engine (BIG's deployment, its residential proxy
+  behind it). Zero setup for download users, only the public video URL is
+  sent, and one Settings switch turns it off. Credentials never ship — the
+  relay shares the *benefit* of the Webshare account, never the account.
+  Verified end-to-end from a caption-gated IP: 60 segments arrived through
+  the service after both local routes failed honestly. Per-video failures
+  from the service (HTTP-error JSON) are read and relayed as sentences.
+- v1.0.0's release page now explains `realesrgan-x4.onnx` (Rise's model,
+  self-hosted at its pinned URL — users never download it by hand).
+- `packaging/RELEASE-NOTES-1.1.0.md` is written for the signing machine;
+  building/signing/notarizing happens there (this keychain has no identity).
+
 ### the Webshare workaround comes to the desktop — 2026-07-17
 - **Why:** YouTube now gates caption/timedtext delivery by IP reputation.
   Investigated live: the community-highlighter **web app's Webshare

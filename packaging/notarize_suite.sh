@@ -82,8 +82,22 @@ STAGE="dist/dmgroot"
 rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-rm -f "$DMG"
-hdiutil create -volname "control-z Suite" -srcfolder "$STAGE" -ov -format UDZO -quiet "$DMG"
+# the volume wears the logo. The custom-icon bit does NOT survive a direct
+# -srcfolder create (measured) — build RW, set the bit on the mounted root,
+# convert to the compressed read-only image.
+cp icon.icns "$STAGE/.VolumeIcon.icns"
+rm -f "$DMG" dist/_rw.dmg
+hdiutil create -volname "control-z Suite" -srcfolder "$STAGE" -ov -format UDRW -quiet dist/_rw.dmg
+hdiutil attach -quiet dist/_rw.dmg
+if command -v SetFile >/dev/null 2>&1 || xcrun -f SetFile >/dev/null 2>&1; then
+    (SetFile -a C "/Volumes/control-z Suite" 2>/dev/null || \
+     xcrun SetFile -a C "/Volumes/control-z Suite")
+else
+    echo "  note: SetFile unavailable — volume icon bit not set (cosmetic)"
+fi
+hdiutil detach -quiet "/Volumes/control-z Suite"
+hdiutil convert -quiet dist/_rw.dmg -format UDZO -o "$DMG"
+rm -f dist/_rw.dmg
 rm -rf "$STAGE"
 
 DEV_ID=$(security find-identity -v -p codesigning 2>/dev/null \

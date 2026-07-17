@@ -193,3 +193,19 @@ android_vr=no tracks, web=PO-token wall, tv=DRM experiment, timedtext=empty
 The proxy is the user's own account, user-configured, used only for asked-
 for fetches — stated in the UI. Testing without credentials proves the
 chain up to the gate; the web app proves the pool itself, daily.
+
+## Wave 4 (2026-07-17): the icon, and captions with zero setup
+
+- Icon = caret over amber z (packaging/make_icon.py → icon.icns, committed).
+  App via spec `icon=`; DMG volume via the RW-mount dance (the custom-icon
+  bit does not survive a -srcfolder create — measured in this session).
+- Caption fallback chain grew a third step: yt-dlp → watch page (+ user's
+  Webshare) → **community caption service** = the web app's public
+  /api/transcript on Render (its Webshare behind it). Default on, Settings
+  switch off, only the public video URL travels. Credentials must NEVER
+  ship in the app — the relay is how download users share the account's
+  benefit without the account. relay pref lives in proxy.json and survives
+  credential set/clear.
+- Version 1.1.0. Release building happens on the machine that holds the
+  Developer ID (exported .p12 + notarytool store-credentials); this repo
+  carries RELEASE-NOTES-1.1.0.md ready for it.

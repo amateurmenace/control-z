@@ -71,6 +71,19 @@ class TestProxyConfig(unittest.TestCase):
             c = proxy.get_config()
             self.assertEqual((c["username"], c["source"]), ("envuser", "env"))
 
+    def test_relay_defaults_on_and_survives_credential_changes(self):
+        self.assertTrue(proxy.relay_enabled())
+        proxy.set_relay(False)
+        proxy.set_config("acct", "pw")          # creds arrive
+        self.assertFalse(proxy.relay_enabled())  # opt-out survives
+        proxy.set_config("", "")                 # creds cleared
+        self.assertFalse(proxy.relay_enabled())  # still opted out
+        proxy.set_relay(True)
+        self.assertTrue(proxy.relay_enabled())
+
+    def test_status_carries_relay(self):
+        self.assertIn("relay", proxy.status())
+
 
 WATCH_HTML = (
     'noise "captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext'

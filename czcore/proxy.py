@@ -55,22 +55,62 @@ def get_config() -> dict:
             "source": None}
 
 
-def set_config(username: str, password: str, host: str = "") -> dict:
-    """Write (or clear, with empty strings) the settings-file credentials."""
-    username, password = username.strip(), password.strip()
-    if not (username and password):
-        try:
-            _file().unlink()
-        except OSError:
-            pass
-        return status()
-    _file().write_text(json.dumps(
-        {"username": username, "password": password,
-         "host": (host or "").strip() or DEFAULT_HOST}))
+def _read_file() -> dict:
+    try:
+        return json.loads(_file().read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_file(d: dict):
+    _file().write_text(json.dumps(d))
     try:
         os.chmod(_file(), 0o600)  # credentials: owner-only
     except OSError:
         pass
+
+
+def set_config(username: str, password: str, host: str = "") -> dict:
+    """Write (or clear, with empty strings) the settings-file credentials.
+    The relay preference riding in the same file is preserved either way."""
+    username, password = username.strip(), password.strip()
+    d = _read_file()
+    if not (username and password):
+        d.pop("username", None)
+        d.pop("password", None)
+        d.pop("host", None)
+    else:
+        d.update({"username": username, "password": password,
+                  "host": (host or "").strip() or DEFAULT_HOST})
+    if d:
+        _write_file(d)
+    else:
+        try:
+            _file().unlink()
+        except OSError:
+            pass
+    return status()
+
+
+def relay_enabled() -> bool:
+    """The community caption service (the web app's public transcript
+    engine): on unless the user turned it off."""
+    return bool(_read_file().get("relay", True))
+
+
+def set_relay(enabled: bool) -> dict:
+    d = _read_file()
+    if enabled:
+        d.pop("relay", None)   # default-true needs no stored key
+    else:
+        d["relay"] = False
+    if d:
+        _write_file(d)
+    else:
+        try:
+            _file().unlink()
+        except OSError:
+            pass
     return status()
 
 
@@ -100,4 +140,4 @@ def status() -> dict:
         u = c["username"]
         masked = (u[:3] + "…" + u[-2:]) if len(u) > 6 else (u[:2] + "…")
     return {"enabled": enabled, "source": c["source"], "host": c["host"],
-            "username_masked": masked}
+            "username_masked": masked, "relay": relay_enabled()}

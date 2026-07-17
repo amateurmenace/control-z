@@ -289,6 +289,18 @@ const SettingsPage = (() => {
       toast("proxy removed — fetches go direct again");
       refreshProxy();
     };
+    box.insertAdjacentHTML("beforeend", `
+      <div class="checkrow" style="margin-top:10px"><input type="checkbox" id="se-pxrelay" ${p.relay ? "checked" : ""}>
+        <span>community caption service
+          <div class="hint">when YouTube gates this machine and no proxy is set, captions may be
+          fetched through the community-highlighter web app's own public transcript engine
+          (run by BIG, residential proxy behind it). Only the public video URL is sent —
+          no account, no tracking. Turn off for full independence.</div></span></div>`);
+    $("#se-pxrelay", box).onchange = async e => {
+      await api("/api/settings/proxy", { relay: e.target.checked });
+      toast(e.target.checked ? "community caption service on"
+                             : "community caption service off — this machine fetches alone");
+    };
   }
 
   async function refresh() {

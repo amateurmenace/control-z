@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.error
 import urllib.request
 from typing import List, Optional
 
@@ -117,3 +118,56 @@ def fetch_vtt(url_or_id: str, lang: str = "en",
              "Configure your Webshare proxy in Settings → fetch network and "
              "retry."))
     return {"vtt": body, "track": track}
+
+
+# -- the community caption service ------------------------------------------
+
+RELAY_URL = "https://community-highlighter.onrender.com/api/transcript"
+
+
+def fetch_vtt_relay(url: str, relay: str = RELAY_URL,
+                    timeout: float = 75.0) -> dict:
+    """Captions via the community-highlighter web app's own public transcript
+    engine — BIG's deployment, which fetches through its residential proxy.
+
+    This is the zero-setup path for download users: no credentials ship in
+    this app and none are needed; the request carries only the public video
+    URL. Users who prefer full independence turn it off in Settings, or set
+    their own Webshare account. The long timeout is honest: free-tier Render
+    cold-starts in ~30 s.
+    """
+    vid = video_id(url)
+    if not vid:
+        raise RuntimeError("that doesn't look like a YouTube URL or id")
+    body = json.dumps({"url": f"https://www.youtube.com/watch?v={vid}"}).encode()
+    req = urllib.request.Request(
+        relay, data=body, method="POST",
+        headers={"User-Agent": UA, "Content-Type": "application/json"})
+    try:
+        resp = urllib.request.urlopen(req, timeout=timeout) \
+            .read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        # the service answers per-video failures as HTTP errors with a JSON
+        # sentence — read it; "didn't answer" would blame the wrong thing
+        try:
+            detail = json.loads(e.read().decode("utf-8", "replace"))
+            detail = detail.get("error") or detail.get("detail") or f"HTTP {e.code}"
+        except Exception:
+            detail = f"HTTP {e.code}"
+        raise RuntimeError("the community caption service couldn't get this "
+                           f"one — {detail}") from e
+    except Exception as e:
+        raise RuntimeError(
+            f"the community caption service didn't answer ({e}) — it runs on "
+            "a free tier and sleeps; a retry usually lands") from e
+    text = resp.strip()
+    if text.startswith("WEBVTT"):
+        return {"vtt": resp, "track": {"lang": "en", "kind": "relay"}}
+    # the service answers errors as JSON sentences — pass the sentence on
+    try:
+        err = json.loads(text)
+        detail = err.get("error") or err.get("detail") or text[:200]
+    except ValueError:
+        detail = text[:200] or "an empty answer"
+    raise RuntimeError(f"the community caption service couldn't get this "
+                       f"one — {detail}")

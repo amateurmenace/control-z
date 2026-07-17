@@ -172,6 +172,18 @@ def register_highlighter(app, jobs, frames):
                     note = None
                 except RuntimeError as e:
                     note = str(e)
+            if not _captions_for(d) and proxy.relay_enabled():
+                # last resort, zero setup: the web app's own public transcript
+                # engine (BIG's deployment, its residential proxy behind it).
+                # Off by one switch in Settings for the fully-independent.
+                job.message = "captions via the community service…"
+                try:
+                    got = ctext.fetch_vtt_relay(url)
+                    (d / "meeting.en.vtt").write_text(got["vtt"])
+                    how = "captions via the community service"
+                    note = None
+                except RuntimeError as e:
+                    note = str(e)
             t, origin = _load_transcript(str(d))
             job.message = (f"{len(t['segments'])} segments — {how}"
                            if t else "no captions — transcribe after download")
