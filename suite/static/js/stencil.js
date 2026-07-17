@@ -421,6 +421,40 @@ const StencilPage = (() => {
       if (!st.available) {
         warn.style.display = "";
         $("#st-runtimehint", el).textContent = st.hint;
+        // a side note is not enough for a tool that cannot run: say it in
+        // the middle of the page, with the button that fixes it
+        const frozen = /can't download it yet/.test(st.hint || "");
+        el.insertAdjacentHTML("beforeend", `
+          <div id="st-gate" style="position:absolute;inset:0;z-index:40;display:flex;
+               align-items:center;justify-content:center;background:rgba(35,38,29,.45);backdrop-filter:blur(3px)">
+            <div style="background:var(--ink);border:1.5px solid var(--cream);border-radius:14px;
+                 box-shadow:7px 7px 0 rgba(35,38,29,.28);max-width:480px;padding:22px 24px">
+              <h2 style="margin:0 0 8px">Stencil needs its brain first.</h2>
+              <p style="font-size:13.5px;color:var(--cream-dim);line-height:1.6">Click-to-matte runs on
+                <b>PyTorch + Meta's SAM 2</b> — a one-time ~1&nbsp;GB install. Without it, clicks can't
+                cut a mask and this page can't do its job. Everything else in the suite works without it.</p>
+              ${frozen ? `<p style="font-size:12.5px;color:var(--cream-dim);margin-top:8px">${esc(st.hint)}</p>`
+                : `<button class="btn cta bright" id="st-install" style="width:100%;margin-top:12px">
+                     ⬇ Install the runtime (torch + SAM 2, ~1 GB)</button>
+                   <div class="progmsg" id="st-installmsg" style="margin-top:8px"></div>`}
+            </div>
+          </div>`);
+        const btn = $("#st-install", el);
+        if (btn) btn.onclick = async () => {
+          btn.disabled = true;
+          try {
+            const job = await api("/api/stencil/install-runtime", {});
+            watchJob(job.id, j => { $("#st-installmsg", el).textContent = j.message || j.status; });
+            const done = await jobDone(job.id);
+            if (done.status === "done") {
+              $("#st-installmsg", el).textContent = "installed — reloading…";
+              setTimeout(() => location.reload(), 900);
+            } else {
+              btn.disabled = false;
+              $("#st-installmsg", el).textContent = done.error || "stopped";
+            }
+          } catch (e) { btn.disabled = false; $("#st-installmsg", el).textContent = e.message; }
+        };
       } else if (st.hint) {
         warn.style.display = "";
         $("#st-runtimehint", el).textContent = st.hint;

@@ -102,6 +102,40 @@ def register_stencil(app, jobs, frames):
     def api_status():
         return runtime_status()
 
+    @app.post("/api/stencil/install-runtime")
+    def api_install_runtime():
+        """The gate's button: pip-install torch + Meta's SAM 2 into THIS
+        venv as a queue job, pip's own lines as progress. Frozen apps can't
+        pip — they get the honest sentence instead of a dead button."""
+        import sys
+        if getattr(sys, "frozen", False):
+            return JSONResponse({"error": runtime_status()["hint"]},
+                                status_code=501)
+
+        def work(job):
+            import subprocess
+            job.message = "installing torch + SAM 2 — ~1 GB, minutes not seconds…"
+            proc = subprocess.Popen(
+                [sys.executable, "-m", "pip", "install", "torch",
+                 "sam2 @ git+https://github.com/facebookresearch/sam2.git"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1)
+            for line in proc.stdout:
+                s = line.strip()
+                if s:
+                    job.message = s[:110]
+                job.check_cancel()
+            if proc.wait() != 0:
+                raise RuntimeError("pip couldn't finish — the Queue holds "
+                                   "its last line; network and disk space "
+                                   "are the usual suspects")
+            job.message = "installed — reload the app and Stencil is live"
+            return {"ok": True}
+
+        return jobs.start("install", work, tool="stencil",
+                          label="install click-to-matte runtime "
+                                "(torch + SAM 2)").to_dict()
+
     @app.post("/api/stencil/click-preview")
     def api_click_preview(body: dict = Body(...)):
         """The instant answer: run SAM 2.1's image predictor on the ONE
