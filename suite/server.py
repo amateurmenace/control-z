@@ -210,22 +210,30 @@ def create_suite_app():
 
     from .tools.clear import register_clear
     from .tools.depth import register_depth
+    from .tools.grabber import register_grabber
+    from .tools.highlighter import register_highlighter
+    from .tools.indexer import register_indexer
     from .tools.modelstore import register_modelstore
     from .tools.ofx import register_ofx
     from .tools.pivot import register_pivot
     from .tools.rise import register_rise
     from .tools.scribe import register_scribe
     from .tools.settings import register_settings
+    from .tools.slate import register_slate
     from .tools.stencil import register_stencil
 
     register_clear(app, jobs, frames)
     register_depth(app, jobs, frames)
+    register_grabber(app, jobs, frames)
+    register_highlighter(app, jobs, frames)
+    register_indexer(app, jobs, frames)
     register_modelstore(app, jobs, frames)
     register_ofx(app, jobs, frames)
     register_pivot(app, jobs, frames)
     register_rise(app, jobs, frames)
     register_scribe(app, jobs, frames)
     register_settings(app, jobs, frames)
+    register_slate(app, jobs, frames)
     register_stencil(app, jobs, frames)
 
     # -- static UI (registered last so /api wins) ------------------------------------------

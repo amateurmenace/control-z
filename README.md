@@ -64,14 +64,18 @@ runs several times larger.
 
 | Package | Tool | Status |
 |---|---|---|
-| `suite/` | **the Suite** — one desktop app around the tools (viewer, queue, export panel) | working: shell + all six tools |
-| `czcore/` | shared core (media IO, encode presets, shots, exports, app shell + job queue, model store, Hush-core denoise) | working |
+| `suite/` | **the Suite** — one desktop app around the tools (viewer, queue, export panel) | working: shell + all ten tools |
+| `czcore/` | shared core (media IO, encode presets, shots, exports, app shell + job queue, model store, yt-dlp nightly manager, Hush-core denoise) | working |
 | `pivot/` | **Pivot** — smart reframe (9:16/1:1 from your masters) | CLI + Suite UI working |
 | `stencil/` | **Stencil** — AI roto mattes (SAM 2.1) | CLI + Suite UI working (torch is an optional heavy) |
 | `scribe/` | **Scribe** — transcription, captions, text-based cuts | CLI + Suite UI working (incl. speaker labels) |
 | `clear/` | **Clear** — dialogue rescue (DF3 + DSP) | CLI + Suite UI working |
 | `rise/` | **Rise** — super-resolution (engine also lives inside Pivot) | engine + CLI + Suite UI working |
 | `depth/` | **Depth** — depth mattes + Fusion template pack | CLI + Suite UI working |
+| `indexer/` | **Index** — footage librarian: catalog, plain-word search, FCPXML selects | CLI + Suite UI working |
+| `slate/` | **Slate** — station graphics kit: lower-third maker (ProRes 4444/PNG/GIF), bars+tone, countdown, program slate | CLI + Suite UI working |
+| `highlighter/` | **Community Highlighter** — meeting video → transcript → scored moments → reel/EDL (community-highlighter reborn) | CLI + Suite UI working |
+| `grabber/` | **BIG Video Grabber** — CivicClerk search, Zoom/zoomgov + yt-dlp fetch, broadcast conform (BIG Video Grabber reborn) | CLI + Suite UI working |
 | `site/` | control-z.org (bake: `python3 site/build.py`) | built, undeployed |
 
 Working = verified end-to-end on real footage this side of packaging. Not yet:
@@ -84,16 +88,30 @@ the Suite app is [`08-suite-app.md`](specs/08-suite-app.md).
 
 ## What each tool is for
 
-Home opens on two doors, split by which way the footage is travelling.
-**Prep** is what you do to footage on its way *into* your editor — Clear (hum,
-clicks and room out of the dialogue), Stencil (click an object, bring its
-matte in with the clip), Depth (a depth map to fog, grade or rack focus
-against). **Finish** is the cut on its way back *out* — Pivot (reframed to
-9:16 or 1:1), Scribe (captions and subtitles), Rise (pushed up to delivery
-resolution). Tools don't police the door you came through: Scribe will paper-
-edit raw interviews into a selects EDL, and Rise will take a tape master, both
-long before picture lock. The Queue runs one job at a time across all six and
-survives quitting; Install OpenFX puts Hush and Speak into Resolve.
+Home opens on three doors, split by what the work is doing. **Prep** is
+footage on its way *into* your editor — Grabber (the town meeting, fetched
+off the civic portal and conformed for air), Clear (hum, clicks and room out
+of the dialogue), Stencil (click an object, bring its matte in with the
+clip), Depth (a depth map to fog, grade or rack focus against). **Make** is
+things made new, from footage or from scratch — Community Highlighter (the
+meeting as text, scored moments with reasons, cut to a reel or selects EDL),
+Index (the archive searched in plain words, out as an FCPXML stringout),
+Slate (lower thirds, slates, bars and countdowns, broadcast-ready). **Finish**
+is the cut on its way back *out* — Pivot (reframed to 9:16 or 1:1), Scribe
+(captions and subtitles), Rise (pushed up to delivery resolution). Tools
+don't police the door you came through: Scribe will paper-edit raw interviews
+into a selects EDL, and Rise will take a tape master, both long before
+picture lock. The Queue runs one job at a time across all ten and survives
+quitting; Install OpenFX puts Hush and Speak into Resolve.
+
+The two **community** tools (Highlighter, Grabber) grew up as separate apps
+at Brookline Interactive Group and keep their own corner of the rail — square
+glyphs, their own colors — rebuilt on the suite's local engine: no cloud, no
+API keys. Both check for the yt-dlp **nightly** on every page open (sites
+drift weekly; a pinned fetcher rots) and say what they found. Grabber speaks
+CivicClerk portals for any town, and resolves Zoom *and zoomgov.com* share
+links with four plain HTTP requests — the flow the old app drove a headless
+Chrome through.
 
 Every tool keeps its measurement surface on by default — that's the covenant,
 not a feature: Pivot draws the camera path it solved, Rise shows where the
@@ -114,8 +132,9 @@ python3 -m unittest discover -s tests -t .   # core algorithm tests, no deps nee
 
 Each tool also has a CLI — every UI control mirrors a flag, so stations can
 script what the app does by hand. `pip install -e .` is what puts `pivot-cli`,
-`rise-cli`, `clear-cli`, `scribe-cli`, `depth-cli`, `stencil-cli` and `suite`
-on your PATH; without it they don't exist, and every one of them also runs as
+`rise-cli`, `clear-cli`, `scribe-cli`, `depth-cli`, `stencil-cli`,
+`highlighter-cli`, `grabber-cli`, `index-cli`, `slate-cli` and `suite` on
+your PATH; without it they don't exist, and every one of them also runs as
 `.venv/bin/python -m pivot.cli` (and so on) straight from a checkout.
 
 ### Known gaps

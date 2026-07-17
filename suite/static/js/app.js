@@ -22,9 +22,19 @@
       stroke="var(--cream-dim)" stroke-width="1.6" fill="none"/></svg>`;
   railTools.before(railItem("home", "Home", homeGlyph, null));
 
-  TOOLS.forEach(t => {
+  TOOLS.filter(t => t.group !== "community").forEach(t => {
     railTools.appendChild(railItem(t.id, t.name, glyphSVG(t.acc, t.ready), t.acc,
       t.ready ? "" : t.when));
+  });
+
+  /* the community pair: their own header, square glyphs, a tinted corner —
+     the visual line between "the workbench" and "the apps BIG brought" */
+  const railCommunity = $("#rail-community");
+  TOOLS.filter(t => t.group === "community").forEach(t => {
+    const item = railItem(t.id, t.name, glyphSVG(t.acc, t.ready, true), t.acc, "");
+    item.classList.add("community");
+    item.title = t.long || t.name;
+    railCommunity.appendChild(item);
   });
 
   const g = (d) => `<svg viewBox="0 0 20 20" fill="none"><path d="${d}"
@@ -37,6 +47,8 @@
     g("M10 3.5 16 7v6l-6 3.5L4 13V7zM10 10l6-3M10 10 4 7m6 3v6.5"), null));
   railSuite.appendChild(railItem("settings", "Settings",
     g("M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM10 3v2m0 10v2m7-7h-2M5 10H3m11.9-4.9-1.4 1.4M6.5 13.5l-1.4 1.4m9.8 0-1.4-1.4M6.5 6.5 5.1 5.1"), null));
+  railSuite.appendChild(railItem("about", "About",
+    g("M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM10 9v4.5M10 6.4v.2"), null));
 
   /* queue badge: count of active jobs on the rail */
   setInterval(() => {

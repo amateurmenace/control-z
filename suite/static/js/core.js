@@ -12,7 +12,10 @@ const CZ = {
   current: null,
 };
 
-/* ---------- tools registry (accents + glyphs + one-liners) ---------- */
+/* ---------- tools registry (accents + glyphs + one-liners) ----------
+   group "cz" = the resolve workbench; group "community" = the two apps that
+   grew up at BIG and moved in (Highlighter, Grabber) — same covenant, their
+   own corner of the rail, square glyphs instead of diamonds. */
 const TOOLS = [
   { id: "pivot",   name: "Pivot",   acc: "var(--pivot)",   ready: true,
     verb: "follows the subject", one: "9:16 / 1:1 from your 16:9 masters" },
@@ -26,16 +29,31 @@ const TOOLS = [
     verb: "restores the detail", one: "SD→HD/4K for archives and punch-ins" },
   { id: "depth",   name: "Depth",   acc: "var(--depth)",   ready: true,
     verb: "maps the scene", one: "depth mattes + fog/rack-focus templates" },
+  { id: "index",   name: "Index",   acc: "var(--index)",   ready: true,
+    verb: "knows where everything is", one: "your footage, searchable in plain words" },
+  { id: "slate",   name: "Slate",   acc: "var(--slate)",   ready: true,
+    verb: "makes it official", one: "lower thirds, slates, bars, countdowns" },
+  { id: "highlighter", name: "Highlighter", acc: "var(--highlighter)",
+    ready: true, group: "community", long: "Community Highlighter",
+    verb: "finds the moments", one: "meeting video → highlight reel, in text" },
+  { id: "grabber", name: "Grabber", acc: "var(--grabber)",
+    ready: true, group: "community", long: "BIG Video Grabber",
+    verb: "brings the meeting home", one: "find, fetch, conform civic recordings" },
 ];
 const toolById = id => TOOLS.find(t => t.id === id);
 
-/* simple diamond glyph per tool, wired like the site's node motif */
-function glyphSVG(acc, ready) {
+/* diamond glyph for the workbench (the site's node motif); the community
+   pair reads square — same wire, different shape, deliberately */
+function glyphSVG(acc, ready, square) {
+  const common = `stroke="${acc}" stroke-width="1.6" fill="${ready ? acc : "none"}"
+      fill-opacity="${ready ? .28 : 0}"`;
+  if (square) {
+    return `<svg viewBox="0 0 20 20" fill="none">
+      <rect x="3.6" y="3.6" width="12.8" height="12.8" rx="2.6" ${common}/></svg>`;
+  }
   return `<svg viewBox="0 0 20 20" fill="none">
     <rect x="10" y="2.8" width="10.2" height="10.2" rx="2.4"
-      transform="rotate(45 10 2.8)"
-      stroke="${acc}" stroke-width="1.6" fill="${ready ? acc : "none"}"
-      fill-opacity="${ready ? .28 : 0}"/></svg>`;
+      transform="rotate(45 10 2.8)" ${common}/></svg>`;
 }
 
 /* ---------- api ---------- */

@@ -9,12 +9,13 @@ dependencies = []
 [project.optional-dependencies]
 pivot = ["numpy", "av", "opencv-python"]
 ui = ["fastapi", "uvicorn", "pywebview"]
-# everything the Suite needs to run all six tools (mirrors requirements.txt)
+# everything the Suite needs to run all ten tools (mirrors requirements.txt)
 suite = ["numpy", "av", "opencv-python",
          "fastapi", "uvicorn[standard]", "pywebview",
          "onnxruntime",
          "scipy", "soundfile", "pyloudnorm",
-         "faster-whisper", "sherpa-onnx"]
+         "faster-whisper", "sherpa-onnx",
+         "pillow"]
 # Stencil's click-to-matte runtime: optional by design, ~700 MB on Apple
 # silicon (more where torch's wheels bundle CUDA). SAM 2 comes from Meta's repo
 # because the `sam2` name on PyPI is an unaffiliated third-party fork; a direct
@@ -36,10 +37,15 @@ scribe-cli = "scribe.cli:main"
 clear-cli = "clear.cli:main"
 rise-cli = "rise.cli:main"
 depth-cli = "depth.cli:main"
+highlighter-cli = "highlighter.cli:main"
+grabber-cli = "grabber.cli:main"
+index-cli = "indexer.cli:main"
+slate-cli = "slate.cli:main"
 
 [tool.setuptools]
 packages = ["czcore", "czcore.exports", "czcore.appshell",
             "pivot", "stencil", "scribe", "clear", "rise", "depth",
+            "highlighter", "grabber", "indexer", "slate",
             "suite", "suite.tools"]
 
 [tool.setuptools.package-data]

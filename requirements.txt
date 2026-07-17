@@ -9,6 +9,9 @@ numpy
 av
 opencv-python
 
+# --- Slate: type rendering (lower thirds, slates, countdowns) ---
+pillow
+
 # --- the app shell (python -m suite) ---
 fastapi
 uvicorn[standard]

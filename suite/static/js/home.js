@@ -1,7 +1,7 @@
-/* Home: two doors, split by which way the footage is travelling — into your
-   editor, or back out of it. Each tool gets a line written for its door, not
-   its generic one-liner (toolById().one): Scribe means "paper edit" going in
-   and "captions" coming out, and the door should say the one you came for. */
+/* Home: three doors now — footage on its way in, things being made, and the
+   cut on its way out. Each tool gets a line written for its door, not its
+   generic one-liner (toolById().one): Scribe means "paper edit" going in and
+   "captions" coming out, and the door should say the one you came for. */
 
 const HomePage = (() => {
   const el = document.createElement("div");
@@ -9,9 +9,15 @@ const HomePage = (() => {
   el.id = "page-home";
 
   const PREP = [
+    { id: "grabber", line: "the meeting recording, fetched and conformed for air" },
     { id: "clear", line: "hum, clicks and room out of the dialogue first" },
     { id: "stencil", line: "click an object, bring its matte in with the clip" },
     { id: "depth", line: "a depth map to fog, grade or rack focus against" },
+  ];
+  const MAKE = [
+    { id: "highlighter", line: "a meeting, cut down to the moments that matter" },
+    { id: "index", line: "the archive, searched in plain words → selects" },
+    { id: "slate", line: "lower thirds, slates and countdowns, broadcast-ready" },
   ];
   const FINISH = [
     { id: "pivot", line: "the finished cut, reframed to 9:16 or 1:1" },
@@ -22,8 +28,9 @@ const HomePage = (() => {
   function doorHTML(title, why, entries, cls) {
     const tools = entries.map(({ id, line }) => {
       const t = toolById(id);
-      return `<button class="door-tool" data-tool="${t.id}" style="--acc:${t.acc}">
-        <span class="glyph">${glyphSVG(t.acc, t.ready)}</span>
+      return `<button class="door-tool${t.group === "community" ? " community" : ""}"
+        data-tool="${t.id}" style="--acc:${t.acc}">
+        <span class="glyph">${glyphSVG(t.acc, t.ready, t.group === "community")}</span>
         <span><span class="name">${t.name}</span>
           <span class="one"> — ${line}</span></span>
         ${t.ready ? "" : `<span class="soon">coming ${t.when}</span>`}
@@ -42,12 +49,13 @@ const HomePage = (() => {
         <span class="meta">${tool}</span></button>`;
     }).join("");
 
-    el.innerHTML = `<div class="page-pad">
+    el.innerHTML = `<div class="page-pad wide">
       <div class="tag">the workbench around resolve</div>
-      <h1 style="margin-top:6px">What are we fixing today?</h1>
+      <h1 style="margin-top:6px">What are we creating today?</h1>
       <div class="doors">
-        ${doorHTML("Prep", "footage you're about to take into your editor", PREP, "prep")}
-        ${doorHTML("Finish", "footage coming back out of it", FINISH, "finish")}
+        ${doorHTML("Prep", "footage on its way into your editor", PREP, "prep")}
+        ${doorHTML("Make", "made new — from your footage, or from scratch", MAKE, "make")}
+        ${doorHTML("Finish", "the cut on its way back out", FINISH, "finish")}
       </div>
       <div class="recents">
         <div class="tag">recent media</div>

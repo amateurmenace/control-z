@@ -2,6 +2,69 @@
 
 ## unreleased
 
+### the Make wave: four new tools, three doors, an About — 2026-07-16
+- **The suite is ten tools.** Two natives from the long-list spec and the two
+  community apps that grew up at BIG, rebuilt on czcore — same jobs, no cloud,
+  no API keys:
+  - **Community Highlighter** (`highlighter/`) — meeting video becomes text,
+    text becomes the reel. Fetch via the managed **yt-dlp nightly** (a check
+    runs on *every* page open and the chip says what it found); YouTube
+    captions seed the transcript instantly (word timing when YT provides tags),
+    one click upgrades through Scribe's local pass; the scorer marks moments
+    with **its reasons on every pick** (decision/money/community/tension
+    keywords, emphasis, optional room-energy blend); keep/drop paragraphs and
+    render the reel (one ffmpeg concat graph, hardware encode) or leave with a
+    selects EDL through Scribe's own exporter.
+  - **BIG Video Grabber** (`grabber/`) — CivicClerk search for any tenant
+    (Brookline default; every URL-shaped field harvested and labeled, bare
+    `youtubeVideoId`s synthesized into links), fetch through yt-dlp *or* the
+    new **zoomshare resolver**: Zoom and **zoomgov.com** share pages resolved
+    with four plain HTTP requests — the flow the old app drove Puppeteer
+    through, multi-clip aware, every failure a sentence naming the step. Then
+    conform for air: constant-rate pass, shared encoder presets, PCM into mov.
+  - **Index** (`indexer/`, tool id `index`) — the footage librarian. Folders →
+    SQLite catalog (FTS5 with LIKE fallback), incremental rescans, missing
+    drives stay listed and say so; plain-word search returns clips *and
+    time-coded transcript hits* read from Scribe sidecars; selects leave as a
+    **FCPXML stringout** (new `czcore/exports/fcpxml.py` — NTSC-exact
+    rationals, percent-encoded file URLs) or CSV.
+  - **Slate** (`slate/`) — the station graphics kit. The **lower-third maker**
+    renders type at 2× through Pillow and downsamples Lanczos; four styles
+    (bar/block/line/clean), slide/rise/fade with cubic easing, live preview
+    *through the export code path* on an alpha checker with safe-area cages;
+    exports **ProRes 4444 with real alpha**, PNG stills, and animated GIF
+    (labeled honestly: 256 colors, web use). Plus SMPTE bars + 1 kHz tone,
+    a countdown leader with beeps, and a program-slate card.
+- **Home is three doors.** Prep / **Make** / Finish — "What are we creating
+  today?" Grabber joins Prep (footage on its way in); Make holds Highlighter,
+  Index, Slate. The community pair keeps its own rail corner: square glyphs,
+  BIG-blue section header, accent-washed rows — deliberately a little
+  different, same covenant.
+- **About page** — the suite's story, the covenant with meanings, this build's
+  numbers, and the website footer's credits verbatim.
+- **Shared plumbing:** `czcore/ytdlp.py` (nightly manager: GitHub check with
+  60s cooldown, atomic binary replace, offline = a sentence and the old build
+  keeps working; downloads print progress and survive failed caption fetches),
+  `czcore/ffrun.py` (ffmpeg with `-progress` parsing + cancel),
+  `czcore/paths.py` (outputs land in `~/Movies/control-z/<tool>`), four new
+  CLIs, packages/scripts registered, `pillow` added to requirements.
+- **Fixed en route:** reel output paths built with `with_suffix()` could
+  resolve to the *source* filename (`meeting.reel` → `.mp4` strips `.reel`) —
+  outputs are appended now and an equality guard refuses to overwrite the
+  source; sidecar discovery used `glob()` on names carrying `[id]`, which glob
+  reads as a character class and never matches — replaced with `startswith`
+  everywhere; yt-dlp subtitle requests narrowed to `en,en-orig` (asking for
+  `en.*` pulls every translated variant and trips YouTube's 429, which used to
+  kill the whole fetch — a landed video now survives a failed caption).
+- Tests: 42 new (scoring/reel merge sweep/VTT word tags, nightly version
+  compare, CivicClerk parsing incl. zoomgov + bare-id synthesis, zoomshare URL
+  matching, FCPXML rationals/escaping/offsets, catalog search + FTS quoting,
+  lower-third clamping/easing/alpha per style). Verified live end-to-end:
+  real YouTube fetch → caption-seeded transcript; real Brookline zoomgov
+  Select Board recording resolved to its mp4 (ranged probe, 3.99 GB, `ftypmp42`);
+  detect → reel render (hardware h264, audio locked) → selects EDL; Index
+  scan/search/FCPXML on disk; Slate ProRes 4444 (`yuva444p12le`) + PNG + GIF.
+
 ### the Fusion template pack — ten setups, paste-tested — 2026-07-16
 - **The pack is now ten templates, and every one has been pasted into a live
   Fusion comp in free Resolve** (build 21, via the scripting API) — the caveat
