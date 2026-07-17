@@ -240,6 +240,7 @@ const SettingsPage = (() => {
     <div class="tag">suite</div>
     <h1 style="margin-top:6px">Settings</h1>
     <div id="se-proxy" style="margin-top:16px"></div>
+    <div id="se-runtimes" style="margin-top:22px"></div>
     <div id="se-llm" style="margin-top:22px"></div>
     <div id="se-caches" style="margin-top:22px"></div>
     <div id="se-about" style="margin-top:22px"></div>
@@ -349,8 +350,42 @@ const SettingsPage = (() => {
     };
   }
 
+  async function refreshRuntimes() {
+    const box = $("#se-runtimes", el);
+    let rows = [];
+    try { rows = (await api("/api/settings/runtimes")).runtimes; } catch (e) { return; }
+    box.innerHTML = `<div class="tag" style="margin-bottom:6px">optional runtimes — the heavies, installable here</div>`
+      + rows.map(r => `
+      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--line)">
+        <b style="flex:0 0 190px">${esc(r.label)}</b>
+        <span class="hint" style="flex:1;min-width:220px">${esc(r.what)} · ${esc(r.size)}</span>
+        ${r.installed
+          ? `<span style="color:var(--ok);font-size:12px">✓ installed</span>`
+          : `<button class="btn cta" data-rt="${esc(r.id)}" style="width:auto;padding:4px 14px">Install</button>
+             <button class="btn" data-cp="${esc(r.command)}" style="width:auto;padding:4px 10px"
+               title="copy the terminal command instead">⌘ copy</button>`}
+        <span class="hint" data-rtmsg="${esc(r.id)}"></span>
+      </div>`).join("");
+    $$("button[data-rt]", box).forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      const msg = $(`[data-rtmsg="${b.dataset.rt}"]`, box);
+      try {
+        const job = await api("/api/settings/runtimes/install", { id: b.dataset.rt });
+        watchJob(job.id, j => { msg.textContent = j.status === "running"
+          ? `${Math.round(Math.max(0, j.progress) * 100)}% ${j.message || ""}` : (j.message || j.status); });
+        const done = await jobDone(job.id);
+        if (done.status === "done") { msg.textContent = "installed — reloading…"; setTimeout(() => location.reload(), 900); }
+        else { b.disabled = false; msg.textContent = done.error || "stopped"; }
+      } catch (e) { b.disabled = false; msg.textContent = e.message; }
+    });
+    $$("button[data-cp]", box).forEach(b => b.onclick = async () => {
+      try { await navigator.clipboard.writeText(b.dataset.cp); toast("command copied"); } catch (e) {}
+    });
+  }
+
   async function refresh() {
     refreshProxy();
+    refreshRuntimes();
     refreshLLM();
     const d = await api("/api/settings/info");
     $("#se-caches", el).innerHTML =

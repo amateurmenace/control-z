@@ -130,6 +130,92 @@ def register_settings(app, jobs, frames):
                                 status_code=422)
         return {"root": str(set_media_root(root))}
 
+    # -- runtimes: the optional heavies, installable from inside the app ----
+
+    def _runtime_rows():
+        import sys as _sys
+        try:
+            import sam2  # noqa: F401
+            import torch  # noqa: F401
+            sam_ok = True
+        except ImportError:
+            sam_ok = False
+        from clear import isolate as dfn
+        return [
+            {"id": "stencil-sam2", "label": "Stencil click-to-matte",
+             "what": "PyTorch + Meta's SAM 2 — clicks become subject mattes",
+             "size": "~1 GB", "installed": sam_ok,
+             "command": f"{_sys.executable} -m pip install torch "
+                        "\"sam2 @ git+https://github.com/facebookresearch/sam2.git\""},
+            {"id": "clear-dfn", "label": "Clear voice isolation",
+             "what": "the official DeepFilterNet3 binary (MIT/Apache) — "
+                     "everything else in Clear works without it",
+             "size": "~40 MB", "installed": dfn.available(),
+             "command": f"curl -L {dfn.BIN_URL} -o '{dfn.binary_path()}' "
+                        f"&& chmod +x '{dfn.binary_path()}'"},
+        ]
+
+    @app.get("/api/settings/runtimes")
+    def api_runtimes():
+        return {"runtimes": _runtime_rows()}
+
+    @app.post("/api/settings/runtimes/install")
+    def api_runtimes_install(body: dict = Body(...)):
+        import sys as _sys
+        which = str(body.get("id", ""))
+        if getattr(_sys, "frozen", False):
+            return JSONResponse({"error": "this signed build can't install "
+                                          "runtimes yet — run from a source "
+                                          "checkout"}, status_code=501)
+
+        def work(job):
+            import subprocess
+            if which == "stencil-sam2":
+                job.message = "pip installing torch + SAM 2 — ~1 GB…"
+                proc = subprocess.Popen(
+                    [_sys.executable, "-m", "pip", "install", "torch",
+                     "sam2 @ git+https://github.com/facebookresearch/sam2.git"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, bufsize=1)
+                for line in proc.stdout:
+                    if line.strip():
+                        job.message = line.strip()[:110]
+                    job.check_cancel()
+                if proc.wait() != 0:
+                    raise RuntimeError("pip couldn't finish — the Queue "
+                                       "holds its last line")
+            elif which == "clear-dfn":
+                import hashlib
+                import urllib.request
+                from clear import isolate as dfn
+                job.message = "downloading DeepFilterNet3…"
+                dest = dfn.binary_path()
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                tmp = dest.with_suffix(".part")
+                with urllib.request.urlopen(dfn.BIN_URL, timeout=120) as r, \
+                        open(tmp, "wb") as f:
+                    got, total = 0, int(r.headers.get("Content-Length") or 0)
+                    while chunk := r.read(1 << 18):
+                        f.write(chunk)
+                        got += len(chunk)
+                        if total:
+                            job.progress = got / total
+                        job.check_cancel()
+                sha = hashlib.sha256(tmp.read_bytes()).hexdigest()
+                if sha != dfn.BIN_SHA256:
+                    tmp.unlink(missing_ok=True)
+                    raise RuntimeError("download didn't match its published "
+                                       "sha256 — refused")
+                tmp.chmod(0o755)
+                tmp.rename(dest)
+            else:
+                raise RuntimeError(f"unknown runtime: {which}")
+            job.message = "installed — reload the app to light it up"
+            return {"ok": True, "id": which}
+
+        return jobs.start("install", work, tool="suite",
+                          label=f"install runtime — {which}").to_dict()
+
     # -- AI: the user's own Anthropic key, optional, never the default -------
 
     @app.get("/api/settings/llm")
