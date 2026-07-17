@@ -78,6 +78,10 @@ def parse_video_details(html: str) -> dict:
         out["uploader"] = str(d["author"])
     if d.get("videoId"):
         out["id"] = str(d["videoId"])
+    if d.get("shortDescription"):
+        # the description often carries the agenda as timestamp lines —
+        # keep it so a fast-path session can show one
+        out["description"] = str(d["shortDescription"])[:20000]
     try:
         out["duration"] = int(d.get("lengthSeconds") or 0) or None
     except (TypeError, ValueError):

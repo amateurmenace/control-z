@@ -117,6 +117,10 @@ const HighlighterPage = (() => {
       <div id="hl-sec-highlight">
         <div class="hl-grid">
           <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+            <div class="hl-panel" id="hl-agendabox" style="display:none">
+              <span class="tag">agenda — the upload's own chapters, clickable</span>
+              <div id="hl-agenda" class="hl-results" style="max-height:180px"></div>
+            </div>
             <div class="hl-panel">
               <span class="tag">search every word</span>
               <div class="hl-searchrow">
@@ -126,7 +130,9 @@ const HighlighterPage = (() => {
               <div class="hl-results" id="hl-qout"></div>
             </div>
             <div class="hl-panel">
-              <span class="tag">transcript — click ✓ to keep a moment for the reel</span>
+              <span class="tag">transcript — click ✓ to keep a moment for the reel
+                <button id="hl-follow" class="chip" style="margin-left:8px;text-transform:none;letter-spacing:0"
+                  title="scroll the transcript along with playback">follow</button></span>
               <div class="hl-transcript" id="hl-transcript">
                 <div class="empty-grain" style="padding:30px 8px;color:var(--cream-faint);text-align:center">no words yet</div>
               </div>
@@ -240,6 +246,10 @@ const HighlighterPage = (() => {
                 <option value="prores-422">ProRes 422 — edit master</option>
                 <option value="hevc">HEVC — half the size</option>
               </select>
+            </div>
+            <div class="checkrow"><input type="checkbox" id="hl-cards">
+              <span>title cards <div class="hint">an ink card before each moment —
+                the meeting, the moment's words, its timestamp. Context, not decoration.</div></span>
             </div>
             <div class="hint">local file → the reel renders straight from it. URL session →
               download the kept sections first; they stitch into one reel.</div>
@@ -402,6 +412,66 @@ const HighlighterPage = (() => {
   }
 
   /* ---------------- playback (two players, one clock) ---------------- */
+  //
+  // Local files tick on the <audio> element. URL sessions tick on the
+  // embed's own widget messages: send {event:"listening"} and YouTube
+  // answers every frame with infoDelivery {currentTime}. One knob —
+  // nowTime() — feeds the clock display, the sparkline playhead and the
+  // follow-along transcript in both modes.
+
+  const nowTime = () => S.session ? (S.sessionTime || 0) : audio.currentTime;
+
+  function wireSessionClock() {
+    const f = $("#hl-ytframe", el);
+    const hello = () => {
+      try {
+        f.contentWindow.postMessage(JSON.stringify(
+          { event: "listening", id: "czhl", channel: "widget" }), "*");
+      } catch (e) {}
+    };
+    f.addEventListener("load", () => { S.sessionTime = 0; hello(); });
+    addEventListener("message", e => {
+      if (!/https:\/\/(www\.)?youtube(-nocookie)?\.com/.test(e.origin)) return;
+      let d;
+      try { d = JSON.parse(e.data); } catch (err) { return; }
+      if (d.event === "onReady") hello();
+      const info = d.info || {};
+      if (typeof info.currentTime === "number") {
+        S.sessionTime = info.currentTime;
+        if (typeof info.playerState === "number")
+          S.ytPlaying = info.playerState === 1;
+        if (S.session && CZ.current === "highlighter") {
+          $("#hl-time", el).textContent = fmtTime(S.sessionTime);
+          drawSpark();
+          followTranscript();
+        }
+      }
+    });
+  }
+
+  /* -- follow-along: the transcript scrolls with the meeting ---------- */
+  let followOn = false, lastNow = -1;
+  function followTranscript() {
+    if (!S.t || !S.t.segments.length) return;
+    const t = nowTime();
+    if (Math.abs(t - lastNow) < 0.4) return;
+    lastNow = t;
+    const segs = S.t.segments;
+    let lo = 0, hi = segs.length - 1, si = 0;
+    while (lo <= hi) {                     // binary search the active row
+      const mid = (lo + hi) >> 1;
+      if (segs[mid].start <= t) { si = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    const box = $("#hl-transcript", el);
+    const prev = $(".hl-seg.now", box);
+    if (prev && +prev.dataset.si === si) return;
+    if (prev) prev.classList.remove("now");
+    const rowEl = $(`.hl-seg[data-si="${si}"]`, box);
+    if (rowEl) {
+      rowEl.classList.add("now");
+      if (followOn) rowEl.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }
   function seek(t, play) {
     if (S.session) {
       const f = $("#hl-ytframe", el);
@@ -410,6 +480,8 @@ const HighlighterPage = (() => {
       if (play) f.contentWindow.postMessage(JSON.stringify(
         { event: "command", func: "playVideo", args: [] }), "*");
       if (play) S.ytPlaying = true;
+      S.sessionTime = t;               // snappy: don't wait for the embed
+      $("#hl-time", el).textContent = fmtTime(t);
     } else {
       audio.currentTime = t;
       if (play) audio.play();
@@ -432,6 +504,7 @@ const HighlighterPage = (() => {
     $("#hl-time", el).textContent = fmtTime(audio.currentTime);
     syncFrame(false);
     drawSpark();
+    followTranscript();
     if (!audio.paused) raf = requestAnimationFrame(tick);
   }
 
@@ -451,8 +524,11 @@ const HighlighterPage = (() => {
     renderTimeline();
   }
 
+  let transcriptJob = 0;   // token: a re-render cancels the chunks in flight
+
   function renderTranscript() {
     const box = $("#hl-transcript", el);
+    const job = ++transcriptJob;
     if (!S.t || !S.t.segments.length) {
       box.innerHTML = `<div class="empty-grain" style="padding:30px 8px;color:var(--cream-faint);text-align:center">
         no words yet — ${S.session ? "this URL had no captions; download it, then run Scribe"
@@ -465,7 +541,7 @@ const HighlighterPage = (() => {
       const hit = S.picks.find(p => mid >= p.start && mid <= p.end);
       if (hit) reasons.set(si, hit);
     });
-    box.innerHTML = S.t.segments.map((seg, si) => {
+    const row = (seg, si) => {
       const kept = S.keep.has(si);
       const hit = reasons.get(si);
       return `<div class="hl-seg${kept ? " kept" : ""}" data-si="${si}"
@@ -476,9 +552,20 @@ const HighlighterPage = (() => {
         <span class="hl-text">${esc(seg.text)}</span>
         ${hit && hit.reasons?.length ? `<span class="hl-why" title="${esc(hit.reasons.join(" · "))}">why</span>` : ""}
       </div>`;
-    }).join("");
-    $$(".keepbtn", box).forEach(b => b.onclick = () => toggleKeep(+b.dataset.si));
-    $$(".hl-time", box).forEach(tEl => tEl.onclick = () => seek(+tEl.dataset.t, true));
+    };
+    // a 7-hour meeting is 8k+ rows — paint the first screenfuls NOW, stream
+    // the rest in chunks between frames so the page never freezes
+    const CHUNK = 400;
+    const segs = S.t.segments;
+    box.innerHTML = segs.slice(0, CHUNK).map(row).join("");
+    let i = CHUNK;
+    (function more() {
+      if (job !== transcriptJob || i >= segs.length) return;
+      box.insertAdjacentHTML("beforeend",
+        segs.slice(i, i + CHUNK).map((s, k) => row(s, i + k)).join(""));
+      i += CHUNK;
+      requestAnimationFrame(more);
+    })();
     updateMetaLine();
   }
 
@@ -560,7 +647,22 @@ const HighlighterPage = (() => {
       hw.value = S.insight.hotwords || "";
       S.autoHotwords = hw.value;
     }
+    renderAgenda();
     renderAnalyze();
+  }
+
+  function renderAgenda() {
+    const items = (S.insight && S.insight.agenda) || [];
+    const boxWrap = $("#hl-agendabox", el);
+    boxWrap.style.display = items.length ? "" : "none";
+    if (!items.length) return;
+    $("#hl-agenda", el).innerHTML = items.map(a => `
+      <div class="hl-result" style="display:flex;gap:8px;align-items:baseline">
+        <span class="tpill" data-t="${a.t}">${fmtTime(a.t)}</span>
+        <span style="flex:1">${esc(a.label)}</span>
+      </div>`).join("");
+    $$("#hl-agenda .tpill", el).forEach(p =>
+      p.onclick = () => seek(+p.dataset.t, true));
   }
 
   function renderAnalyze() {
@@ -601,8 +703,73 @@ const HighlighterPage = (() => {
         ${(I.topics || []).map(t => `<div class="hl-entrow">${pill(t.t)}
           <span>${esc(t.topic)}</span><span class="cnt">×${t.count}</span></div>`).join("")
         || `<div class="hint">nothing recurred enough</div>`}
+      </div>
+      <div class="hl-panel"><span class="tag">meeting pace — words per minute, counted
+          ${I.pace?.wpm_avg ? `<span style="text-transform:none;letter-spacing:0">· avg ${I.pace.wpm_avg}</span>` : ""}</span>
+        <div class="hl-spark" style="height:64px"><canvas id="hl-pacechart" data-click="seek"></canvas></div>
+      </div>
+      <div class="hl-panel"><span class="tag">discussion dynamics — questions · decisions · tension, counted</span>
+        <div class="hl-spark" style="height:84px"><canvas id="hl-dynchart" data-click="seek"></canvas></div>
+        <div class="hint" style="display:flex;gap:14px;margin-top:4px">
+          <span><i style="display:inline-block;width:9px;height:9px;background:#3FA9D0;border-radius:2px"></i> questions</span>
+          <span><i style="display:inline-block;width:9px;height:9px;background:#1E7F63;border-radius:2px"></i> decisions</span>
+          <span><i style="display:inline-block;width:9px;height:9px;background:#B0542D;border-radius:2px"></i> tension</span>
+        </div>
       </div>`;
     $$("#hl-ana .tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+    drawCharts();
+  }
+
+  /* -- the shape of the meeting: two canvases, counted not modeled ----- */
+  function drawBins(c, draw) {
+    if (!c || !c.clientWidth) return;
+    c.width = c.clientWidth * devicePixelRatio;
+    c.height = c.clientHeight * devicePixelRatio;
+    const g = c.getContext("2d");
+    g.clearRect(0, 0, c.width, c.height);
+    g.fillStyle = "rgba(0,0,0,.05)";
+    g.fillRect(0, 0, c.width, c.height);
+    draw(g, c.width, c.height);
+  }
+
+  function drawCharts() {
+    const I = S.insight;
+    if (!I) return;
+    const dur = I.pace?.duration || 1;
+    const seekAt = e => {
+      const r = e.target.getBoundingClientRect();
+      seek((e.clientX - r.left) / r.width * dur, true);
+    };
+    const pc = $("#hl-pacechart", el);
+    if (pc && I.pace?.bins?.length) {
+      drawBins(pc, (g, W, H) => {
+        const bins = I.pace.bins, mx = Math.max(...bins, 1), bw = W / bins.length;
+        g.fillStyle = "rgba(169,122,22,.75)";
+        bins.forEach((v, b) => {
+          const h = v / mx * (H - 6);
+          if (h > 0) g.fillRect(b * bw + 1, H - h, bw - 2, h);
+        });
+      });
+      pc.onclick = seekAt;
+    }
+    const dc = $("#hl-dynchart", el);
+    if (dc && I.dynamics?.lanes) {
+      drawBins(dc, (g, W, H) => {
+        const L = I.dynamics.lanes;
+        const lanes = [["questions", "#3FA9D0"], ["decisions", "#1E7F63"],
+                       ["tension", "#B0542D"]];
+        const laneH = H / lanes.length;
+        lanes.forEach(([k, color], li) => {
+          const bins = L[k] || [], mx = Math.max(...bins, 1), bw = W / bins.length;
+          g.fillStyle = color;
+          bins.forEach((v, b) => {
+            const h = v / mx * (laneH - 4);
+            if (h > 0) g.fillRect(b * bw + 1, laneH * (li + 1) - h, bw - 2, h);
+          });
+        });
+      });
+      dc.onclick = seekAt;
+    }
   }
 
   /* ---------------- search + sparkline ---------------- */
@@ -649,9 +816,10 @@ const HighlighterPage = (() => {
       const h = bins[b] / mx * (c.height - 6);
       if (h > 0) g.fillRect(b * bw + 1, c.height - h, bw - 2, h);
     }
-    if (!S.session && audio.duration) {
+    const nt = nowTime();
+    if (nt > 0) {
       g.fillStyle = "#23261D";
-      g.fillRect(audio.currentTime / dur * c.width, 0, 2, c.height);
+      g.fillRect(nt / dur * c.width, 0, 2, c.height);
     }
   }
 
@@ -871,14 +1039,26 @@ const HighlighterPage = (() => {
   async function exportReel() {
     if (!S.timeline.length) { toast("the timeline is empty", true); return; }
     const preset = $("#hl-preset", el).value;
+    const wantCards = $("#hl-cards", el).checked;
+    const title = S.meta?.title || $("#hl-title", el).textContent || "";
     try {
       let job;
       if (!S.session) {
         job = await api("/api/highlighter/reel", {
-          path: S.source, preset,
-          ranges: S.timeline.map(c => ({ start: c.start, end: c.end })) });
+          path: S.source, preset, cards: wantCards, title,
+          ranges: S.timeline.map(c => ({ start: c.start, end: c.end,
+                                         label: c.label || "" })) });
       } else if (S.sectionFiles && S.sectionFiles.length) {
-        job = await api("/api/highlighter/stitch", { files: S.sectionFiles, preset });
+        // cards ride the span order: each downloaded [start-end] file gets
+        // the label of the timeline moment that starts inside it
+        const spanCards = wantCards ? S.sectionFiles.map(f => {
+          const m = f.match(/\[(\d+)-(\d+)\]\.\w+$/);
+          const a = m ? +m[1] : 0, b = m ? +m[2] : 1e9;
+          const hit = S.timeline.find(c => c.start >= a - 1 && c.start <= b + 1);
+          return { label: hit?.label || "", t: a };
+        }) : null;
+        job = await api("/api/highlighter/stitch", {
+          files: S.sectionFiles, preset, cards: spanCards, title });
       } else {
         toast("URL session — download the kept sections first, then export", true);
         return;
@@ -1066,6 +1246,7 @@ const HighlighterPage = (() => {
     $$("#hl-pills .hl-pill", el).forEach(p =>
       p.classList.toggle("on", p.dataset.sec === name));
     if (name === "highlight") drawSpark();
+    if (name === "analyze") drawCharts();  // canvases size 0 while hidden
   }
 
   /* ---------------- wire up ---------------- */
@@ -1104,6 +1285,20 @@ const HighlighterPage = (() => {
       $$(".chip", styleRow).forEach(x => x.classList.remove("on"));
       c.classList.add("on");
     });
+
+    // one listener owns every transcript row — 8k rows never mean 8k handlers
+    $("#hl-transcript", el).addEventListener("click", e => {
+      const keep = e.target.closest(".keepbtn");
+      if (keep) { toggleKeep(+keep.dataset.si); return; }
+      const tEl = e.target.closest(".hl-time");
+      if (tEl) seek(+tEl.dataset.t, true);
+    });
+    $("#hl-follow", el).onclick = () => {
+      followOn = !followOn;
+      $("#hl-follow", el).classList.toggle("on", followOn);
+      if (followOn) { lastNow = -1; followTranscript(); }
+    };
+    wireSessionClock();
 
     $("#hl-detect", el).onclick = detect;
     $("#hl-q", el).addEventListener("input", searchTranscript);
@@ -1148,7 +1343,11 @@ const HighlighterPage = (() => {
 
     new MutationObserver(() => { if (!el.classList.contains("active")) stop(); })
       .observe(el, { attributes: true, attributeFilter: ["class"] });
-    addEventListener("resize", () => { if (CZ.current === "highlighter") drawSpark(); });
+    addEventListener("resize", () => {
+      if (CZ.current !== "highlighter") return;
+      drawSpark();
+      drawCharts();
+    });
   }
 
   function stop() {

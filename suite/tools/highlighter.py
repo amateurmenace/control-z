@@ -62,6 +62,19 @@ def _captions_for(path: Path):
     return None
 
 
+def _info_for(source: str) -> dict:
+    """The full info json for either source kind — chapters, description,
+    the fields _session_meta doesn't carry. Empty dict when absent."""
+    p = Path(source)
+    ij = (p / "meeting.info.json") if p.is_dir() else p.with_suffix(".info.json")
+    if ij.exists():
+        try:
+            return json.loads(ij.read_text())
+        except ValueError:
+            pass
+    return {}
+
+
 def _session_meta(d: Path) -> dict:
     info = d / "meeting.info.json"
     meta = {"id": d.name, "title": d.name, "duration": None, "uploader": None,
@@ -211,10 +224,20 @@ def register_highlighter(app, jobs, frames):
             except RuntimeError as e:
                 notes.append(str(e))
         info_p = d / "meeting.info.json"
-        if not info_p.exists():
+        existing = {}
+        if info_p.exists():
+            try:
+                existing = json.loads(info_p.read_text())
+            except ValueError:
+                pass
+        if scraped_meta or not existing:
+            # merge, never shrink: a re-read with fresher scraped fields
+            # (title, description → the agenda) upgrades the session
             info_p.write_text(json.dumps(
-                {"id": vid, "webpage_url": url, **scraped_meta}))
-        how = winner["how"] if winner else "no route"
+                {**existing, "id": vid, "webpage_url": url,
+                 **{k: v for k, v in scraped_meta.items() if v}}))
+        how = (winner["how"] if winner
+               else "no caption route today — kept what was already here")
         return _finish_ingest(job, d, how, " · ".join(notes[-2:]) or None, t0)
 
     @app.post("/api/highlighter/ingest")
@@ -382,7 +405,10 @@ def register_highlighter(app, jobs, frames):
         if cache.exists() and not body.get("fresh"):
             try:
                 data = json.loads(cache.read_text())
-                if data.get("n_segments") == len(t["segments"]):
+                # "agenda" gates the cache: caches from before the charts
+                # rebuild themselves once instead of shipping half a payload
+                if data.get("n_segments") == len(t["segments"]) \
+                        and "agenda" in data:
                     return data
             except ValueError:
                 pass
@@ -400,6 +426,11 @@ def register_highlighter(app, jobs, frames):
             # names for Whisper's decoder — harvested here so the Scribe
             # upgrade can teach it the people/places before it listens
             "hotwords": insight.hotwords(segs, meta),
+            # the shape of the meeting — counted, not modeled
+            "pace": insight.pace(segs),
+            "dynamics": insight.dynamics(segs),
+            # the upload's own agenda: chapters, else description timestamps
+            "agenda": insight.agenda(_info_for(source)),
         }
         cache.write_text(json.dumps(data))
         return data
@@ -559,6 +590,8 @@ def register_highlighter(app, jobs, frames):
         path = str(Path(body["path"]).expanduser())
         ranges = body.get("ranges", [])
         preset = str(body.get("preset", "h264"))
+        want_cards = bool(body.get("cards"))
+        title = str(body.get("title", "")) or Path(path).stem
         if not ranges:
             return JSONResponse({"error": "the reel is empty — keep at least "
                                           "one moment"}, status_code=422)
@@ -569,6 +602,9 @@ def register_highlighter(app, jobs, frames):
         p = Path(path)
         out = str(p.with_suffix("")) + ".reel"
         name = p.name
+        cards = ([{"label": str(r.get("label", "")) or f"Moment {k + 1}",
+                   "t": float(r.get("start", 0))}
+                  for k, r in enumerate(ranges)] if want_cards else None)
 
         def work(job):
             def prog(frac, m):
@@ -578,9 +614,12 @@ def register_highlighter(app, jobs, frames):
 
             job.message = "cutting the reel…"
             rep = render_reel(path, ranges, out, preset=preset, progress=prog,
-                              cancelled=lambda: job.cancel_requested)
-            job.message = (f"{rep['clips']} cuts · {rep['duration']}s · "
-                           f"{rep['encoder']}")
+                              cancelled=lambda: job.cancel_requested,
+                              cards=cards, title=title)
+            job.message = (f"{rep['clips']} cuts"
+                           + (f" · {rep['cards']} title cards"
+                              if rep.get("cards") else "")
+                           + f" · {rep['duration']}s · {rep['encoder']}")
             return rep
 
         total = sum(float(r["end"]) - float(r["start"]) for r in ranges)
@@ -595,6 +634,11 @@ def register_highlighter(app, jobs, frames):
         files = [str(Path(f).expanduser()) for f in body.get("files", [])]
         files = [f for f in files if Path(f).is_file()]
         preset = str(body.get("preset", "h264"))
+        title = str(body.get("title", ""))
+        cards = body.get("cards") or None   # [{label, t}] aligned with files
+        if cards:
+            cards = [{"label": str(c.get("label", "")), "t": float(c.get("t", 0))}
+                     for c in cards]
         if len(files) < 1:
             return JSONResponse({"error": "no section clips to stitch"},
                                 status_code=422)
@@ -608,8 +652,12 @@ def register_highlighter(app, jobs, frames):
 
             job.message = "stitching the sections…"
             rep = stitch_files(files, out, preset=preset, progress=prog,
-                               cancelled=lambda: job.cancel_requested)
-            job.message = f"{rep['clips']} clips · {rep['duration']}s"
+                               cancelled=lambda: job.cancel_requested,
+                               cards=cards, title=title)
+            job.message = (f"{rep['clips']} clips"
+                           + (f" · {rep['cards']} title cards"
+                              if rep.get("cards") else "")
+                           + f" · {rep['duration']}s")
             return rep
 
         return jobs.start("stitch", work, tool="highlighter",

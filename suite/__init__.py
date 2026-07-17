@@ -1,3 +1,3 @@
 """control-z Suite — one desktop app for the tools that live outside Resolve."""
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"

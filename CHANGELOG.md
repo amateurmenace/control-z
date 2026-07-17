@@ -2,6 +2,53 @@
 
 ## unreleased
 
+### 1.3.0: the meeting shows its shape, the reel gets its cards — 2026-07-17
+- **The reel can wear title cards now.** One checkbox in the render panel
+  and every kept moment gets an ink card before it — the meeting's name
+  small, the moment's words big in cream, its timestamp in the brief's
+  green pill. Rendered through Pillow with Slate's font discovery at the
+  output's own size, and ridden into the SAME concat graph as the cuts
+  (`-loop` image inputs + anullsrc silence, every chain normalized to one
+  SAR/pix_fmt/48k-stereo so audio stays locked). Works on both paths —
+  local-file reels and stitched section downloads, where each `[start-end]`
+  clip finds its timeline label by its span. Verified: 5 clips + 5 cards =
+  36.76 s, frame-checked. Context, not decoration; hard cuts stay hard.
+- **The session has a clock now.** The YouTube embed answers the widget
+  "listening" handshake, so URL sessions get what local files always had:
+  a ticking time display, the sparkline playhead, and a **follow-along
+  transcript** — the row being spoken right now carries a green edge, and
+  the *follow* chip scrolls it centered as the meeting plays. Verified
+  live: play on the March 10 session → 0:10.2 on the clock and the active
+  row tracking the speech. Seeks paint immediately instead of waiting for
+  the embed to answer.
+- **Analyze shows the meeting's shape — counted, not modeled.**
+  - **Meeting pace**: words per minute in 50 bins (the recess is visible
+    as a gap in the bars; the March 10 meeting averages 124 wpm).
+  - **Discussion dynamics**: three thin lanes — questions asked, decision
+    words, tension words — from the same keyword classes the scorer shows
+    its reasons with (240 questions counted across that night). Click
+    either chart to jump the player there.
+- **Agenda, when the upload carries one**: yt-dlp chapters, else timestamp
+  lines in the description (the civic upload habit), parsed into a
+  clickable agenda card above search. Two items minimum — one timestamp is
+  a link, not an agenda — and honest absence otherwise. A fresh re-read
+  now MERGES newly scraped fields (title, description) into the session's
+  info instead of keeping the thinner one, and when every caption route is
+  gated but words are already on disk, the message says exactly that:
+  "no caption route today — kept what was already here."
+- **8,363 rows stopped being 16,726 event handlers.** The transcript
+  renders in 400-row chunks between frames and ONE delegated listener owns
+  every keep/seek click. Chart canvases redraw when their tab actually
+  shows (a hidden canvas is 0 px wide — it drew into nothing before) and
+  on resize.
+- **Grabber: a month in one click.** When a CivicClerk search finds more
+  than one video, a "⬇ Fetch all N videos" button queues every fetch at
+  the chosen quality; the bin fills as they land.
+- 8 new tests (`test_meeting_shape.py`: pace bins, dynamics lanes, agenda
+  chapters-beat-description / description fallback / one-timestamp-is-not-
+  an-agenda, title card lands as a real PNG at size). 246 pass; the same 2
+  cv2 packaging gates stand.
+
 ### 1.2.0: the meeting reads in seconds, Whisper learns the names — 2026-07-17
 - **URL ingest races the web app now — and the routes race each other.**
   YouTube links skip the yt-dlp probe entirely (the id is in the URL), the

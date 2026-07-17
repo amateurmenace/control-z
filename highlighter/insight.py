@@ -158,6 +158,80 @@ def hotwords(segments: List[dict], meta: Optional[dict] = None,
     return s[:cap].rsplit(", ", 1)[0] if len(s) > cap else s
 
 
+def pace(segments: List[dict], bins: int = 50) -> dict:
+    """Words per minute across the meeting, counted into bins — the fast
+    stretches read fast, the procedural stretches read slow. Counted, not
+    modeled."""
+    if not segments:
+        return {"bins": [], "duration": 0, "wpm_avg": 0}
+    dur = max(float(s.get("end", 0)) for s in segments) or 1.0
+    words = [0.0] * bins
+    for s in segments:
+        n = len(str(s.get("text", "")).split())
+        b = min(bins - 1, int(float(s.get("start", 0)) / dur * bins))
+        words[b] += n
+    per_bin_min = (dur / bins) / 60.0 or 1.0
+    wpm = [round(w / per_bin_min, 1) for w in words]
+    total_words = sum(words)
+    return {"bins": wpm, "duration": round(dur, 1),
+            "wpm_avg": round(total_words / (dur / 60.0), 1)}
+
+
+def dynamics(segments: List[dict], bins: int = 50) -> dict:
+    """Three thin lanes over the hour — questions asked, decision words,
+    tension words — counted per bin from the same keyword classes the
+    scorer shows its reasons with. A shape of the meeting, not a mood
+    model."""
+    lanes = {"questions": [0] * bins, "decisions": [0] * bins,
+             "tension": [0] * bins}
+    if not segments:
+        return {"bins": bins, "lanes": lanes}
+    dur = max(float(s.get("end", 0)) for s in segments) or 1.0
+    dec_words = KEYWORD_CLASSES["decision"][1]
+    ten_words = KEYWORD_CLASSES["tension"][1]
+    for s in segments:
+        text = str(s.get("text", ""))
+        low = text.lower()
+        b = min(bins - 1, int(float(s.get("start", 0)) / dur * bins))
+        lanes["questions"][b] += text.count("?")
+        lanes["decisions"][b] += sum(1 for w in dec_words if w in low)
+        lanes["tension"][b] += sum(1 for w in ten_words if w in low)
+    return {"bins": bins, "lanes": lanes, "duration": round(dur, 1)}
+
+
+_AGENDA_LINE = re.compile(
+    r"^\s*[•\-–—*]?\s*\(?((?:\d{1,2}:)?\d{1,2}:\d{2})\)?\s*[-–—:.]?\s*(.{3,90})\s*$")
+
+
+def _to_seconds(ts: str) -> float:
+    parts = [int(p) for p in ts.split(":")]
+    parts = [0] * (3 - len(parts)) + parts
+    return parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+
+def agenda(info: Optional[dict]) -> List[dict]:
+    """The meeting's own agenda: yt-dlp chapters when the upload carries
+    them, else timestamp lines in the description (the civic upload habit).
+    Two items minimum — one timestamp is a link, not an agenda."""
+    if not info:
+        return []
+    chapters = info.get("chapters") or []
+    out = [{"t": round(float(c.get("start_time", 0)), 1),
+            "label": str(c.get("title", "")).strip()}
+           for c in chapters if str(c.get("title", "")).strip()]
+    if len(out) >= 2:
+        return out
+    desc = str(info.get("description") or "")
+    hits = []
+    for line in desc.splitlines():
+        m = _AGENDA_LINE.match(line)
+        if m:
+            hits.append({"t": _to_seconds(m.group(1)),
+                         "label": m.group(2).strip(" -–—:.")})
+    hits = [h for h in hits if h["label"]]
+    return hits if len(hits) >= 2 else []
+
+
 def participation(segments: List[dict]) -> List[dict]:
     """Talk time per labeled speaker. Empty when nobody ran diarization."""
     talk: Dict[str, float] = defaultdict(float)

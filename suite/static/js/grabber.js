@@ -162,6 +162,21 @@ const GrabberPage = (() => {
         </div>`;
       }).join("");
       $$(".gb-fetch", box).forEach(b => b.onclick = () => fetchURL(b.dataset.url, b.dataset.name, b));
+      const fetchable = $$(".gb-fetch", box);
+      if (fetchable.length > 1) {
+        // the archive habit: a month of meetings, one click — jobs queue,
+        // the bin fills as they land
+        box.insertAdjacentHTML("afterbegin", `
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <button class="btn" id="gb-fetchall" style="width:auto">⬇ Fetch all ${fetchable.length} videos</button>
+            <span class="hint">every video link below, at the chosen quality — they queue and land in the bin</span>
+          </div>`);
+        $("#gb-fetchall", box).onclick = () => {
+          $("#gb-fetchall", box).disabled = true;
+          fetchable.forEach(b => fetchURL(b.dataset.url, b.dataset.name, b));
+          toast(`${fetchable.length} fetches queued`);
+        };
+      }
       toast(`${r.events.length} events · ${r.with_video} with video`);
     } catch (e) {
       box.innerHTML = `<div class="progmsg err" style="padding:10px 2px">${esc(e.message)}</div>`;
