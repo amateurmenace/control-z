@@ -232,6 +232,43 @@ def agenda(info: Optional[dict]) -> List[dict]:
     return hits if len(hits) >= 2 else []
 
 
+def topic_map(segments: List[dict], bins: int = 12, top: int = 8) -> dict:
+    """The topic coverage map: which topics got airtime in which slice of
+    the meeting — counted mentions, rows you can click into."""
+    rows = topics(segments, top=top)
+    if not segments or not rows:
+        return {"topics": [], "bins": bins, "matrix": [], "duration": 0}
+    dur = max(float(s.get("end", 0)) for s in segments) or 1.0
+    names = [r["topic"] for r in rows]
+    matrix = [[0] * bins for _ in names]
+    for s in segments:
+        low = str(s.get("text", "")).lower()
+        b = min(bins - 1, int(float(s.get("start", 0)) / dur * bins))
+        for i, name in enumerate(names):
+            if name in low:
+                matrix[i][b] += 1
+    return {"topics": names, "bins": bins, "matrix": matrix,
+            "duration": round(dur, 1)}
+
+
+def disagreements(segments: List[dict], top: int = 14) -> List[dict]:
+    """Moments of pushback — segments carrying the tension vocabulary,
+    scored by how much of it they carry. Counted words, not a mood model."""
+    ten = KEYWORD_CLASSES["tension"][1]
+    out = []
+    for s in segments:
+        low = str(s.get("text", "")).lower()
+        hits = [w for w in ten if w in low]
+        if hits:
+            out.append({"t": round(float(s.get("start", 0)), 1),
+                        "end": round(float(s.get("end", 0)), 1),
+                        "text": str(s.get("text", ""))[:160],
+                        "speaker": s.get("speaker"),
+                        "score": len(hits), "words": hits[:4]})
+    out.sort(key=lambda r: (-r["score"], r["t"]))
+    return sorted(out[:top], key=lambda r: r["t"])
+
+
 def participation(segments: List[dict]) -> List[dict]:
     """Talk time per labeled speaker. Empty when nobody ran diarization."""
     talk: Dict[str, float] = defaultdict(float)

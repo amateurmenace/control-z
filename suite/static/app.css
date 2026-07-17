@@ -837,3 +837,42 @@ a { color: var(--cream-dim); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .qout:hover { color: var(--cream); text-decoration: underline; }
+
+/* Highlighter: the analyzer grows up */
+.hl-sumhead { margin-bottom: 8px; }
+.hl-sumhead .mark { font-family: var(--head); font-weight: 700; font-size: 16.5px;
+  background: linear-gradient(180deg, transparent 55%, rgba(34,197,94,.35) 55%);
+  padding: 0 3px; }
+.hl-brief, .hl-reporttext { user-select: text; -webkit-user-select: text; cursor: text; }
+.hl-searching { display: flex; gap: 10px; align-items: center; padding: 10px 2px;
+  font-size: 12.5px; color: var(--cream-dim); }
+.hl-sweep { flex: 0 0 120px; height: 5px; border-radius: 4px; background: var(--ink-3);
+  overflow: hidden; position: relative; }
+.hl-sweep i { position: absolute; top: 0; bottom: 0; width: 38%; border-radius: 4px;
+  background: var(--hl-cta, #22C55E); animation: hlsweep 1.2s ease-in-out infinite; }
+@keyframes hlsweep { 0% { left: -38%; } 100% { left: 100%; } }
+.hl-overlay { position: fixed; inset: 0; z-index: 56;
+  background: rgba(35,38,29,.38); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; }
+.hl-cmrow { display: flex; gap: 8px; align-items: baseline; padding: 6px 2px;
+  border-bottom: 1px dashed var(--line); font-size: 12.5px; }
+.hl-cmrow .btn { width: auto; padding: 2px 10px; font-size: 11.5px; }
+.hl-invtabs { display: flex; gap: 6px; margin-top: 10px; }
+.hl-pptgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 2px 18px; }
+.hl-pptgrid .btn { width: auto; padding: 1px 9px; font-size: 11px; }
+.hl-kind { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em;
+  text-transform: uppercase; padding: 1px 6px; border-radius: 4px; flex: 0 0 auto; }
+.hl-kind-person { background: #E3EDE5; color: #1E7F63; }
+.hl-kind-place { background: #E4ECF3; color: #3E6C8E; }
+.hl-kind-org { background: #EDE6F1; color: #7E5B8E; }
+.hl-kind-money { background: #F5ECD8; color: #A97A16; }
+.hl-tmap { display: grid; gap: 3px; margin-top: 8px; align-items: center; }
+.hl-tmap-label { font-size: 11px; color: var(--cream-dim); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; padding-right: 6px; }
+.hl-tmap-cell { border: 1px solid var(--line-soft); border-radius: 3px; height: 22px;
+  background: rgba(30,127,99, var(--a, 0)); cursor: pointer; }
+.hl-tmap-cell:hover { outline: 2px solid var(--hl-cta, #22C55E); }
+.hl-click { cursor: pointer; }
+.hl-click:hover { background: rgba(0,0,0,.04); border-radius: 6px; }
+.hl-disrow { border-left: 3px solid #B0542D; padding-left: 8px; cursor: pointer; }

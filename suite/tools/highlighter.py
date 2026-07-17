@@ -405,10 +405,10 @@ def register_highlighter(app, jobs, frames):
         if cache.exists() and not body.get("fresh"):
             try:
                 data = json.loads(cache.read_text())
-                # "agenda" gates the cache: caches from before the charts
-                # rebuild themselves once instead of shipping half a payload
+                # "topic_map" gates the cache: caches from before the
+                # analyzer grew rebuild once instead of shipping half
                 if data.get("n_segments") == len(t["segments"]) \
-                        and "agenda" in data:
+                        and "topic_map" in data:
                     return data
             except ValueError:
                 pass
@@ -431,6 +431,9 @@ def register_highlighter(app, jobs, frames):
             "dynamics": insight.dynamics(segs),
             # the upload's own agenda: chapters, else description timestamps
             "agenda": insight.agenda(_info_for(source)),
+            # the analyzer's map and its friction points
+            "topic_map": insight.topic_map(segs),
+            "disagreements": insight.disagreements(segs),
         }
         cache.write_text(json.dumps(data))
         return data
@@ -638,6 +641,266 @@ def register_highlighter(app, jobs, frames):
 
         return jobs.start("ai-reel", work, tool="highlighter",
                           label=f"AI highlight reel — {title[:55]}").to_dict()
+
+    # -- investigate: a name, looked up where lookups live --------------------
+
+    @app.post("/api/highlighter/investigate")
+    def api_investigate(body: dict = Body(...)):
+        """Google News RSS for a proper noun — fetched server-side (the
+        browser can't cross-origin it), parsed with stdlib, returned as
+        plain rows. Wikipedia rides client-side (its API allows CORS)."""
+        import urllib.parse
+        import urllib.request
+        import xml.etree.ElementTree as ET
+
+        q = str(body.get("q", "")).strip()
+        if not q:
+            return JSONResponse({"error": "select or type a name first"},
+                                status_code=422)
+        url = ("https://news.google.com/rss/search?q="
+               + urllib.parse.quote(q) + "&hl=en-US&gl=US&ceid=US:en")
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "control-z-suite"})
+            raw = urllib.request.urlopen(req, timeout=15).read()
+            root = ET.fromstring(raw)
+        except Exception as e:
+            return JSONResponse({"error": f"news lookup didn't answer "
+                                          f"({e.__class__.__name__})"},
+                                status_code=502)
+        rows = []
+        for item in root.iter("item"):
+            src = item.find("source")
+            rows.append({
+                "title": (item.findtext("title") or "")[:160],
+                "link": item.findtext("link") or "",
+                "date": (item.findtext("pubDate") or "")[:16],
+                "source": (src.text if src is not None else "")[:40],
+            })
+            if len(rows) >= 10:
+                break
+        return {"q": q, "rows": rows}
+
+    @app.post("/api/highlighter/mentions")
+    def api_mentions(body: dict = Body(...)):
+        """The desktop's own knowledge base: every meeting in the library
+        that says this name, counted from the transcripts already on disk."""
+        q = str(body.get("q", "")).strip().lower()
+        current = str(body.get("path", ""))
+        if len(q) < 3:
+            return JSONResponse({"error": "too short to search"},
+                                status_code=422)
+        rows = []
+        sources = []
+        if _meetings_dir().exists():
+            sources += [d for d in _meetings_dir().iterdir() if d.is_dir()]
+        sources += [p for p in lib.iterdir()
+                    if p.suffix.lower() in VIDEO_EXTS]
+        for src in sources[:120]:
+            if str(src) == current:
+                continue
+            sc, _, _ = _sidecars(str(src))
+            if not sc.exists():
+                continue
+            try:
+                segs = json.loads(sc.read_text()).get("segments") or []
+            except ValueError:
+                continue
+            count, first_t = 0, None
+            for s in segs:
+                if q in str(s.get("text", "")).lower():
+                    count += 1
+                    if first_t is None:
+                        first_t = round(float(s.get("start", 0)), 1)
+            if count:
+                meta = _session_meta(src) if src.is_dir() else {}
+                rows.append({"source": str(src),
+                             "title": meta.get("title") or src.name,
+                             "count": count, "t": first_t})
+        rows.sort(key=lambda r: -r["count"])
+        return {"q": q, "rows": rows[:20]}
+
+    # -- the full report: one document, sourced to the second ----------------
+
+    @app.post("/api/highlighter/report")
+    def api_report(body: dict = Body(...)):
+        from czcore import llm, pdfout
+
+        source = str(Path(body["path"]).expanduser())
+        t, origin = _load_transcript(source)
+        if not t or not t.get("segments"):
+            return JSONResponse({"error": "no transcript to report on"},
+                                status_code=409)
+        meta = _session_meta(Path(source)) if _is_session(source) else {}
+        title = meta.get("title") or Path(source).stem
+        p = Path(source)
+        md_p = (p / "report.md") if p.is_dir() else p.with_suffix(".report.md")
+        pdf_p = md_p.with_suffix(".pdf")
+        if md_p.exists() and pdf_p.exists() and not body.get("fresh"):
+            def cached_work(job):
+                job.message = "full report — cached"
+                return {"md": str(md_p), "pdf": str(pdf_p),
+                        "text": md_p.read_text()}
+            return jobs.start("report", cached_work, tool="highlighter",
+                              label=f"report (cached) — {title[:50]}"
+                              ).to_dict()
+
+        def work(job):
+            from highlighter import insight
+
+            segs = t["segments"]
+            job.message = "reading the meeting…"
+            dur = max(float(s.get("end", 0)) for s in segs)
+            parts = [f"# {title}",
+                     f"Full meeting report - {len(segs)} transcript segments,"
+                     f" {int(dur // 3600)}h {int(dur % 3600 // 60)}m."
+                     f" Words from {origin or 'the transcript'}."]
+            if llm.enabled():
+                job.message = f"writing the narrative ({llm.status()['model']}, your key)…"
+                try:
+                    parts += ["", llm.complete(
+                        system=("You write thorough civic meeting reports "
+                                "for the public record. Markdown; ## section "
+                                "headings; keep every [MM:SS] timestamp you "
+                                "cite inline. Ground every claim in the "
+                                "transcript."),
+                        prompt=("Write the report: ## Executive Summary "
+                                "(a paragraph), ## Key Decisions (bullets "
+                                "with [MM:SS]), ## Discussion (2-3 "
+                                "paragraphs), ## Public Comment, ## What's "
+                                "Next. Under 800 words.\n\nMeeting: "
+                                f"{title}\n\n{_transcript_lines(t)}"),
+                        max_tokens=2200)]
+                except RuntimeError as e:
+                    parts += ["", f"(AI narrative unavailable - {e})"]
+            job.message = "counting the record…"
+            dec = insight.decisions(segs)
+            parts += ["", "## Decisions and motions (counted)"]
+            parts += [f"- [{int(d['t'] // 60):02d}:{int(d['t'] % 60):02d}] "
+                      f"({d['outcome']}) {d['text'][:140]}" for d in dec[:12]] \
+                or ["- none detected"]
+            ent = insight.entities(segs)
+            for bucket, label in (("people", "People"), ("places", "Places"),
+                                  ("organizations", "Organizations"),
+                                  ("money", "Money")):
+                rows = ent.get(bucket) or []
+                if rows:
+                    parts += ["", f"## {label} mentioned"]
+                    parts += [f"- {r['name']} (x{r['count']})"
+                              for r in rows[:10]]
+            part = insight.participation(segs)
+            if part:
+                parts += ["", "## Who spoke"]
+                parts += [f"- {r['speaker']}: {int(r['seconds'] // 60)}m "
+                          f"{int(r['seconds'] % 60)}s across {r['turns']} turns"
+                          for r in part[:10]]
+            qs = insight.questions(segs)
+            if qs:
+                parts += ["", f"## Questions asked ({len(qs)})"]
+                parts += [f"- [{int(q['t'] // 60):02d}:{int(q['t'] % 60):02d}] "
+                          f"({q['type']}) {q['text'][:120]}" for q in qs[:10]]
+            md = "\n".join(parts) + "\n"
+            md_p.write_text(md)
+            job.message = "writing the PDF…"
+            pdfout.write_pdf(str(pdf_p), pdfout.md_blocks(md),
+                             footer=f"{title} - control-z Community "
+                                    "Highlighter")
+            job.message = "report written — markdown + PDF"
+            return {"md": str(md_p), "pdf": str(pdf_p), "text": md}
+
+        return jobs.start("report", work, tool="highlighter",
+                          label=f"full report — {title[:55]}").to_dict()
+
+    # -- translate: the summary or the whole transcript, any language --------
+
+    @app.post("/api/highlighter/translate")
+    def api_translate(body: dict = Body(...)):
+        from czcore import llm
+
+        if not llm.enabled():
+            return JSONResponse({"error": "translation runs on your API key "
+                                          "— Settings → AI"}, status_code=409)
+        source = str(Path(body["path"]).expanduser())
+        what = str(body.get("what", "summary"))
+        lang = str(body.get("lang", "Spanish"))[:40]
+        t, _ = _load_transcript(source)
+        if not t:
+            return JSONResponse({"error": "no words to translate"},
+                                status_code=409)
+        p = Path(source)
+        stem = (p / f"meeting.{lang.lower()}") if p.is_dir() \
+            else p.with_suffix(f".{lang.lower()}")
+
+        def work(job):
+            segs = t["segments"]
+            if what == "summary":
+                brief_p = (p / "ai-brief.json") if p.is_dir() \
+                    else p.with_suffix(".ai-brief.json")
+                base = ""
+                if brief_p.exists():
+                    try:
+                        base = json.loads(brief_p.read_text()).get("text", "")
+                    except ValueError:
+                        pass
+                if not base:
+                    from highlighter import insight
+                    base = "\n".join(x["text"] for x in insight.brief(segs))
+                job.message = f"translating the summary into {lang}…"
+                out = llm.complete(
+                    system=(f"Translate into {lang}. Keep every [MM:SS] "
+                            "timestamp exactly as written. Answer with the "
+                            "translation only."),
+                    prompt=base, max_tokens=1800)
+                out_p = Path(str(stem) + ".summary.txt")
+                out_p.write_text(out)
+                job.message = f"summary in {lang} — written"
+                return {"text": out, "path": str(out_p), "lang": lang}
+            # the whole transcript, chunked, timings kept
+            CH = 60
+            translated: list = []
+            chunks = [segs[i:i + CH] for i in range(0, len(segs), CH)]
+            for ci, chunk in enumerate(chunks):
+                job.progress = ci / max(1, len(chunks))
+                job.message = (f"translating transcript into {lang} — "
+                               f"chunk {ci + 1}/{len(chunks)}")
+                job.check_cancel()
+                numbered = "\n".join(
+                    f"{k}|{str(s.get('text', '')).strip()}"
+                    for k, s in enumerate(chunk))
+                try:
+                    out = llm.complete(
+                        system=(f"Translate each line into {lang}. Keep the "
+                                "N| prefixes exactly; one line out per line "
+                                "in; no commentary."),
+                        prompt=numbered, max_tokens=3600)
+                    got = {}
+                    for ln in out.splitlines():
+                        if "|" in ln:
+                            k, txt = ln.split("|", 1)
+                            try:
+                                got[int(k.strip())] = txt.strip()
+                            except ValueError:
+                                pass
+                    translated += [got.get(k, str(s.get("text", "")))
+                                   for k, s in enumerate(chunk)]
+                except RuntimeError:
+                    translated += [str(s.get("text", "")) for s in chunk]
+            def ts(x):
+                return (f"{int(x // 3600):02d}:{int(x % 3600 // 60):02d}:"
+                        f"{int(x % 60):02d},{int(x % 1 * 1000):03d}")
+            srt = "\n".join(
+                f"{i + 1}\n{ts(float(s['start']))} --> {ts(float(s['end']))}"
+                f"\n{translated[i]}\n"
+                for i, s in enumerate(segs))
+            srt_p = Path(str(stem) + ".srt")
+            txt_p = Path(str(stem) + ".txt")
+            srt_p.write_text(srt)
+            txt_p.write_text("\n".join(translated) + "\n")
+            job.message = f"transcript in {lang} — .srt and .txt written"
+            return {"srt": str(srt_p), "txt": str(txt_p), "lang": lang}
+
+        return jobs.start("translate", work, tool="highlighter",
+                          label=f"translate {what} → {lang}").to_dict()
 
     @app.post("/api/highlighter/detect")
     def api_detect(body: dict = Body(...)):

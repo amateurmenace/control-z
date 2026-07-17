@@ -97,13 +97,20 @@ const HighlighterPage = (() => {
           </div>
         </div>
         <div style="flex:1;min-width:320px" class="hl-panel">
-          <span class="tag">executive brief — extractive, the meeting's own sentences</span>
+          <div class="hl-sumhead"><span class="mark">AI-Powered Summary</span></div>
           <div class="hl-brief" id="hl-brief"><div class="hint">reading…</div></div>
-          <div id="hl-aibrief-row" style="display:none;margin-top:8px">
-            <button class="btn" id="hl-aibrief" style="width:auto"
-              title="generative — sends this transcript to Anthropic with YOUR key (Settings → AI); the local brief above stays">✨ AI narrative brief</button>
+          <div id="hl-briefrow" style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;align-items:center">
+            <button class="btn cta" id="hl-report" style="width:auto">Generate Full Report</button>
+            <button class="btn" id="hl-aibrief" style="width:auto;display:none">↻ Regenerate</button>
+            <select id="hl-lang" style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px">
+              ${["Spanish", "Portuguese", "Haitian Creole", "French", "Chinese (Simplified)",
+                 "Russian", "Vietnamese", "Arabic", "Korean", "Hindi"].map(l =>
+                `<option value="${l}">${l}</option>`).join("")}
+            </select>
+            <button class="btn" id="hl-trsum" style="width:auto"
+              title="translate this summary — your key; lands as a .txt too">Translate summary</button>
           </div>
-          <div class="hl-brief" id="hl-aibrief-out" style="display:none;margin-top:8px;border-top:1px dashed var(--line);padding-top:8px"></div>
+          <div id="hl-reportout" style="display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px"></div>
         </div>
       </div>
 
@@ -147,8 +154,10 @@ const HighlighterPage = (() => {
                 </select>
                 <button class="btn" id="hl-txt" style="width:auto">Transcript .txt</button>
                 <button class="btn" id="hl-srt" style="width:auto">.srt</button>
-                <button class="btn" id="hl-gtranslate" style="width:auto"
-                  title="copies the transcript, opens Google Translate — the honest free path for any language">Google Translate…</button>
+                <button class="btn" id="hl-trtxt" style="width:auto"
+                  title="AI-translate the whole transcript into the language chosen up in the summary card — .srt + .txt land beside the meeting">Translate transcript…</button>
+                <button class="btn" id="hl-invsel" style="width:auto"
+                  title="select a name in the transcript, then look it up — news, Wikipedia, maps, and your own library">🔍 Investigate selection</button>
               </div>
               <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
                 <input type="text" id="hl-hotwords" spellcheck="false" placeholder="names to teach Whisper — auto-filled from this meeting; edit freely"
@@ -270,6 +279,36 @@ const HighlighterPage = (() => {
       </div>
     </div>
 
+    <!-- CLIPS modal: any viz, opened into its moments -->
+    <div id="hl-clipsmodal" class="hl-overlay" style="display:none">
+      <div class="hl-modal" style="width:min(680px,94vw)">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <h2 style="margin:0;font-size:17px" id="hl-cm-title">Moments</h2>
+          <span class="hint" id="hl-cm-meta"></span>
+          <button class="btn" id="hl-cm-addall" style="margin-left:auto;width:auto;padding:3px 12px">+ all to reel</button>
+          <button class="btn" id="hl-cm-close" style="width:auto;padding:3px 12px">✕</button>
+        </div>
+        <div id="hl-cm-rows" style="max-height:56vh;overflow-y:auto;margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- INVESTIGATE modal: a name, looked up -->
+    <div id="hl-invmodal" class="hl-overlay" style="display:none">
+      <div class="hl-modal" style="width:min(640px,94vw)">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <h2 style="margin:0;font-size:17px">🔍 <span id="hl-inv-q"></span></h2>
+          <button class="btn" id="hl-inv-close" style="margin-left:auto;width:auto;padding:3px 12px">✕</button>
+        </div>
+        <div class="hl-invtabs" id="hl-invtabs">
+          <button class="chip on" data-tab="news">News</button>
+          <button class="chip" data-tab="wiki">Wikipedia</button>
+          <button class="chip" data-tab="maps">Maps</button>
+          <button class="chip" data-tab="library">Your library</button>
+        </div>
+        <div id="hl-inv-body" style="max-height:52vh;overflow-y:auto;margin-top:10px;font-size:13px"></div>
+      </div>
+    </div>
+
     <!-- EXPORT VIDEO modal: two doors out -->
     <div id="hl-exportmodal" style="display:none">
       <div class="hl-modal">
@@ -358,9 +397,32 @@ const HighlighterPage = (() => {
     const box = $("#hl-findout", el);
     const q = $("#hl-findq", el).value.trim();
     if (!q) return;
-    box.innerHTML = `<div class="hint" style="padding:8px 2px">searching…</div>`;
+    // the search rides yt-dlp's own ytsearch — 10-20s is its honest speed,
+    // so the wait SHOWS work: staged messages, a sweep bar, elapsed time
+    const t0 = Date.now();
+    const stages = [
+      "asking YouTube's search index…",
+      "no API key involved — this is yt-dlp's own crawl…",
+      "reading result metadata…",
+      "matching civic channels…",
+      "nearly there — sorting what came back…",
+    ];
+    box.innerHTML = `<div class="hl-searching">
+      <div class="hl-sweep"><i></i></div>
+      <span id="hl-findmsg">${stages[0]}</span>
+      <span class="hint" id="hl-findsec" style="margin-left:auto">0s</span>
+    </div>`;
+    const tick2 = setInterval(() => {
+      const s = Math.floor((Date.now() - t0) / 1000);
+      const m = $("#hl-findmsg", box);
+      const sec = $("#hl-findsec", box);
+      if (!m) { clearInterval(tick2); return; }
+      m.textContent = stages[Math.min(stages.length - 1, Math.floor(s / 4))];
+      sec.textContent = s + "s";
+    }, 1000);
     try {
       const r = await api("/api/highlighter/finder", { q });
+      clearInterval(tick2);
       box.innerHTML = r.rows.map(v => `
         <div class="hl-result" style="display:flex;gap:8px;align-items:baseline">
           <span style="flex:1">${esc(v.title || v.id)}
@@ -369,7 +431,10 @@ const HighlighterPage = (() => {
           <button class="btn cta" style="padding:3px 12px;font-size:11.5px" data-url="${esc(v.url)}">Load</button>
         </div>`).join("") || `<div class="hint">nothing found</div>`;
       $$("button[data-url]", box).forEach(b => b.onclick = () => ingest(b.dataset.url));
-    } catch (e) { box.innerHTML = `<div class="progmsg err">${esc(e.message)}</div>`; }
+    } catch (e) {
+      clearInterval(tick2);
+      box.innerHTML = `<div class="progmsg err">${esc(e.message)}</div>`;
+    }
   }
 
   async function loadLibrary() {
@@ -452,8 +517,9 @@ const HighlighterPage = (() => {
       S.keep = new Set(); S.timeline = []; S.picks = []; S.lane = [];
       S.insight = null; S.curClip = -1; S.sectionFiles = [];
       renderDlFiles();
-      $("#hl-aibrief-out", el).style.display = "none";
-      $("#hl-aibrief-out", el).innerHTML = "";
+      $("#hl-reportout", el).style.display = "none";
+      $("#hl-reportout", el).innerHTML = "";
+      $("#hl-aibrief", el).style.display = "none";
       llmCheck();
       const tr = await api("/api/highlighter/transcript", { path: source });
       S.session = tr.session;
@@ -760,36 +826,69 @@ const HighlighterPage = (() => {
     const I = S.insight;
     const pill = t => `<span class="tpill" data-t="${t}">${fmtTime(t)}</span>`;
     const ent = I.entities || {};
-    const entCard = (title, rows) => `
-      <div class="hl-panel"><span class="tag">${title}</span>
-        ${(rows || []).map(r => `<div class="hl-entrow">${pill(r.t)}
-          <span>${esc(r.name)}</span><span class="cnt">×${r.count}</span></div>`).join("")
-        || `<div class="hint">none found</div>`}</div>`;
+    // the web app's "People, Places & Things" — one card, every row opens
+    const merged = [
+      ...(ent.people || []).map(r => ({ ...r, kind: "person" })),
+      ...(ent.places || []).map(r => ({ ...r, kind: "place" })),
+      ...(ent.organizations || []).map(r => ({ ...r, kind: "org" })),
+      ...(ent.money || []).map(r => ({ ...r, kind: "money" })),
+    ].sort((a, b) => b.count - a.count).slice(0, 18);
+    const tmap = I.topic_map || { topics: [], matrix: [], bins: 12 };
+    const tmax = Math.max(1, ...tmap.matrix.flat());
+    const qTypes = {};
+    (I.questions || []).forEach(q => { qTypes[q.type] = (qTypes[q.type] || 0) + 1; });
+    const QCOLORS = { budget: "#A97A16", timeline: "#3FA9D0", accountability: "#B0542D",
+                      rationale: "#7E5B8E", information: "#1E7F63" };
     const maxTalk = Math.max(...(I.participation || []).map(p => p.seconds), 1);
     box.innerHTML = `
+      <div class="hl-panel" style="grid-column:1 / -1"><span class="tag">people, places &amp; things — click a name: play its moments, add them to the reel, or investigate it in the world</span>
+        <div class="hl-pptgrid">
+        ${merged.map((r, i) => `<div class="hl-entrow">
+          <span class="hl-kind hl-kind-${r.kind}">${r.kind}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(r.name)}</span>
+          <span class="cnt">×${r.count}</span>
+          <button class="btn" data-clips="${esc(r.name)}" title="every moment that says it">clips</button>
+          <button class="btn" data-inv="${esc(r.name)}" title="news · Wikipedia · maps · your library">🔍</button>
+        </div>`).join("") || `<div class="hint">none found</div>`}
+        </div></div>
       <div class="hl-panel"><span class="tag">decisions — motions and outcomes</span>
         ${(I.decisions || []).map(d => `<div class="hl-qrow">
           <span class="hl-outcome ${d.outcome}">${d.outcome}</span>${pill(d.t)}
           ${esc(d.text)}</div>`).join("") || `<div class="hint">no motions detected</div>`}
       </div>
-      ${entCard("people", ent.people)}
-      ${entCard("places", ent.places)}
-      ${entCard("organizations", ent.organizations)}
-      ${entCard("money", ent.money)}
-      <div class="hl-panel"><span class="tag">who spoke — needs the Scribe pass</span>
-        ${(I.participation || []).map(p => `<div class="hl-entrow">
+      <div class="hl-panel"><span class="tag">participation tracker — click a speaker for their moments</span>
+        ${(I.participation || []).map(p => `<div class="hl-entrow hl-click" data-spk="${esc(p.speaker)}">
           <span style="flex:0 0 110px;overflow:hidden;text-overflow:ellipsis">${esc(p.speaker)}</span>
           <span class="hl-bar" style="width:${(p.seconds / maxTalk * 100).toFixed(0)}%"></span>
           <span class="cnt">${fmtTime(p.seconds)} · ${p.turns} turns</span></div>`).join("")
         || `<div class="hint">no speaker labels — run the Scribe pass with speakers on</div>`}
       </div>
-      <div class="hl-panel"><span class="tag">question flow</span>
-        ${(I.questions || []).map(q => `<div class="hl-qrow">
+      <div class="hl-panel" style="grid-column:1 / -1"><span class="tag">topic coverage map — which topics got airtime when; click a cell to open those moments</span>
+        <div class="hl-tmap" style="grid-template-columns:110px repeat(${tmap.bins},1fr)">
+          ${tmap.topics.map((name, ti) => `
+            <span class="hl-tmap-label" title="${esc(name)}">${esc(name)}</span>
+            ${tmap.matrix[ti].map((v, bi) => `<button class="hl-tmap-cell" data-topic="${esc(name)}"
+              data-bin="${bi}" style="--a:${(v / tmax).toFixed(2)}" title="${esc(name)} · ${v} mention${v === 1 ? "" : "s"}"></button>`).join("")}
+          `).join("") || `<div class="hint">nothing recurred enough to map</div>`}
+        </div>
+      </div>
+      <div class="hl-panel"><span class="tag">question flow — ${(I.questions || []).length} asked; click a type</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px">
+          ${Object.entries(qTypes).map(([k, n]) => `<button class="chip" data-qtype="${k}"
+            style="border-color:${QCOLORS[k] || "var(--line)"}">${k} · ${n}</button>`).join("")}
+        </div>
+        ${(I.questions || []).slice(0, 12).map(q => `<div class="hl-qrow">
           <span class="hl-qtype">${q.type}</span>${pill(q.t)}${esc(q.text)}</div>`).join("")
         || `<div class="hint">no questions detected</div>`}
       </div>
+      <div class="hl-panel"><span class="tag">moments of disagreement — tension words, counted; ▶ plays each</span>
+        ${(I.disagreements || []).map(d => `<div class="hl-qrow hl-disrow">
+          ${pill(d.t)}<span style="flex:1">${d.speaker ? `<b>${esc(d.speaker)}:</b> ` : ""}${esc(d.text)}
+          <span class="hint">${(d.words || []).join(" · ")}</span></span></div>`).join("")
+        || `<div class="hint">no pushback vocabulary detected</div>`}
+      </div>
       <div class="hl-panel"><span class="tag">recurring topics</span>
-        ${(I.topics || []).map(t => `<div class="hl-entrow">${pill(t.t)}
+        ${(I.topics || []).map(t => `<div class="hl-entrow hl-click" data-clips="${esc(t.topic)}">${pill(t.t)}
           <span>${esc(t.topic)}</span><span class="cnt">×${t.count}</span></div>`).join("")
         || `<div class="hint">nothing recurred enough</div>`}
       </div>
@@ -806,6 +905,37 @@ const HighlighterPage = (() => {
         </div>
       </div>`;
     $$("#hl-ana .tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+    // every viz opens: clips buttons, investigate, speakers, topic cells, q-types
+    $$("button[data-clips], .hl-entrow[data-clips]", box).forEach(b => b.onclick = () => {
+      const q = b.dataset.clips;
+      clipsModal(`"${q}" — every mention`, segsWith(q));
+    });
+    $$("button[data-inv]", box).forEach(b => b.onclick = () => investigate(b.dataset.inv));
+    $$(".hl-entrow[data-spk]", box).forEach(r => r.onclick = () => {
+      const spk = r.dataset.spk;
+      clipsModal(`${spk} — their moments`, (S.t?.segments || [])
+        .filter(s => s.speaker === spk)
+        .map(s => ({ t: s.start, end: s.end, text: s.text })));
+    });
+    $$(".hl-tmap-cell", box).forEach(c => c.onclick = () => {
+      const topic = c.dataset.topic;
+      const tm = S.insight.topic_map;
+      const binW = (tm.duration || 1) / tm.bins;
+      const a = +c.dataset.bin * binW, b2 = a + binW;
+      const rows = segsWith(topic).filter(r => r.t >= a && r.t < b2);
+      clipsModal(`"${topic}" · ${fmtTime(a)}–${fmtTime(b2)}`, rows);
+    });
+    $$("button[data-qtype]", box).forEach(b => b.onclick = () => {
+      const k = b.dataset.qtype;
+      clipsModal(`${k} questions`, (S.insight.questions || [])
+        .filter(q => q.type === k)
+        .map(q => ({ t: q.t, text: q.text, speaker: q.speaker })));
+    });
+    $$(".hl-disrow", box).forEach((r, i) => r.onclick = e => {
+      if (e.target.closest(".tpill")) return;
+      const d = (S.insight.disagreements || [])[i];
+      if (d) seek(d.t, true);
+    });
     drawCharts();
   }
 
@@ -1290,7 +1420,8 @@ const HighlighterPage = (() => {
   async function llmCheck() {
     try { S.llm = await api("/api/settings/llm"); } catch (e) { S.llm = null; }
     const on = !!(S.llm && S.llm.enabled);
-    $("#hl-aibrief-row", el).style.display = on ? "" : "none";
+    $("#hl-trsum", el).style.display = on ? "" : "none";
+    $("#hl-trtxt", el).style.display = on ? "" : "none";
     $("#hl-askai", el).style.display = on ? "" : "none";
     $("#hl-aireel-row", el).style.display = on ? "" : "none";
   }
@@ -1347,11 +1478,10 @@ const HighlighterPage = (() => {
           `<div class="hint">${esc(done.error || "stopped")} — the extractive read below stands</div>`);
         return;
       }
-      box.innerHTML = `<div class="hint" style="margin-bottom:5px">executive summary — generative (${esc(done.result.model)}, your key) · every [time] cites its moment</div>`
-        + done.result.text.split(/\n+/).map(p =>
-            `<p>${linkifyTimes(p.replace(/^#+\s*/, "").replace(/\*\*/g, ""))}</p>`).join("");
+      box.innerHTML = done.result.text.split(/\n+/).map(p =>
+        `<p>${linkifyTimes(p.replace(/^#+\s*/, "").replace(/\*\*/g, ""))}</p>`).join("");
       $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
-      $("#hl-aibrief", el).textContent = "↻ Regenerate summary";
+      $("#hl-aibrief", el).style.display = "";
     } catch (e) {
       btn.disabled = false;
       $("#hl-briefwip", el)?.remove();
@@ -1379,6 +1509,158 @@ const HighlighterPage = (() => {
       $$(".tpill", holder).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
       log.scrollTop = log.scrollHeight;
     } catch (e) { holder.innerHTML = esc(e.message); }
+  }
+
+  /* ---------------- full report + translate ---------------- */
+  async function fullReport(fresh) {
+    const btn = $("#hl-report", el);
+    const out = $("#hl-reportout", el);
+    btn.disabled = true;
+    out.style.display = "";
+    out.innerHTML = `<div class="hint">writing the report…</div>`;
+    try {
+      const job = await api("/api/highlighter/report", { path: S.source, fresh: !!fresh });
+      watchJob(job.id, j => { if (j.status === "running") out.innerHTML = `<div class="hint">${esc(j.message || "working")}</div>`; });
+      const done = await jobDone(job.id);
+      btn.disabled = false;
+      if (done.status !== "done") { out.innerHTML = `<div class="hint">${esc(done.error || "stopped")}</div>`; return; }
+      const r = done.result;
+      out.innerHTML = `
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="btn cta" data-rev="${esc(r.pdf)}" style="width:auto">📄 Reveal PDF</button>
+          <button class="btn" data-rev="${esc(r.md)}" style="width:auto">Reveal .md</button>
+          <button class="btn" id="hl-rep-fresh" style="width:auto">↻ Regenerate</button>
+        </div>
+        <div class="hl-brief hl-reporttext">${r.text.split(/\n+/).map(p => {
+          const s = p.replace(/\*\*/g, "");
+          if (s.startsWith("## ")) return `<p><b>${linkifyTimes(s.slice(3))}</b></p>`;
+          if (s.startsWith("# ")) return `<p><b style="font-size:15px">${linkifyTimes(s.slice(2))}</b></p>`;
+          if (s.startsWith("- ")) return `<p style="padding-left:12px">· ${linkifyTimes(s.slice(2))}</p>`;
+          return `<p>${linkifyTimes(s)}</p>`;
+        }).join("")}</div>`;
+      $$("button[data-rev]", out).forEach(b => b.onclick = () =>
+        api("/api/media/reveal", { path: b.dataset.rev }).catch(e => toast(e.message, true)));
+      $("#hl-rep-fresh", out).onclick = () => fullReport(true);
+      $$(".tpill", out).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+      toast("full report written — markdown + PDF beside the meeting");
+    } catch (e) { btn.disabled = false; out.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
+  }
+
+  async function translate(what) {
+    const lang = $("#hl-lang", el).value;
+    const btn = $(what === "summary" ? "#hl-trsum" : "#hl-trtxt", el);
+    btn.disabled = true;
+    try {
+      const job = await api("/api/highlighter/translate", { path: S.source, what, lang });
+      watchJob(job.id, j => { $("#hl-detectmsg", el).textContent = j.message || j.status; });
+      const done = await jobDone(job.id);
+      btn.disabled = false;
+      if (done.status !== "done") { toast(done.error || "stopped", true); return; }
+      if (what === "summary") {
+        const box = $("#hl-brief", el);
+        box.insertAdjacentHTML("beforeend",
+          `<div style="border-top:1px dashed var(--line);margin-top:8px;padding-top:8px">
+            <div class="hint" style="margin-bottom:4px">${esc(lang)} — also saved as a .txt</div>
+            ${done.result.text.split(/\n+/).map(p => `<p>${linkifyTimes(p)}</p>`).join("")}</div>`);
+        $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+      } else {
+        toast(`transcript in ${lang} — .srt and .txt landed beside the meeting`);
+      }
+    } catch (e) { btn.disabled = false; toast(e.message, true); }
+  }
+
+  /* ---------------- the clips modal: any viz, opened into moments -------- */
+  function clipsModal(title, rows) {
+    // rows: [{t, end?, text, speaker?}]
+    $("#hl-cm-title", el).textContent = title;
+    $("#hl-cm-meta", el).textContent = `${rows.length} moment${rows.length === 1 ? "" : "s"}`;
+    const box = $("#hl-cm-rows", el);
+    box.innerHTML = rows.map((r, i) => `
+      <div class="hl-cmrow">
+        <span class="tpill" data-t="${r.t}">${fmtTime(r.t)}</span>
+        <span style="flex:1">${r.speaker ? `<b>${esc(r.speaker)}:</b> ` : ""}${esc((r.text || "").slice(0, 140))}</span>
+        <button class="btn" data-play="${i}" title="play this moment">▶</button>
+        <button class="btn" data-add="${i}" title="add to the reel">+</button>
+      </div>`).join("") || `<div class="hint">nothing matched</div>`;
+    $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+    $$("button[data-play]", box).forEach(b => b.onclick = () => {
+      const r = rows[+b.dataset.play];
+      seek(r.t, true);
+    });
+    $$("button[data-add]", box).forEach(b => b.onclick = () => {
+      const r = rows[+b.dataset.add];
+      addToTimeline({ start: Math.max(0, r.t - 0.3), end: (r.end || r.t + 12) + 0.3,
+                      label: (r.text || "").slice(0, 60) });
+      renderTimeline();
+      toast("added to the reel");
+    });
+    $("#hl-cm-addall", el).onclick = () => {
+      rows.slice(0, 12).forEach(r => addToTimeline({
+        start: Math.max(0, r.t - 0.3), end: (r.end || r.t + 12) + 0.3,
+        label: (r.text || "").slice(0, 60) }, true));
+      renderTimeline();
+      toast(`${Math.min(rows.length, 12)} moments on the reel`);
+    };
+    $("#hl-clipsmodal", el).style.display = "";
+  }
+
+  const segsWith = q => (S.t?.segments || [])
+    .filter(s => (s.text || "").toLowerCase().includes(q.toLowerCase()))
+    .map(s => ({ t: s.start, end: s.end, text: s.text, speaker: s.speaker }));
+
+  /* ---------------- investigate: a name, looked up ---------------- */
+  async function investigate(q) {
+    q = (q || "").trim();
+    if (!q) { toast("select or click a name first", true); return; }
+    $("#hl-inv-q", el).textContent = q;
+    $("#hl-invmodal", el).style.display = "";
+    invTab("news", q);
+  }
+
+  async function invTab(tab, q) {
+    $$("#hl-invtabs .chip", el).forEach(c => c.classList.toggle("on", c.dataset.tab === tab));
+    const body = $("#hl-inv-body", el);
+    body.innerHTML = `<div class="hint">looking up…</div>`;
+    try {
+      if (tab === "news") {
+        const r = await api("/api/highlighter/investigate", { q });
+        body.innerHTML = r.rows.map(n => `
+          <div class="hl-cmrow"><span style="flex:1"><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>
+            <span class="hint">${esc(n.source)} · ${esc(n.date)}</span></span></div>`).join("")
+          || `<div class="hint">no recent news found</div>`;
+      } else if (tab === "wiki") {
+        const resp = await fetch("https://en.wikipedia.org/api/rest_v1/page/summary/"
+          + encodeURIComponent(q.replace(/ /g, "_")));
+        if (!resp.ok) throw new Error("no Wikipedia page by that exact name");
+        const w = await resp.json();
+        body.innerHTML = `
+          ${w.thumbnail ? `<img src="${esc(w.thumbnail.source)}" style="float:right;max-width:120px;border-radius:8px;margin:0 0 8px 10px">` : ""}
+          <p><b>${esc(w.title)}</b>${w.description ? ` — ${esc(w.description)}` : ""}</p>
+          <p style="margin-top:6px">${esc(w.extract || "")}</p>
+          <p style="margin-top:8px"><a href="${esc(w.content_urls?.desktop?.page || "#")}" target="_blank" rel="noopener">Read on Wikipedia ↗</a></p>`;
+      } else if (tab === "maps") {
+        const enc = encodeURIComponent(q);
+        body.innerHTML = `
+          <p class="hint" style="margin-bottom:8px">maps open in your browser — the map services don't allow embedding</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a class="btn cta" style="width:auto;text-decoration:none" href="https://www.google.com/maps/search/${enc}" target="_blank" rel="noopener">Google Maps ↗</a>
+            <a class="btn" style="width:auto;text-decoration:none" href="https://www.openstreetmap.org/search?query=${enc}" target="_blank" rel="noopener">OpenStreetMap ↗</a>
+            <a class="btn" style="width:auto;text-decoration:none" href="https://news.google.com/search?q=${enc}" target="_blank" rel="noopener">Google News ↗</a>
+          </div>`;
+      } else if (tab === "library") {
+        const r = await api("/api/highlighter/mentions", { q, path: S.source });
+        body.innerHTML = `<p class="hint" style="margin-bottom:6px">every other meeting on this machine that says "${esc(q)}" — the desktop's own knowledge base</p>`
+          + (r.rows.map(m => `
+          <div class="hl-cmrow"><span style="flex:1"><b>${esc(m.title)}</b>
+            <span class="hint">×${m.count}${m.t != null ? " · first at " + fmtTime(m.t) : ""}</span></span>
+            <button class="btn" data-open="${esc(m.source)}" style="width:auto">Open</button></div>`).join("")
+          || `<div class="hint">no other meeting in your library mentions it yet</div>`);
+        $$("button[data-open]", body).forEach(b => b.onclick = () => {
+          $("#hl-invmodal", el).style.display = "none";
+          open(b.dataset.open);
+        });
+      }
+    } catch (e) { body.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
   }
 
   /* ---------------- ask the meeting ---------------- */
@@ -1541,11 +1823,27 @@ const HighlighterPage = (() => {
     $("#hl-transcribe", el).onclick = transcribe;
     $("#hl-txt", el).onclick = exportTxt;
     $("#hl-srt", el).onclick = exportSrt;
-    $("#hl-gtranslate", el).onclick = gTranslate;
     $("#hl-askgo", el).onclick = askMeeting;
     $("#hl-askq", el).addEventListener("keydown", e => { if (e.key === "Enter") askMeeting(); });
-    $("#hl-aibrief", el).onclick = aiBrief;
+    $("#hl-aibrief", el).onclick = () => aiBrief(false);
     $("#hl-askai", el).onclick = askAI;
+    $("#hl-report", el).onclick = () => fullReport(false);
+    $("#hl-trsum", el).onclick = () => translate("summary");
+    $("#hl-trtxt", el).onclick = () => translate("transcript");
+    $("#hl-invsel", el).onclick = () => {
+      const sel = String(window.getSelection() || "").trim();
+      investigate(sel || $("#hl-q", el).value.trim());
+    };
+    $("#hl-cm-close", el).onclick = () => { $("#hl-clipsmodal", el).style.display = "none"; };
+    $("#hl-clipsmodal", el).onclick = e => {
+      if (e.target.id === "hl-clipsmodal") e.target.style.display = "none";
+    };
+    $("#hl-inv-close", el).onclick = () => { $("#hl-invmodal", el).style.display = "none"; };
+    $("#hl-invmodal", el).onclick = e => {
+      if (e.target.id === "hl-invmodal") e.target.style.display = "none";
+    };
+    $$("#hl-invtabs .chip", el).forEach(c => c.onclick = () =>
+      invTab(c.dataset.tab, $("#hl-inv-q", el).textContent));
 
     // transport keys, NLE muscle memory: space play/pause, arrows ±5s —
     // never while typing in a field
