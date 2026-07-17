@@ -26,6 +26,10 @@
     railTools.appendChild(railItem(t.id, t.name, glyphSVG(t.acc, t.ready), t.acc,
       t.ready ? "" : t.when));
   });
+  // the Resolve resources live with the tools — they ARE the toolkit
+  railTools.appendChild(railItem("davinci", "DaVinci Tools",
+    `<svg viewBox="0 0 20 20" fill="none"><path d="M4 5.5h12v9H4zM4 8h12M7.5 5.5V8m5-2.5V8m-6 4h7"
+      stroke="var(--cream-dim)" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>`, null));
 
   /* the community pair: their own header, square glyphs, a tinted corner —
      the visual line between "the workbench" and "the apps BIG brought" */
@@ -43,8 +47,6 @@
     g("M4 6h12M4 10h12M4 14h8"), null));
   railSuite.appendChild(railItem("ofx", "Install OpenFX",
     g("M10 4v8m0 0 3-3m-3 3-3-3M4.5 15.5h11"), null));
-  railSuite.appendChild(railItem("davinci", "DaVinci Tools",
-    g("M4 5.5h12v9H4zM4 8h12M7.5 5.5V8m5-2.5V8m-6 4h7"), null));
   railSuite.appendChild(railItem("models", "Models",
     g("M10 3.5 16 7v6l-6 3.5L4 13V7zM10 10l6-3M10 10 4 7m6 3v6.5"), null));
   railSuite.appendChild(railItem("settings", "Settings",
