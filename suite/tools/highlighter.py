@@ -732,6 +732,7 @@ def register_highlighter(app, jobs, frames):
         files = [f for f in files if Path(f).is_file()]
         preset = str(body.get("preset", "h264"))
         title = str(body.get("title", ""))
+        fx = body.get("fx") or None         # [{speed, fade}] aligned with files
         cards = body.get("cards") or None   # [{label, t}] aligned with files
         if cards:
             cards = [{"label": str(c.get("label", "")), "t": float(c.get("t", 0))}
@@ -750,7 +751,7 @@ def register_highlighter(app, jobs, frames):
             job.message = "stitching the sections…"
             rep = stitch_files(files, out, preset=preset, progress=prog,
                                cancelled=lambda: job.cancel_requested,
-                               cards=cards, title=title)
+                               cards=cards, title=title, fx=fx)
             job.message = (f"{rep['clips']} clips"
                            + (f" · {rep['cards']} title cards"
                               if rep.get("cards") else "")

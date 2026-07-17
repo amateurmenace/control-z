@@ -88,6 +88,7 @@ function applyJob(job) {
   /* copy: a watcher is allowed to unregister itself from inside the call */
   (CZ.jobWatchers.get(job.id) || []).slice().forEach(fn => { try { fn(job); } catch (e) {} });
   if (window.QueuePage) QueuePage.onJob(job);
+  if (window.JobToasts) JobToasts.onJob(job);
 }
 
 /* returns an unregister function; callers that only want progress can ignore it */

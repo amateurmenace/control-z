@@ -65,6 +65,37 @@
     b.style.color = n ? "var(--amber)" : "";
   }, 800);
 
+  /* ---------- job toasts: every queued thing, live, bottom-right ---------- */
+  const jt = document.createElement("div");
+  jt.id = "jobtoasts";
+  document.body.appendChild(jt);
+  window.JobToasts = {
+    onJob(j) {
+      let card = jt.querySelector(`[data-jid="${j.id}"]`);
+      const active = ["queued", "running"].includes(j.status);
+      if (!card && !active) return;          // never resurrect finished jobs
+      if (!card) {
+        jt.insertAdjacentHTML("beforeend", `
+          <div class="jt-card" data-jid="${j.id}">
+            <div class="jt-label"></div>
+            <div class="jt-bar"><i></i></div>
+            <div class="jt-msg"></div>
+          </div>`);
+        card = jt.querySelector(`[data-jid="${j.id}"]`);
+        card.onclick = () => go("queue");
+      }
+      $(".jt-label", card).textContent = j.label || j.kind || "job";
+      const pct = Math.round(Math.max(0, j.progress || 0) * 100);
+      $(".jt-bar i", card).style.width = (active ? pct : 100) + "%";
+      $(".jt-msg", card).textContent = j.status === "queued" ? "queued"
+        : j.status === "running" ? `${pct}% — ${j.message || "working"}`
+        : (j.message || j.status);
+      card.classList.toggle("done", j.status === "done");
+      card.classList.toggle("err", ["error", "cancelled"].includes(j.status));
+      if (!active) setTimeout(() => card.remove(), 7000);
+    },
+  };
+
   /* ---------- keyboard: route to the active viewer ---------- */
   addEventListener("keydown", e => {
     if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;

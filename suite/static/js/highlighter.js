@@ -201,7 +201,7 @@ const HighlighterPage = (() => {
       </div>
 
       <!-- EDIT -->
-      <div id="hl-sec-edit" style="display:none">
+      <div id="hl-sec-edit">
         <div class="hl-nle">
           <div class="hl-toolrow">
             <span class="tag">the reel</span>
@@ -265,7 +265,7 @@ const HighlighterPage = (() => {
       </div>
 
       <!-- ANALYZE -->
-      <div id="hl-sec-analyze" style="display:none">
+      <div id="hl-sec-analyze">
         <div class="hl-ana" id="hl-ana"></div>
       </div>
     </div>
@@ -309,6 +309,9 @@ const HighlighterPage = (() => {
               <button class="btn cta bright" id="hl-exp-go" style="flex:1">Make the MP4</button>
             </div>
             <div id="hl-exp-stages"></div>
+            <div class="hint" style="margin-top:8px">exports run in the background —
+              close this and keep working; the card in the corner carries the progress,
+              and the Queue holds the file when it's done</div>
           </div>
         </div>
       </div>
@@ -1014,7 +1017,32 @@ const HighlighterPage = (() => {
           <input data-k="${k}" data-e="start" value="${c.start.toFixed(1)}" spellcheck="false" title="in point (s)">
           <input data-k="${k}" data-e="end" value="${c.end.toFixed(1)}" spellcheck="false" title="out point (s)">
         </div>
+        <div class="cfx">
+          <button data-nud="${k}|start|-0.5" title="in point 0.5s earlier">◂in</button>
+          <button data-nud="${k}|start|0.5" title="in point 0.5s later">in▸</button>
+          <select data-spd="${k}" title="playback speed — rendered into the export">
+            ${[0.5, 1, 1.5, 2].map(s => `<option value="${s}"${(c.speed || 1) === s ? " selected" : ""}>${s}×</option>`).join("")}
+          </select>
+          <label title="0.35s fade in/out on this clip — rendered into the export">
+            <input type="checkbox" data-fade="${k}"${c.fade ? " checked" : ""}>fade</label>
+          <button data-nud="${k}|end|-0.5" title="out point 0.5s earlier">◂out</button>
+          <button data-nud="${k}|end|0.5" title="out point 0.5s later">out▸</button>
+        </div>
       </div>`).join("");
+    $$("[data-nud]", box).forEach(b => b.onclick = () => {
+      const [k, e2, d] = b.dataset.nud.split("|");
+      const c = S.timeline[+k];
+      c[e2] = Math.max(0, c[e2] + parseFloat(d));
+      if (c.end <= c.start) c.end = c.start + 0.5;
+      renderTimeline();
+    });
+    $$("select[data-spd]", box).forEach(s => s.onchange = () => {
+      S.timeline[+s.dataset.spd].speed = parseFloat(s.value);
+      updateMetaLine();
+    });
+    $$("input[data-fade]", box).forEach(f => f.onchange = () => {
+      S.timeline[+f.dataset.fade].fade = f.checked;
+    });
     $$(".hl-clip", box).forEach(clipEl => {
       clipEl.addEventListener("dragstart", e => {
         clipEl.classList.add("dragging");
@@ -1209,13 +1237,21 @@ const HighlighterPage = (() => {
           const hit = S.timeline.find(c => c.start >= a - 1 && c.start <= b + 1);
           return { label: hit?.label || "", t: a };
         }) : null;
+        const fileFx = files.map(f => {
+          const m = f.match(/\[(\d+)-(\d+)\]\.\w+$/);
+          const a = m ? +m[1] : 0, b2 = m ? +m[2] : 1e9;
+          const hit = S.timeline.find(c => c.start >= a - 1 && c.start <= b2 + 1);
+          return { speed: hit?.speed || 1, fade: !!hit?.fade };
+        });
         job2 = await api("/api/highlighter/stitch", {
-          files, preset, cards: spanCards, title });
+          files, preset, cards: spanCards, title, fx: fileFx });
       } else {
         job2 = await api("/api/highlighter/reel", {
           path: S.source, preset, cards: wantCards, title,
           ranges: S.timeline.map(c => ({ start: c.start, end: c.end,
-                                         label: c.label || "" })) });
+                                         label: c.label || "",
+                                         speed: c.speed || 1,
+                                         fade: !!c.fade })) });
       }
       watchJob(job2.id, j => s2.set(j.status === "running"
         ? `${Math.round(Math.max(0, j.progress) * 100)}% — ${j.message || "cutting"}` : j.status));
@@ -1436,13 +1472,17 @@ const HighlighterPage = (() => {
 
   /* ---------------- sections nav ---------------- */
   function showSec(name) {
-    ["highlight", "edit", "analyze"].forEach(s => {
-      $(`#hl-sec-${s}`, el).style.display = s === name ? "" : "none";
-    });
+    // all three sections live on one page now — the pills are anchors
     $$("#hl-pills .hl-pill", el).forEach(p =>
       p.classList.toggle("on", p.dataset.sec === name));
-    if (name === "highlight") drawSpark();
-    if (name === "analyze") drawCharts();  // canvases size 0 while hidden
+    if (name === "highlight") {
+      $("#hl-loaded", el).scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      $(`#hl-sec-${name}`, el).scrollIntoView({ behavior: "smooth",
+                                                block: "start" });
+    }
+    drawSpark();
+    drawCharts();
   }
 
   /* ---------------- wire up ---------------- */

@@ -12,9 +12,31 @@ from pathlib import Path
 
 
 def media_root() -> Path:
-    """~/Movies/control-z on macOS, ~/Videos/control-z elsewhere."""
+    """~/Movies/control-z on macOS, ~/Videos/control-z elsewhere — unless
+    the user pointed the suite somewhere else (Settings → outputs; the
+    choice lives in app support as outputs.json)."""
+    try:
+        import json
+        f = support_dir() / "outputs.json"
+        if f.exists():
+            root = json.loads(f.read_text()).get("root", "")
+            if root:
+                return Path(root).expanduser()
+    except (OSError, ValueError):
+        pass
     base = Path.home() / ("Movies" if sys.platform == "darwin" else "Videos")
     return base / "control-z"
+
+
+def set_media_root(root: str) -> Path:
+    """Write (or clear, with "") the user's chosen output root."""
+    import json
+    f = support_dir() / "outputs.json"
+    if not root:
+        f.unlink(missing_ok=True)
+    else:
+        f.write_text(json.dumps({"root": str(Path(root).expanduser())}))
+    return media_root()
 
 
 def media_dir(tool: str) -> Path:

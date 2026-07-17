@@ -132,13 +132,26 @@ def render_reel(src: str, ranges: List[dict], out_path: str,
         parts, maps = [], []
         for k, r in enumerate(ranges):
             a, b = float(r["start"]), float(r["end"])
+            # per-clip edits from the timeline: speed (0.5–2×) and a short
+            # fade in/out — cuts stay hard unless the editor asked
+            speed = min(2.0, max(0.5, float(r.get("speed") or 1.0)))
+            fade = bool(r.get("fade"))
+            span = (b - a) / speed
+            vfx = f",setpts=(PTS-STARTPTS)/{speed:.3f}" if speed != 1.0 \
+                else ",setpts=PTS-STARTPTS"
+            afx = f",atempo={speed:.3f}" if speed != 1.0 else ""
+            if fade and span > 1.0:
+                vfx += (f",fade=t=in:st=0:d=0.35"
+                        f",fade=t=out:st={max(0.0, span - 0.35):.3f}:d=0.35")
+                afx += (f",afade=t=in:st=0:d=0.35"
+                        f",afade=t=out:st={max(0.0, span - 0.35):.3f}:d=0.35")
             vnorm = ",setsar=1,format=yuv420p" if use_cards else ""
             anorm = "," + _ANORM if use_cards else ""
-            parts.append(f"[0:v]trim=start={a:.3f}:end={b:.3f},"
-                         f"setpts=PTS-STARTPTS{vnorm}[v{k}]")
+            parts.append(f"[0:v]trim=start={a:.3f}:end={b:.3f}"
+                         f"{vfx}{vnorm}[v{k}]")
             if has_audio:
                 parts.append(f"[0:a]atrim=start={a:.3f}:end={b:.3f},"
-                             f"asetpts=PTS-STARTPTS{anorm}[a{k}]")
+                             f"asetpts=PTS-STARTPTS{afx}{anorm}[a{k}]")
             if use_cards:
                 parts.append(f"[{1 + k}:v]fps={fps},setpts=PTS-STARTPTS,"
                              f"setsar=1,format=yuv420p[c{k}]")
@@ -156,7 +169,9 @@ def render_reel(src: str, ranges: List[dict], out_path: str,
             args += ["-map", "[a]"]
         args += ffrun.encoder_args(spec, audio=has_audio)
         args += [out]
-        total = sum(float(r["end"]) - float(r["start"]) for r in ranges) \
+        total = sum((float(r["end"]) - float(r["start"]))
+                    / min(2.0, max(0.5, float(r.get("speed") or 1.0)))
+                    for r in ranges) \
             + (len(pngs) * CARD_SECONDS if use_cards else 0)
         ffrun.run(args, duration=total, progress=progress, cancelled=cancelled)
     return {"out": out, "duration": round(total, 2), "clips": n,
@@ -168,10 +183,10 @@ def stitch_files(files: List[str], out_path: str, preset: str = "h264",
                  progress: Optional[Callable[[float, str], None]] = None,
                  cancelled: Optional[Callable[[], bool]] = None,
                  cards: Optional[List[dict]] = None,
-                 title: str = "") -> dict:
+                 title: str = "", fx: Optional[List[dict]] = None) -> dict:
     """Concat whole files into one reel — the section-download path, where
     each kept moment already arrived as its own clip. cards as in
-    render_reel, aligned with files."""
+    render_reel, aligned with files; fx too: [{speed, fade}] per clip."""
     if not files:
         raise ValueError("no clips to stitch")
     infos = [probe(f) for f in files]
@@ -200,9 +215,19 @@ def stitch_files(files: List[str], out_path: str, preset: str = "h264",
         parts, maps = [], []
         vnorm = ",setsar=1,format=yuv420p" if use_cards else ""
         for k in range(n):
-            parts.append(f"[{k}:v]setpts=PTS-STARTPTS,fps=30{vnorm}[v{k}]")
+            e = (fx[k] if fx and k < len(fx) else {}) or {}
+            speed = min(2.0, max(0.5, float(e.get("speed") or 1.0)))
+            span = (infos[k].duration or 0) / speed
+            vfx = f",setpts=(PTS-STARTPTS)/{speed:.3f}" if speed != 1.0 else ""
+            afx = f",atempo={speed:.3f}" if speed != 1.0 else ""
+            if e.get("fade") and span > 1.0:
+                vfx += (f",fade=t=in:st=0:d=0.35"
+                        f",fade=t=out:st={max(0.0, span - 0.35):.3f}:d=0.35")
+                afx += (f",afade=t=in:st=0:d=0.35"
+                        f",afade=t=out:st={max(0.0, span - 0.35):.3f}:d=0.35")
+            parts.append(f"[{k}:v]setpts=PTS-STARTPTS{vfx},fps=30{vnorm}[v{k}]")
             if has_audio:
-                parts.append(f"[{k}:a]asetpts=PTS-STARTPTS"
+                parts.append(f"[{k}:a]asetpts=PTS-STARTPTS{afx}"
                              + ("," + _ANORM if use_cards else "") + f"[a{k}]")
             if use_cards:
                 # card k sits at input n+k; its silence at input 2n+k —

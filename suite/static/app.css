@@ -785,3 +785,55 @@ a { color: var(--cream-dim); }
   content: "▋"; color: #22C55E; animation: hlblink 1s steps(1) infinite;
 }
 @keyframes hlblink { 50% { opacity: 0; } }
+
+/* Highlighter timeline: the per-clip edit row */
+.hl-clip .cfx {
+  display: flex; gap: 3px; align-items: center; margin-top: 3px;
+  font-size: 9.5px; color: #B9BDB2;
+}
+.hl-clip .cfx button {
+  background: #23261D; border: 1px solid #3A3E30; color: #B9BDB2;
+  border-radius: 4px; font-size: 9px; padding: 1px 4px; cursor: pointer;
+}
+.hl-clip .cfx button:hover { color: #fff; border-color: #6b7060; }
+.hl-clip .cfx select {
+  background: #23261D; border: 1px solid #3A3E30; color: #B9BDB2;
+  border-radius: 4px; font-size: 9.5px; padding: 1px 2px;
+}
+.hl-clip .cfx label { display: flex; gap: 3px; align-items: center; cursor: pointer; }
+
+/* job toasts: everything queued, bottom-right, live */
+#jobtoasts {
+  position: fixed; right: 14px; bottom: 34px; z-index: 70;
+  display: flex; flex-direction: column; gap: 8px; width: 280px;
+  pointer-events: none;
+}
+.jt-card {
+  pointer-events: auto; cursor: pointer;
+  background: var(--ink-2); border: 1.5px solid var(--cream);
+  border-radius: 10px; padding: 9px 11px 8px;
+  box-shadow: 4px 4px 0 rgba(35,38,29,.22);
+  animation: jtin .18s ease-out;
+}
+@keyframes jtin { from { transform: translateY(8px); opacity: 0; } }
+.jt-label { font-size: 11.5px; font-weight: 600; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.jt-bar { height: 4px; background: var(--ink-3); border-radius: 3px;
+  margin: 5px 0 4px; overflow: hidden; }
+.jt-bar i { display: block; height: 100%; background: var(--hl-cta, #22C55E);
+  width: 0%; transition: width .4s ease; }
+.jt-msg { font-family: var(--mono); font-size: 9.5px; color: var(--cream-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jt-card.done { border-color: var(--ok); }
+.jt-card.done .jt-msg { color: var(--ok); }
+.jt-card.err { border-color: var(--err); }
+.jt-card.err .jt-msg { color: var(--err); white-space: normal; }
+
+/* queue: where finished work landed */
+.qout {
+  display: block; background: none; border: 0; padding: 1px 0;
+  font-family: var(--mono); font-size: 10px; color: var(--cream-dim);
+  cursor: pointer; text-align: left; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.qout:hover { color: var(--cream); text-decoration: underline; }

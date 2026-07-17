@@ -113,6 +113,23 @@ def register_settings(app, jobs, frames):
                                 str(body.get("password", "")),
                                 str(body.get("host", "")))
 
+    # -- outputs: where finished files land ---------------------------------
+
+    @app.get("/api/settings/outputs")
+    def api_outputs_get():
+        from czcore.paths import media_root
+        return {"root": str(media_root())}
+
+    @app.post("/api/settings/outputs")
+    def api_outputs_set(body: dict = Body(...)):
+        from czcore.paths import set_media_root
+        root = str(body.get("root", "")).strip()
+        if root and not Path(root).expanduser().parent.exists():
+            return JSONResponse({"error": f"the folder above {root} doesn't "
+                                          "exist — pick a real place"},
+                                status_code=422)
+        return {"root": str(set_media_root(root))}
+
     # -- AI: the user's own Anthropic key, optional, never the default -------
 
     @app.get("/api/settings/llm")
