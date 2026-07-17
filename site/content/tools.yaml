@@ -25,6 +25,8 @@
   links:
     github: https://github.com/amateurmenace/Hush-OpenNR
     download: https://github.com/amateurmenace/Hush-OpenNR/releases/latest
+    guide: guide.html
+    guide_label: Hush + Speak guide
   quickstart:
   - Drop Hush Open NR on a node and click Auto Setup — it measures the clip and dials in every slider.
   - 'Check the measurement: Step 1 → Scope: Measurements.'
@@ -526,6 +528,8 @@
   links:
     github: https://github.com/amateurmenace/Speak
     download: https://github.com/amateurmenace/Speak/releases/latest
+    guide: guide.html
+    guide_label: Hush + Speak guide
   quickstart:
   - Install Speak, then put it on the LAST node of your grade — Hush opens the tree, Speak closes it.
   - Pick a tone scale and printer lights; the H&D scope plots the exact curve your pixels are using.

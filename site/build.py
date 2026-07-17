@@ -51,8 +51,12 @@ def main() -> int:
         "templates.html": ("templates.html", "templates"),
         "node-tree.html": ("node-tree.html", "node-tree"),
     }
+    # carried pages (not templated here): the Hush design study and the
+    # Hush+Speak visual guide are authored in their own repos and copied in
+    # below, so the stale sweep must not delete them.
+    carried = {"whitepaper.html", "guide.html"}
     for stale in DOCS.glob("*.html"):
-        if stale.name not in pages and stale.name != "whitepaper.html":
+        if stale.name not in pages and stale.name not in carried:
             stale.unlink()
             print(f"  removed stale {stale.name}")
     for out_name, (tpl, page) in pages.items():
@@ -71,6 +75,16 @@ def main() -> int:
         if src.exists():
             (DOCS / name).write_bytes(src.read_bytes())
             print(f"  {name}  (carried from Hush-OpenNR/docs)")
+
+    # carry the Hush+Speak visual guide (authored in the Speak repo, self-
+    # contained) and its PDF — linked from both tool cards, same pattern.
+    guide_src = Path.home() / "Speak" / "docs" / "guide"
+    for src_name, out_name in (("index.html", "guide.html"),
+                               ("hush-speak-guide.pdf", "hush-speak-guide.pdf")):
+        src = guide_src / src_name
+        if src.exists():
+            (DOCS / out_name).write_bytes(src.read_bytes())
+            print(f"  {out_name}  (carried from Speak/docs/guide)")
     print(f"baked → {DOCS}")
     return 0
 

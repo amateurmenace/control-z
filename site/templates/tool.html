@@ -22,6 +22,7 @@
   <div class="cta">
     {% if t.links and t.links.download %}<a class="btn btn-green" href="{{ t.links.download }}">Download</a>{% endif %}
     {% if t.links and t.links.github %}<a class="btn btn-line" href="{{ t.links.github }}">Source</a>{% endif %}
+    {% if t.links and t.links.guide %}<a class="btn btn-paper" href="{{ t.links.guide }}">{{ t.links.guide_label or 'Visual guide' }}<span class="up">↗</span></a>{% endif %}
     {% if not (t.links and t.links.download) %}<a class="btn btn-line" href="roadmap.html">Building in the open — roadmap</a>{% endif %}
   </div>
   <div class="meta">{{ t.platforms|join(" · ") }} · for {{ t.audiences|join(", ") }}</div>

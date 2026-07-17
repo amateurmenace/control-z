@@ -486,6 +486,7 @@
         <div class="cta" style="margin-top:4px">
           {% if t.links and t.links.download %}<a class="btn btn-green" href="{{ t.links.download }}">Download</a>{% endif %}
           {% if t.links and t.links.github %}<a class="btn btn-line" href="{{ t.links.github }}">Source</a>{% endif %}
+          {% if t.links and t.links.guide %}<a class="btn btn-paper" href="{{ t.links.guide }}">{{ t.links.guide_label or 'Visual guide' }}<span class="up">↗</span></a>{% endif %}
         </div>
       </div>
     </div>
