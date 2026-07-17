@@ -19,11 +19,14 @@ class Viewer {
     this._raf = null;
     this._lastTick = 0;
 
+    this.onOpen = opts.onOpen || null;   // page hook: (path) => open it
+
     wrap.classList.add("viewer-wrap");
     wrap.innerHTML = `
       <canvas></canvas>
       <div class="viewer-empty"><div class="big">no clip open</div>
-        <div>open a file above, or pick a recent from Home</div></div>
+        <div>drag a clip here — or</div>
+        <button class="browse-btn">Browse…</button></div>
       <div class="viewer-hud" style="display:none"></div>
       <div class="viewer-ctl" style="display:none">
         <button data-z="fit" class="on" title="fit to window (F)">fit</button>
@@ -41,6 +44,14 @@ class Viewer {
     wrap.addEventListener("wheel", e => this._wheel(e), { passive: false });
     wrap.addEventListener("mousedown", e => this._down(e));
     wrap.addEventListener("dblclick", () => this.setZoom(this.zoomMode === "fit" ? "1" : "fit"));
+
+    $(".browse-btn", wrap).onclick = e => { e.stopPropagation(); browseForPath(p => this._open(p)); };
+    wireDropZone(wrap, p => this._open(p));
+  }
+
+  _open(path) {
+    if (path && this.onOpen) this.onOpen(path);
+    else if (path) toast("this page didn't wire its open handler", true);
   }
 
   setClip(clip) {

@@ -172,18 +172,92 @@ def check_async(force: bool = False) -> dict:
     return status()
 
 
+def _run_json(args: list, timeout: float = 60.0):
+    """yt-dlp -J … -> parsed JSON (one object per line for playlists)."""
+    exe = binary_path()
+    if not exe.exists():
+        raise RuntimeError(
+            "yt-dlp isn't installed yet — open the page once with the network "
+            "up (the nightly check installs it), then retry.")
+    out = subprocess.run([str(exe)] + args, capture_output=True, text=True,
+                         timeout=timeout)
+    if out.returncode != 0:
+        why = next((ln for ln in reversed(out.stderr.splitlines())
+                    if "ERROR" in ln), out.stderr.strip()[-300:])
+        raise RuntimeError(f"yt-dlp couldn't read that — {why[:300]}")
+    return [json.loads(ln) for ln in out.stdout.splitlines() if ln.strip()]
+
+
+def probe_url(url: str) -> dict:
+    """Metadata without downloading a byte of video: title, duration,
+    uploader, and whether captions exist to seed a transcript from."""
+    rows = _run_json(["-J", "--skip-download", "--no-playlist", url])
+    if not rows:
+        raise RuntimeError("that URL answered with no metadata")
+    d = rows[0]
+    subs = set(d.get("subtitles") or {}) | set(d.get("automatic_captions") or {})
+    return {"id": d.get("id"), "title": d.get("title"),
+            "duration": d.get("duration"),
+            "uploader": d.get("uploader") or d.get("channel"),
+            "upload_date": d.get("upload_date"),
+            "url": d.get("webpage_url") or url,
+            "captions": any(l == "en" or str(l).startswith("en") for l in subs),
+            "extractor": d.get("extractor_key")}
+
+
+def fetch_captions(url: str, outdir: Path) -> dict:
+    """Captions + info json only — the transcript arrives before any video.
+    Returns {"vtt": path|None, "info": path|None, "id": video id}."""
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    exe = binary_path()
+    if not exe.exists():
+        raise RuntimeError("yt-dlp isn't installed yet — the nightly check "
+                           "installs it on page open; get online once.")
+    out = subprocess.run(
+        [str(exe), url, "--skip-download", "--no-playlist",
+         "--write-info-json", "--write-subs", "--write-auto-subs",
+         "--sub-langs", "en,en-orig", "--sub-format", "vtt/srt",
+         "-o", str(outdir / "meeting.%(ext)s"),
+         "--print", "id"],
+        capture_output=True, text=True, timeout=120)
+    vid = next((ln.strip() for ln in out.stdout.splitlines() if ln.strip()), "")
+    vtt = next((p for p in sorted(outdir.iterdir())
+                if p.suffix in (".vtt", ".srt")), None)
+    info = outdir / "meeting.info.json"
+    if out.returncode != 0 and not vtt:
+        why = next((ln for ln in reversed(out.stderr.splitlines())
+                    if "ERROR" in ln), "")
+        raise RuntimeError(f"couldn't fetch captions — {why[:250] or 'no captions'}")
+    return {"vtt": str(vtt) if vtt else None,
+            "info": str(info) if info.exists() else None, "id": vid}
+
+
+def search(query: str, n: int = 12) -> list:
+    """YouTube search through yt-dlp itself — no API key, flat and fast."""
+    rows = _run_json(["-J", "--flat-playlist", f"ytsearch{max(1, min(30, n))}:{query}"],
+                     timeout=45)
+    entries = (rows[0].get("entries") or []) if rows else []
+    return [{"id": e.get("id"), "title": e.get("title"),
+             "duration": e.get("duration"),
+             "uploader": e.get("uploader") or e.get("channel"),
+             "url": e.get("url") or f"https://www.youtube.com/watch?v={e.get('id')}",
+             "views": e.get("view_count")} for e in entries if e.get("id")]
+
+
 _PROG = re.compile(r"\[download\]\s+(\d+(?:\.\d+)?)%")
 
 
 def download(url: str, outdir: Path, quality: str = "best",
              progress: Optional[Callable[[float, str], None]] = None,
              cancelled: Optional[Callable[[], bool]] = None,
-             extra_args: Optional[list] = None) -> dict:
+             extra_args: Optional[list] = None,
+             sections: Optional[list] = None) -> dict:
     """Fetch one video (YouTube, Zoom, direct file — yt-dlp's thousand sites).
 
-    Returns {"path": final file, "sidecars": [info/subs written beside it]}.
-    Raises RuntimeError with a sentence when yt-dlp isn't installed yet or
-    the fetch fails.
+    sections: [(start_s, end_s), …] downloads ONLY those spans — each lands
+    as its own file (named with the span) instead of the whole meeting.
+    Returns {"path": final file, "paths": all files, "sidecars": […]}.
     """
     exe = binary_path()
     if not exe.exists():
@@ -192,10 +266,10 @@ def download(url: str, outdir: Path, quality: str = "best",
             "up (the nightly check installs it), then retry.")
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
+    template = "%(title).120B [%(id)s].%(ext)s"
     # subtitles: just en + en-orig — asking for en.* pulls every translated
     # variant and trips YouTube's 429 rate limit, killing the whole fetch
     cmd = [str(exe), url,
-           "-o", str(outdir / "%(title).120B [%(id)s].%(ext)s"),
            "-f", FORMATS.get(quality, quality),
            "--newline", "--no-playlist",
            "--merge-output-format", "mp4",
@@ -203,10 +277,19 @@ def download(url: str, outdir: Path, quality: str = "best",
            "--write-subs", "--write-auto-subs",
            "--sub-langs", "en,en-orig", "--sub-format", "vtt/srt",
            "--no-simulate", "--print", "after_move:filepath"]
+    for a, b in (sections or []):
+        cmd += ["--download-sections", f"*{float(a):.1f}-{float(b):.1f}"]
+    if sections:
+        # each span is its own clip; keyframe cuts so the files start clean
+        template = ("%(title).100B [%(id)s]"
+                    " [%(section_start)d-%(section_end)d].%(ext)s")
+        cmd += ["--force-keyframes-at-cuts", "--no-write-subs",
+                "--no-write-auto-subs"]
+    cmd += ["-o", str(outdir / template)]
     cmd += list(extra_args or [])
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1)
-    final, tail = None, []
+    finals, tail = [], []
     for line in proc.stdout:
         line = line.rstrip("\n")
         if cancelled and cancelled():
@@ -217,7 +300,7 @@ def download(url: str, outdir: Path, quality: str = "best",
         if m and progress:
             progress(float(m.group(1)) / 100.0, line.split("]", 1)[-1].strip())
         elif line.startswith("/") or re.match(r"^[A-Za-z]:\\", line):
-            final = line.strip()  # --print after_move:filepath
+            finals.append(line.strip())  # --print after_move:filepath, per file
         elif line:
             tail.append(line)
             if progress and line.startswith("["):
@@ -225,13 +308,15 @@ def download(url: str, outdir: Path, quality: str = "best",
     code = proc.wait()
     # the video landing is what success means — a failed subtitle fetch after
     # it (rate limits love caption endpoints) must not throw the video away
-    if not final or not Path(final).exists():
+    finals = [f for f in finals if Path(f).exists()]
+    if not finals:
         why = next((t for t in reversed(tail) if "ERROR" in t), tail[-1] if tail else "")
         raise RuntimeError(f"yt-dlp couldn't fetch this — {why[:300] or f'exit {code}'}")
-    p = Path(final)
+    p = Path(finals[-1])
     # startswith, not glob: yt-dlp names carry "[id]", which glob reads as a
     # character class and never matches
+    stem0 = Path(finals[0]).stem.split(" [")[0]
     sidecars = [str(s) for s in p.parent.iterdir()
-                if s != p and s.name.startswith(p.stem)
+                if str(s) not in finals and s.name.startswith(stem0)
                 and s.suffix in (".json", ".vtt", ".srt")]
-    return {"path": str(p), "sidecars": sidecars}
+    return {"path": str(p), "paths": finals, "sidecars": sidecars}

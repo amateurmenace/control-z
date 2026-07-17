@@ -388,6 +388,7 @@ const RisePage = (() => {
   /* ---------- wire up ---------- */
   function init() {
     viewer = new Viewer($("#rs-viewer", el), { h: 540 });
+    viewer.onOpen = p => open(p);
     viewer.overlay = overlay;
     viewer.onFrame = i => {
       strip.setFrame(i);

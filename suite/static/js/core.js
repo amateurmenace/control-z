@@ -180,6 +180,59 @@ function go(name, arg) {
   if (page.onshow) page.onshow(arg);
 }
 
+/* ---------- open-a-clip helpers: drop zones + the Browse dialog ----------
+   The server opens files by PATH (local-only covenant — nothing uploads).
+   In the app window pywebview stamps dragged Files with pywebviewFullPath;
+   plain browsers don't reveal paths, so the drop explains itself instead
+   of failing silently. file:// URIs (dragged from some file managers) work
+   everywhere. */
+function droppedPath(dt) {
+  for (const f of dt.files || []) {
+    if (f.pywebviewFullPath) return f.pywebviewFullPath;
+    if (f.path) return f.path;               // some embedded runtimes
+  }
+  const uri = dt.getData && (dt.getData("text/uri-list") || dt.getData("text/plain"));
+  if (uri) {
+    const line = uri.split("\n").map(s => s.trim()).find(s => s && !s.startsWith("#"));
+    if (line && line.startsWith("file://")) {
+      try { return decodeURIComponent(new URL(line).pathname); } catch (e) {}
+    }
+    if (line && line.startsWith("/")) return line;
+  }
+  return null;
+}
+
+function wireDropZone(el, onPath) {
+  let depth = 0;
+  el.addEventListener("dragover", e => { e.preventDefault(); });
+  el.addEventListener("dragenter", e => {
+    e.preventDefault();
+    depth++;
+    el.classList.add("dropping");
+  });
+  el.addEventListener("dragleave", () => {
+    if (--depth <= 0) { depth = 0; el.classList.remove("dropping"); }
+  });
+  el.addEventListener("drop", e => {
+    e.preventDefault();
+    depth = 0;
+    el.classList.remove("dropping");
+    const p = droppedPath(e.dataTransfer);
+    if (p) onPath(p);
+    else if ((e.dataTransfer.files || []).length) {
+      toast("the browser hides file paths — use the app window for drag & " +
+            "drop, or Browse / paste the path", true);
+    }
+  });
+}
+
+async function browseForPath(onPath) {
+  try {
+    const r = await api("/api/dialog/open-file", {});
+    if (r.paths && r.paths[0]) onPath(r.paths[0]);
+  } catch (e) { toast(e.message, true); }
+}
+
 /* frame URL helper */
 const frameURL = (path, i, h) =>
   `/api/media/frame?path=${encodeURIComponent(path)}&i=${i}&h=${h || 540}`;

@@ -2,6 +2,52 @@
 
 ## unreleased
 
+### Highlighter goes web-app-shaped, the suite goes paper — 2026-07-16
+- **Community Highlighter now mirrors the web app** (community-highlighter
+  v9.5's shape), rebuilt on local reads that say what they are:
+  - **URL sessions**: paste a link → the meeting is *readable before any video
+    downloads* — metadata + captions land in a session folder, preview streams
+    through a YouTube embed (seek/play by postMessage), and a session whose
+    video already sits in the library **borrows the local twin's transcript**
+    instead of re-asking YouTube.
+  - **Executive brief** with clickable green [MM:SS] pills — extractive, the
+    meeting's own sentences, spread across the hour (`highlighter/insight.py`).
+  - **Highlights → timeline editor**: reel-style presets (Decisions, Public
+    comment, Controversial, Budget, Actions, Everything) drive the scorer; the
+    top 5 picks auto-load into a **dark NLE strip** — drag to reorder, trim
+    in/out, per-clip thumbs, prev/play/next transport — inside the light app.
+  - **Search every word** with a 50-bin sparkline, **word cloud** (civic
+    stopwords, top-3 glow), **Analyze** cards: decisions with outcomes,
+    entities (people/places/organizations/money, pattern-harvested), speaker
+    participation bars, question flow typed by its words, recurring topics.
+  - **Ask the meeting** — retrieval, labeled as such: best passages with
+    timestamps + follow-up suggestions; never invents prose.
+  - **Smart downloads**: the full recording at a chosen quality, or **only the
+    kept sections** (`--download-sections` + keyframe cuts, one clip per span)
+    which **stitch** into a reel (`stitch_files`). Transcript exports (.txt,
+    .srt) are built client-side; **Google Translate** button copies the full
+    text and opens the site — the web app's own free path for any language.
+  - Civic **Meeting Finder**: yt-dlp's own ytsearch — no API key.
+- **The suite turned light.** Paper cream chrome (the site's tokens, the web
+  app's cues), ink text, white neo-brutalist cards with offset shadows;
+  media surfaces (viewer, filmstrip, scopes, the NLE strip) stay dark on
+  purpose — footage lives in the dark, the chrome lives on paper. Highlighter
+  wears the web app's brand green (#1E7F63 / #22C55E).
+- **Home says "Make Something."**
+- **Every open-a-clip surface takes a drop now**: drag a file into any
+  viewer (or Clear's waveform, or Highlighter's hero) and it opens; a
+  **Browse…** button sits in the center of every empty state instead of only
+  up in the media bar. In the app window drops carry real paths (pywebview);
+  plain browsers explain themselves instead of failing silently.
+- czcore/ytdlp grew `probe_url` (metadata, no download), `fetch_captions`
+  (transcript-first ingest), `search` (ytsearch), and per-section downloads
+  with multi-file result tracking.
+- Tests: 20 new for the insight engine (extractive brief never paraphrases,
+  entity buckets, question typing, decision outcomes, participation shares,
+  retrieval ask hits and honest misses). Verified live: URL ingest, library
+  twin borrow, section-only download (two spans → two clips) → stitched reel,
+  full local flow (brief/cloud/analyze/ask), light theme across every page.
+
 ### the Make wave: four new tools, three doors, an About — 2026-07-16
 - **The suite is ten tools.** Two natives from the long-list spec and the two
   community apps that grew up at BIG, rebuilt on czcore — same jobs, no cloud,

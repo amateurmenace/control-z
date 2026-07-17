@@ -22,7 +22,8 @@ const ClearPage = (() => {
           <div id="cl-waves" style="position:relative;height:38%;min-height:130px;cursor:pointer">
             <canvas style="position:absolute;inset:0;width:100%;height:100%"></canvas>
             <div class="viewer-empty" id="cl-empty"><div class="big">no audio open</div>
-              <div>open a WAV, AIFF, or any video — the track is extracted</div></div>
+              <div>drag a WAV, AIFF, or any video here — the track is extracted</div>
+              <button class="browse-btn" id="cl-emptybrowse">Browse…</button></div>
           </div>
           <div id="cl-specwrap" style="position:relative;flex:1;border-top:1px solid var(--line-soft);display:none">
             <img id="cl-spec" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill">
@@ -320,6 +321,8 @@ const ClearPage = (() => {
   function init() {
     $("#cl-open", el).onclick = () => { const p = $("#cl-path", el).value.trim(); if (p) open(p); };
     $("#cl-path", el).addEventListener("keydown", e => { if (e.key === "Enter") $("#cl-open", el).click(); });
+    $("#cl-emptybrowse", el).onclick = e => { e.stopPropagation(); browseForPath(p => open(p)); };
+    wireDropZone($("#cl-waves", el).parentElement, p => open(p));
     $("#cl-browse", el).onclick = async () => {
       try {
         const r = await api("/api/dialog/open-file", {});

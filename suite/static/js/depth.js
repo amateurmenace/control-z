@@ -241,6 +241,7 @@ const DepthPage = (() => {
   /* ---------- wire up ---------- */
   function init() {
     viewer = new Viewer($("#dp-viewer", el), { h: 540 });
+    viewer.onOpen = p => open(p);
     viewer.overlay = overlay;
     viewer.onFrame = () => {
       strip.setFrame(viewer.i);

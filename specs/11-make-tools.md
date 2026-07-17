@@ -131,3 +131,39 @@ pyproject; `pillow` joins requirements (Slate's type).
   rows show a hidden thumb box.
 - GIF alpha is 1-bit by format law; the UI says "web use, cut with the
   ProRes."
+
+## Wave 2 (same day): the web-app shape, the paper theme
+
+The user pointed Highlighter at its ancestor's live deployment
+(community-highlighter.onrender.com, v9.5) and asked for parity. What ported,
+and how the covenant translated it:
+
+- Cloud-LLM features became **labeled local reads** (`highlighter/insight.py`):
+  brief = extractive sentences (never paraphrased), ask = retrieval with
+  timestamps, entities/questions/decisions = pattern passes. Each card in the
+  UI names its method.
+- **URL sessions** (`.meetings/<id>/` under the library) make a meeting
+  readable before any download; preview via YouTube embed postMessage;
+  a session whose video exists locally borrows the twin's transcript
+  (match `[id]` in the filename).
+- **Smart downloads**: full at quality, or kept-sections-only via
+  `--download-sections` (one file per span, `[start-end]` in the name,
+  keyframe cuts) → `stitch_files()` concats them into the reel.
+- **Reel styles** are keyword presets feeding the same scorer.
+- Timeline = the editing model now (drag-reorder, trim inputs); transcript
+  keep/✓ adds spans to it; top-5 picks auto-load like the web app.
+- **Theme**: the whole suite flipped to paper light (site cream + web app
+  cues); the `--ink/--cream` token names kept their meanings inverted on
+  purpose (surfaces/text) so every existing rule repainted itself. Media
+  surfaces stay dark. Highlighter's accent is the web app's #1E7F63.
+- **Drop zones everywhere**: `wireDropZone`/`browseForPath` in core.js;
+  Viewer empty states carry a centered Browse; pywebview stamps dropped
+  Files with `pywebviewFullPath` (browsers can't reveal paths — the drop
+  says so instead of failing).
+- Home: **"Make Something."**
+
+Not ported (honest): cross-meeting Knowledge Base dashboards (Index covers
+the local-search spirit; embeddings/ChromaDB stay out of the dependency
+tree), local MT translation (the Google-Translate copy-paste path ships,
+exactly like the web app's long-transcript fallback), streaming-LLM chat
+prose (retrieval instead), YouTube Data API metadata (yt-dlp only).

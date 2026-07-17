@@ -28,7 +28,7 @@ const ScribePage = (() => {
           <span class="clipmeta" id="sc-edithint" style="margin-left:auto">double-click a paragraph to edit ·
             select words → pull list</span>
         </div>
-        <div id="sc-transcript" style="flex:1;overflow-y:auto;padding:16px 22px;background:var(--ink);
+        <div id="sc-transcript" style="flex:1;overflow-y:auto;padding:16px 22px;background:#fff;
              font-size:14.5px;line-height:2.05">
           <div class="empty-grain" style="padding:36px 8px;color:var(--cream-faint);text-align:center">
             open a clip and transcribe — the transcript becomes the edit surface</div>
@@ -478,6 +478,7 @@ const ScribePage = (() => {
   /* ---------- wire up ---------- */
   function init() {
     viewer = new Viewer($("#sc-viewer", el), { h: 360 });
+    viewer.onOpen = p => open(p);
     viewer.overlay = overlay;
 
     $("#sc-open", el).onclick = () => { const p = $("#sc-path", el).value.trim(); if (p) open(p); };

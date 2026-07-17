@@ -51,7 +51,7 @@ const HomePage = (() => {
 
     el.innerHTML = `<div class="page-pad wide">
       <div class="tag">the workbench around resolve</div>
-      <h1 style="margin-top:6px">What are we creating today?</h1>
+      <h1 style="margin-top:6px">Make Something.</h1>
       <div class="doors">
         ${doorHTML("Prep", "footage on its way into your editor", PREP, "prep")}
         ${doorHTML("Make", "made new — from your footage, or from scratch", MAKE, "make")}

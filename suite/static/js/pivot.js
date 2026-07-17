@@ -402,6 +402,7 @@ const PivotPage = (() => {
   /* ---------- wire up ---------- */
   function init() {
     viewer = new Viewer($("#pv-viewer", el), { h: 360 });  // analyze warms this cache
+    viewer.onOpen = p => open(p);
     viewer.overlay = overlay;
     viewer.onFrame = i => { strip.setFrame(i); updateScopes(); renderShotHighlight(); };
     strip = new Filmstrip($("#pv-strip", el), i => { viewer.stop(); viewer.show(i); });
