@@ -393,6 +393,19 @@
   .dn:hover::before, .dn:focus-visible::before { transform:scale(1.05); }
   .daynight:hover .dn { flex:.86; }
   .daynight .dn:hover, .daynight .dn:focus-visible { flex:1.28; }
+  /* whole card opens the joint Hush + Speak page (stretched link); the small
+     release link on each side escapes above it to its own repo */
+  .dn { text-decoration:none; }
+  /* transform would make the pill the containing block for the overlay —
+     the stretch only works with it off */
+  .dn .dn-main { position:static; transform:none; }
+  .dn-main::after { content:""; position:absolute; inset:0; z-index:3; }
+  .dnrel { position:relative; z-index:4; align-self:flex-start; margin-top:9px;
+    font:600 11px var(--mono); letter-spacing:.02em; text-decoration:none; }
+  .dn.night .dnrel { color:var(--sage); border-bottom:1px solid rgba(155,211,166,.35); }
+  .dn.day .dnrel { color:#A0742A; border-bottom:1px solid rgba(192,106,50,.35); }
+  .dn.night .dnrel:hover { color:#CFE8D6; }
+  .dn.day .dnrel:hover { color:#C06A32; }
   .dncap { font:500 12.5px var(--mono); color:var(--text-lt); }
   @media (max-width:640px){
     .daynight { flex-direction:column; }
@@ -601,20 +614,23 @@
     the tree, Speak puts the optical character back at the bottom. Clean early, reconstruct
     late.</p>
     <div class="daynight">
-      <a class="dn night" href="https://github.com/amateurmenace/Hush-OpenNR">
+      <div class="dn night">
         <span class="dnk">night · first node · shipped</span>
         <b>Hush</b>
         <i>Quiets the noise — measured, and it shows its work.</i>
-        <span class="dnb">Get Hush ↓</span>
-      </a>
-      <a class="dn day" href="https://github.com/amateurmenace/Speak">
-        <span class="dnk">day · last node · early beta</span>
+        <a class="dnb dn-main" href="https://amateurmenace.github.io/Hush-OpenNR/">Hush + Speak, together →</a>
+        <a class="dnrel" href="https://github.com/amateurmenace/Hush-OpenNR/releases/latest">or grab the latest Hush release ↗</a>
+      </div>
+      <div class="dn day">
+        <span class="dnk">day · last node · v1.0</span>
         <b>Speak</b>
         <i>Gives the image its voice — H&amp;D curves, halation, grain.</i>
-        <span class="dnb">Get Speak ↓</span>
-      </a>
+        <a class="dnb dn-main" href="https://amateurmenace.github.io/Hush-OpenNR/#speak">Hush + Speak, together →</a>
+        <a class="dnrel" href="https://github.com/amateurmenace/Speak/releases/latest">or grab the latest Speak release ↗</a>
+      </div>
     </div>
-    <p class="dncap">macOS and Windows for Hush; macOS for Speak so far. Hush v3.7 hands its
+    <p class="dncap">One page tells the whole story — the buttons open it; the small links jump
+    straight to each release. macOS and Windows for Hush; macOS for Speak so far. Hush hands its
     clean-confidence matte to Speak's grain — the handoff, working.</p>
 
     <div class="subhead num" style="--dn:#8E6A9E">
@@ -633,6 +649,15 @@
         feature if you have it, or the free combo that matches it. <b>Hush</b> and <b>Speak</b>
         drop onto the free paths.</p>
         <span class="btn btn-line" style="pointer-events:none">See the tree + how to use it →</span>
+      </a>
+      <a class="pcard" href="middle-gray.html" style="--pc:#C99A3A;text-decoration:none">
+        <div class="pc-top"><span class="pc-tag">powergrade · one control point</span><span class="pc-free">100% FREE</span></div>
+        <h3>Middle Gray Contrast Tool</h3><span class="sub">an 18% gray pivot for your curves · .drx · ~3 KB</span>
+        <p>A single control point pinned to the <b>exact</b> position of 18% middle gray in DaVinci Wide
+        Gamut / Intermediate (code 344, not the middle of the curve). Sits on the diagonal, so it changes
+        nothing — until you shape contrast around it and your mid-gray <b>stays put</b> instead of drifting
+        darker every time you add punch. Drop it in the node tree's Contrast stage.</p>
+        <span class="btn btn-line" style="pointer-events:none">Why it matters + how to use it →</span>
       </a>
       <a class="pcard" href="templates.html" style="--pc:#5E5A8C;text-decoration:none">
         <div class="pc-top"><span class="pc-tag">fusion pack · 10 setups</span><span class="pc-free">100% FREE</span></div>
@@ -1147,7 +1172,7 @@ FCM: NON-DROP FRAME
         <ol class="mini">
 <li>Drop Hush Open NR on a node and click Auto Setup — it measures the clip and dials in every slider.</li><li>Check the measurement: Step 1 → Scope: Measurements.</li><li>Check what's being removed: Step 5 → View → Noise Removed. Featureless static = good.</li><li>Set View back to Result. Done.</li>        </ol>
         <div class="cta" style="margin-top:4px">
-<a class="btn btn-green" href="https://github.com/amateurmenace/Hush-OpenNR/releases/latest">Download</a><a class="btn btn-line" href="https://github.com/amateurmenace/Hush-OpenNR">Source</a>        </div>
+<a class="btn btn-green" href="https://github.com/amateurmenace/Hush-OpenNR/releases/latest">Download</a><a class="btn btn-line" href="https://github.com/amateurmenace/Hush-OpenNR">Source</a><a class="btn btn-paper" href="guide.html">Hush + Speak guide<span class="up">↗</span></a>        </div>
       </div>
     </div>
     <details class="tech">
@@ -1437,7 +1462,7 @@ FCM: NON-DROP FRAME
         <ol class="mini">
 <li>Install Speak, then put it on the LAST node of your grade — Hush opens the tree, Speak closes it.</li><li>Pick a tone scale and printer lights; the H&D scope plots the exact curve your pixels are using.</li><li>For the handoff: enable "Export Clean Matte to Alpha" in Hush ≥ 3.7 and "Use Incoming Matte" in Speak's grain.</li>        </ol>
         <div class="cta" style="margin-top:4px">
-<a class="btn btn-green" href="https://github.com/amateurmenace/Speak/releases/latest">Download</a><a class="btn btn-line" href="https://github.com/amateurmenace/Speak">Source</a>        </div>
+<a class="btn btn-green" href="https://github.com/amateurmenace/Speak/releases/latest">Download</a><a class="btn btn-line" href="https://github.com/amateurmenace/Speak">Source</a><a class="btn btn-paper" href="guide.html">Hush + Speak guide<span class="up">↗</span></a>        </div>
       </div>
     </div>
     <details class="tech">
