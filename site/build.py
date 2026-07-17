@@ -48,6 +48,7 @@ def main() -> int:
     pages = {
         "index.html": ("home.html", "home"),
         "roadmap.html": ("roadmap.html", "roadmap"),
+        "templates.html": ("templates.html", "templates"),
     }
     for stale in DOCS.glob("*.html"):
         if stale.name not in pages and stale.name != "whitepaper.html":
