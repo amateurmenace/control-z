@@ -29,9 +29,13 @@ pyloudnorm
 faster-whisper
 sherpa-onnx
 
-# Stencil's runtime is an OPTIONAL heavy (~1 GB) — the app runs fine without it
-# and its page says exactly this. To enable click-to-matte:
-#     .venv/bin/pip install torch sam2
+# Stencil's runtime is an OPTIONAL heavy (~1 GB) — the app runs fine without
+# it and its page says exactly this. It stays out of this file on purpose:
+# torch is a gigabyte the other nine tools never load, and the signed app
+# can't ship it. To enable click-to-matte (NOT `pip install sam2` — the name
+# on PyPI is an unaffiliated fork; Meta's package comes from their repo):
+#     .venv/bin/pip install -e ".[stencil]"
+# or: .venv/bin/pip install torch "sam2 @ git+https://github.com/facebookresearch/sam2.git"
 #
 # Clear's voice isolation needs the official DeepFilterNet binary (MIT/Apache).
 # Everything else in Clear works without it; the app prints the download line.
