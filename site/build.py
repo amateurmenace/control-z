@@ -50,6 +50,7 @@ def main() -> int:
         "roadmap.html": ("roadmap.html", "roadmap"),
         "templates.html": ("templates.html", "templates"),
         "node-tree.html": ("node-tree.html", "node-tree"),
+        "middle-gray.html": ("middle-gray.html", "middle-gray"),
     }
     # carried pages (not templated here): the Hush design study and the
     # Hush+Speak visual guide are authored in their own repos and copied in

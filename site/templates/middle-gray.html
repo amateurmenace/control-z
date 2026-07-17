@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Middle Gray Contrast Tool · control-z{% endblock %}
+{% block desc %}A DaVinci Resolve PowerGrade that pins a control point at the exact position of 18% middle gray in DaVinci Wide Gamut / Intermediate, so your contrast curves pivot around a fixed mid-gray instead of letting it drift. What it's for, why the exact code value matters, and how to build better contrast with it.{% endblock %}
+{% block style %}
+  .mg-hero { padding:52px 0 8px; }
+  .dlbar { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin:22px 0 6px; }
+  .zip-note { font:500 12.5px var(--mono); color:var(--text-lt); letter-spacing:.03em; }
+
+  /* ---- curve panels: Resolve's Custom Curves look ---- */
+  .panels { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin:10px 0 6px; }
+  @media (max-width:760px){ .panels{ grid-template-columns:1fr; } }
+  .cpanel { background:#191921; border:1px solid #2c2c34; border-radius:var(--r-lg); padding:20px 20px 16px; }
+  .cpanel .ctag { font:700 11px var(--mono); letter-spacing:.12em; text-transform:uppercase; display:block; margin-bottom:4px; }
+  .cpanel.bad .ctag { color:#E08A5B; }
+  .cpanel.good .ctag { color:#8FBF9A; }
+  .cpanel h3 { font-size:18px; color:#e6e6ee; margin:0 0 12px; letter-spacing:-.01em; }
+  .cpanel svg { display:block; width:100%; height:auto; }
+  .cpanel p { font-size:13.5px; color:#a9a9b6; margin:12px 0 0; max-width:none; }
+  .cpanel p b.bad { color:#E9A07A; }
+  .cpanel p b.good { color:#9EC8A9; }
+
+  .numbers { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:22px 0 4px; }
+  @media (max-width:640px){ .numbers{ grid-template-columns:1fr 1fr; } }
+  .num { background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:16px 18px; }
+  .num .nk { font:600 11px var(--mono); letter-spacing:.06em; color:var(--text-lt); text-transform:uppercase; display:block; }
+  .num .nv { font:700 26px "Space Grotesk"; color:var(--green); display:block; margin-top:4px; letter-spacing:-.01em; }
+  .num .nn { font:500 12px var(--mono); color:var(--text-lt); }
+
+  .steps { counter-reset:s; list-style:none; margin:16px 0; padding:0; }
+  .steps li { position:relative; padding:14px 0 14px 48px; border-bottom:1px solid var(--border); max-width:70ch; }
+  .steps li:last-child { border-bottom:0; }
+  .steps li::before { counter-increment:s; content:counter(s); position:absolute; left:0; top:13px; width:32px; height:32px;
+    border-radius:50%; background:var(--green); color:var(--cream); font:700 15px var(--mono); display:flex; align-items:center; justify-content:center; }
+  .steps li b { color:var(--green); }
+  .kv { font:600 13.5px var(--mono); color:var(--green-br); background:#eceae3; padding:1px 6px; border-radius:5px; }
+
+  .why { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:16px; }
+  @media (max-width:760px){ .why{ grid-template-columns:1fr; } }
+  .whycard { background:var(--card); border:1px solid var(--border); border-radius:var(--r-md); padding:20px 22px; }
+  .whycard h4 { font:700 16px "Space Grotesk"; color:var(--green); margin:0 0 6px; }
+  .whycard p { font-size:14.5px; margin:0; }
+
+  .rulebox { border-left:4px solid var(--amber); background:#FEF9EF; border-radius:var(--r-md); padding:18px 22px; margin:18px 0; }
+  .rulebox p { margin:0; max-width:72ch; }
+{% endblock %}
+{% block body %}
+<div class="wrap">
+  <section class="mg-hero">
+    <span class="kicker" style="color:#5B8C65">powergrade · one control point</span>
+    <h1 style="font-size:clamp(34px,5vw,52px);letter-spacing:-.02em;color:var(--green)">
+      Contrast that pivots where you decide.</h1>
+    <p class="lede" style="max-width:64ch;margin-top:10px">A DaVinci Resolve PowerGrade that drops a single
+      control point onto the Custom Curves at the <b>exact</b> position of 18% middle gray in DaVinci Wide
+      Gamut / Intermediate. It sits on the identity diagonal, so it changes nothing on its own — it gives you
+      a <b>fixed mid-gray pivot</b> to shape contrast around, instead of guessing where the middle of the
+      curve is and watching your exposure drift.</p>
+    <div class="dlbar">
+      <a class="btn btn-green" href="https://github.com/amateurmenace/control-z/raw/main/grades/control-z-middle-gray-anchor.zip">Download the PowerGrade (.zip) ↓</a>
+      <span class="zip-note">.drx + README · ~3 KB · MIT · Resolve 21+</span>
+    </div>
+    <p class="meta">Free-edition safe — it uses only standard Custom Curves, no Studio-only effects. The
+      anchor is on the diagonal, so importing and applying it is a no-op until you start shaping the curve.</p>
+  </section>
+
+  <section style="padding:26px 0 0">
+    <div class="kicker">the problem it removes</div>
+    <h2>A contrast curve is a rotation. Rotations need a centre.</h2>
+    <p>When you steepen the Custom Curve to add contrast, the curve pivots around some point — and every
+      tone except that point moves. If you don't <b>choose</b> the pivot, it lands wherever the curve happens
+      to be steepest, and your middle gray — faces, skin, the exposure you set — slides brighter or darker as
+      a side effect. Here is the same contrast move pivoted two ways:</p>
+
+    <div class="panels">
+      <div class="cpanel bad">
+        <span class="ctag">without the anchor</span>
+        <h3>Pivoting at the middle of the curve (0.5)</h3>
+        <svg viewBox="0 0 340 340" xmlns="http://www.w3.org/2000/svg" role="img"
+             aria-label="Custom curve with an S-shaped contrast pivoting at 0.5. At the 18% middle-gray input, the output has fallen from code 344 to code 260 — mid-gray drifts darker.">
+          <g transform="translate(20,20)">
+            <rect x="0" y="0" width="300" height="300" fill="#101015" stroke="#2c2c34"/>
+            <g stroke="#23232c" stroke-width="1">
+              <line x1="75" y1="0" x2="75" y2="300"/><line x1="150" y1="0" x2="150" y2="300"/><line x1="225" y1="0" x2="225" y2="300"/>
+              <line x1="0" y1="75" x2="300" y2="75"/><line x1="0" y1="150" x2="300" y2="150"/><line x1="0" y1="225" x2="300" y2="225"/>
+            </g>
+            <line x1="0" y1="300" x2="300" y2="0" stroke="#3a3a44" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <!-- the contrast S-curve, pivot 0.5 -->
+            <path d="M0.0,300.0 L5.0,299.5 L10.0,298.5 L15.0,297.0 L20.0,295.1 L25.0,292.9 L30.0,290.3 L35.0,287.4 L40.0,284.1 L45.0,280.6 L50.0,276.8 L55.0,272.8 L60.0,268.4 L65.0,263.8 L70.0,258.9 L75.0,253.8 L80.0,248.5 L85.0,242.9 L90.0,237.1 L95.0,231.0 L100.0,224.7 L105.0,218.2 L110.0,211.5 L115.0,204.5 L120.0,197.4 L125.0,190.0 L130.0,182.4 L135.0,174.6 L140.0,166.6 L145.0,158.4 L150.0,150.0 L155.0,141.6 L160.0,133.4 L165.0,125.4 L170.0,117.6 L175.0,110.0 L180.0,102.6 L185.0,95.5 L190.0,88.5 L195.0,81.8 L200.0,75.3 L205.0,69.0 L210.0,62.9 L215.0,57.1 L220.0,51.5 L225.0,46.2 L230.0,41.1 L235.0,36.2 L240.0,31.6 L245.0,27.2 L250.0,23.2 L255.0,19.4 L260.0,15.9 L265.0,12.6 L270.0,9.7 L275.0,7.1 L280.0,4.9 L285.0,3.0 L290.0,1.5 L295.0,0.5 L300.0,0.0"
+                  fill="none" stroke="#E08A5B" stroke-width="2.4"/>
+            <!-- mid-gray input line -->
+            <line x1="100.8" y1="0" x2="100.8" y2="300" stroke="#E08A5B" stroke-width="1" stroke-dasharray="4 4" opacity="0.55"/>
+            <!-- where mid-gray SHOULD sit (on the diagonal) -->
+            <circle cx="100.8" cy="199.2" r="4" fill="none" stroke="#6a6a78" stroke-width="1.5"/>
+            <!-- where it actually lands (drifted dark) -->
+            <line x1="100.8" y1="199.2" x2="100.8" y2="223.7" stroke="#E9634A" stroke-width="2"/>
+            <circle cx="100.8" cy="223.7" r="6" fill="#E9634A" stroke="#101015" stroke-width="1.5"/>
+          </g>
+          <text x="170" y="335" fill="#8a8a98" font-family="monospace" font-size="11" text-anchor="middle">input →</text>
+          <text x="12" y="170" fill="#8a8a98" font-family="monospace" font-size="11" text-anchor="middle" transform="rotate(-90 12 170)">← output</text>
+        </svg>
+        <p>Mid-gray was at code 344. After the contrast, it lands at <b class="bad">code 260</b> — the whole
+          image reads darker, and you chase it back with exposure, undoing half the contrast.</p>
+      </div>
+
+      <div class="cpanel good">
+        <span class="ctag">with the anchor</span>
+        <h3>Pivoting at 18% gray (0.336)</h3>
+        <svg viewBox="0 0 340 340" xmlns="http://www.w3.org/2000/svg" role="img"
+             aria-label="Custom curve with an S-shaped contrast pivoting exactly at the 18% middle-gray anchor. The anchor point sits on the identity diagonal — mid-gray output equals mid-gray input, code 344, unchanged.">
+          <g transform="translate(20,20)">
+            <rect x="0" y="0" width="300" height="300" fill="#101015" stroke="#2c2c34"/>
+            <g stroke="#23232c" stroke-width="1">
+              <line x1="75" y1="0" x2="75" y2="300"/><line x1="150" y1="0" x2="150" y2="300"/><line x1="225" y1="0" x2="225" y2="300"/>
+              <line x1="0" y1="75" x2="300" y2="75"/><line x1="0" y1="150" x2="300" y2="150"/><line x1="0" y1="225" x2="300" y2="225"/>
+            </g>
+            <line x1="0" y1="300" x2="300" y2="0" stroke="#3a3a44" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <!-- the contrast S-curve, pivot 0.336 -->
+            <path d="M0.0,300.0 L5.0,299.4 L10.0,298.0 L15.0,296.0 L20.0,293.6 L25.0,290.6 L30.0,287.2 L35.0,283.3 L40.0,279.1 L45.0,274.4 L50.0,269.4 L55.0,264.0 L60.0,258.3 L65.0,252.2 L70.0,245.8 L75.0,239.0 L80.0,232.0 L85.0,224.6 L90.0,216.9 L95.0,208.9 L100.0,200.6 L105.0,192.1 L110.0,183.8 L115.0,175.7 L120.0,167.7 L125.0,159.8 L130.0,152.2 L135.0,144.6 L140.0,137.3 L145.0,130.0 L150.0,123.0 L155.0,116.1 L160.0,109.4 L165.0,102.8 L170.0,96.4 L175.0,90.2 L180.0,84.2 L185.0,78.3 L190.0,72.6 L195.0,67.1 L200.0,61.7 L205.0,56.6 L210.0,51.6 L215.0,46.8 L220.0,42.2 L225.0,37.9 L230.0,33.7 L235.0,29.7 L240.0,25.9 L245.0,22.3 L250.0,19.0 L255.0,15.9 L260.0,13.0 L265.0,10.4 L270.0,8.0 L275.0,5.8 L280.0,4.0 L285.0,2.5 L290.0,1.2 L295.0,0.4 L300.0,0.0"
+                  fill="none" stroke="#E5A835" stroke-width="2.4"/>
+            <!-- anchor crosshair -->
+            <line x1="100.8" y1="199.2" x2="100.8" y2="300" stroke="#5B8C65" stroke-width="1" stroke-dasharray="4 4" opacity="0.7"/>
+            <line x1="0" y1="199.2" x2="100.8" y2="199.2" stroke="#5B8C65" stroke-width="1" stroke-dasharray="4 4" opacity="0.7"/>
+            <!-- the pinned anchor, on the diagonal -->
+            <circle cx="100.8" cy="199.2" r="8" fill="none" stroke="#5B8C65" stroke-width="1.5" opacity="0.5"/>
+            <circle cx="100.8" cy="199.2" r="5" fill="#8FBF9A" stroke="#101015" stroke-width="1.5"/>
+          </g>
+          <text x="170" y="335" fill="#8a8a98" font-family="monospace" font-size="11" text-anchor="middle">input →</text>
+          <text x="12" y="170" fill="#8a8a98" font-family="monospace" font-size="11" text-anchor="middle" transform="rotate(-90 12 170)">← output</text>
+        </svg>
+        <p>The anchor is <b class="good">exactly on the diagonal</b>: input 0.336 → output 0.336, code 344,
+          unchanged. Shadows deepen and highlights lift <em>around</em> it. Your exposure never moved.</p>
+      </div>
+    </div>
+    <p style="font-size:13.5px;color:var(--text-lt);max-width:70ch">Same contrast strength in both panels —
+      only the pivot changed. The anchor doesn't add contrast; it decides what your contrast rotates around.</p>
+  </section>
+</div>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="kicker">why it needs a tool</div>
+    <h2>Because 18% gray isn't in the middle of the curve.</h2>
+    <div class="why">
+      <div class="whycard">
+        <h4>Log encodings put mid-gray low</h4>
+        <p>DaVinci Wide Gamut / Intermediate is a log-shaped working space. 18% scene-linear gray doesn't
+          land at 0.5 on the curve — it encodes to <b>0.336</b> (about 10-bit code 344), a third of the way
+          up, not the middle. Eyeball the curve's centre and you're pivoting a full stop above your real
+          mid-gray. The exact value is easy to miss and impossible to place by hand.</p>
+      </div>
+      <div class="whycard">
+        <h4>Middle gray is the one value to protect</h4>
+        <p>It's the reference the whole exposure hangs on — where a gray card reads, where faces roughly sit.
+          Contrast should bloom outward from it, not shove it around. Pin it and every contrast move becomes
+          a clean decision: how much to deepen shadows, how much to lift highlights — with the anchor held.</p>
+      </div>
+      <div class="whycard">
+        <h4>The code value belongs to one gamma</h4>
+        <p>0.336 is the encoded position of 18% gray <b>in DWG/Intermediate specifically</b>. The number
+          depends entirely on the transfer function — it's different in Rec.709, in ACEScct, in Log-C. Use
+          this anchor only where the node receives DWG/Intermediate data, so the point lines up with the gray
+          it's named for.</p>
+      </div>
+      <div class="whycard">
+        <h4>It's transparent, and free</h4>
+        <p>No Studio feature, no plugin, no baked-in look — one control point on the stock Custom Curves you
+          already have. It ships on the identity diagonal, so it's a labelled reference that does nothing
+          until you choose to shape around it. Show-your-work, like the rest of control-z.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <section>
+    <div class="kicker">the exact anchor</div>
+    <h2>Where the point sits.</h2>
+    <div class="numbers">
+      <div class="num"><span class="nk">Normalized in/out</span><span class="nv">0.336</span><span class="nn">043, on the diagonal</span></div>
+      <div class="num"><span class="nk">Curve coordinate</span><span class="nv">343.8</span><span class="nn">of Resolve's 0–1023</span></div>
+      <div class="num"><span class="nk">10-bit code</span><span class="nv">344</span><span class="nn">rounded for display</span></div>
+      <div class="num"><span class="nk">Working space</span><span class="nv">DWG</span><span class="nn">/ Intermediate only</span></div>
+    </div>
+    <p style="font-size:13.5px;color:var(--text-lt);max-width:70ch;margin-top:10px">Round-trip tested in
+      DaVinci Resolve 21.0.0 build 48. The grade uses only standard Custom Curves controls — nothing
+      Studio-only.</p>
+  </section>
+
+  <section style="padding-top:8px">
+    <div class="kicker">how to use it</div>
+    <h2>Import once, pivot forever.</h2>
+    <ol class="steps">
+      <li>On Resolve's <b>Color</b> page, open <b>Gallery → PowerGrade</b>. Right-click an empty spot,
+        choose <span class="kv">Import</span>, and select the <span class="kv">.drx</span> from the download.</li>
+      <li>Make sure the node is receiving <b>DaVinci Wide Gamut / Intermediate</b>: a DWG/Intermediate
+        working space under Resolve Color Management, or — in a manual CST pipeline — <b>after</b> the input
+        transform to DWG/Intermediate and <b>before</b> the output transform.</li>
+      <li>Apply the PowerGrade to a clip, or append its node to your tree. Nothing changes yet — the anchor
+        is on the diagonal.</li>
+      <li>Open <span class="kv">Curves → Custom</span>. On the ganged YRGB curve you'll find the control
+        point at input/output <span class="kv">0.336</span>. That's your 18% gray.</li>
+      <li>Leave that point <b>on the diagonal</b> and shape contrast around it: drag a point down in the
+        shadows, a point up in the highlights. The mid-gray anchor holds while everything else rotates.</li>
+      <li>Add as many points as the look needs — just don't move the anchor off the diagonal, and your
+        exposure will never drift out from under the grade.</li>
+    </ol>
+    <div class="rulebox">
+      <p><b>The one rule:</b> keep the anchor on the diagonal. The moment you drag it off, mid-gray is no
+        longer pinned — which is sometimes exactly what you want (a deliberate exposure move), but now it's a
+        decision you made, not a side effect of adding contrast. That's the whole point: the drift becomes a
+        choice.</p>
+    </div>
+  </section>
+</div>
+
+<section class="dark">
+  <div class="wrap">
+    <div class="kicker" style="color:var(--amber)">the thinking behind it</div>
+    <h2 style="color:#fff">A reference point, not a look.</h2>
+    <p style="color:var(--sage);max-width:70ch">Most grading tools give you a look. This one gives you a
+      <b>datum</b> — a fixed thing to measure from. Resolve's Contrast palette has a Pivot control for exactly
+      this reason, but the Custom Curves, where the real shaping happens, leave you without a labelled
+      mid-gray. So you pivot by feel, and middle gray becomes whatever falls out of the curve rather than a
+      number you set on purpose.</p>
+    <p style="color:var(--sage);max-width:70ch">This PowerGrade is the smallest possible fix: put the datum
+      where it belongs, once, exactly, and get out of the way. It pairs naturally with the
+      <a href="node-tree.html" style="color:#8FBF9A">node tree</a> — drop it in the Contrast stage and every
+      contrast decision downstream starts from a mid-gray that won't move. Clean structure, honest tools, and
+      one point of ground truth to build on.</p>
+    <div class="dlbar" style="margin-top:22px">
+      <a class="btn btn-green" href="https://github.com/amateurmenace/control-z/raw/main/grades/control-z-middle-gray-anchor.zip">Download the PowerGrade (.zip) ↓</a>
+      <a class="btn btn-line" href="index.html#downloads" style="border-color:rgba(197,214,204,.3);color:var(--sage-lt)">All the tools →</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
