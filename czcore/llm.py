@@ -36,38 +36,61 @@ def _file():
     return support_dir() / "llm.json"
 
 
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+OPENAI_BASE = "https://api.openai.com"
+
+
+def _provider_for(key: str) -> str:
+    """sk-ant-… is Anthropic; anything else OpenAI-shaped is OpenAI — the
+    same key the community-highlighter web app runs on."""
+    return "anthropic" if key.startswith("sk-ant-") else "openai"
+
+
 def get_config() -> dict:
-    """{api_key, model, base_url, source} — env wins over the settings file.
-    The env route needs the KEY present; a stray ANTHROPIC_BASE_URL alone
-    (dev shells export those) never activates anything."""
+    """{api_key, model, base_url, provider, source} — env wins over the
+    settings file. The env route needs the KEY present; a stray
+    ANTHROPIC_BASE_URL alone (dev shells export those) never activates
+    anything."""
     key = os.getenv("ANTHROPIC_API_KEY", "")
     if key:
-        return {"api_key": key,
+        return {"api_key": key, "provider": "anthropic",
                 "model": os.getenv("CONTROL_Z_LLM_MODEL", DEFAULT_MODEL),
                 "base_url": os.getenv("ANTHROPIC_BASE_URL", DEFAULT_BASE),
                 "source": "env"}
+    key = os.getenv("OPENAI_API_KEY", "")
+    if key:
+        return {"api_key": key, "provider": "openai",
+                "model": os.getenv("CONTROL_Z_LLM_MODEL",
+                                   DEFAULT_OPENAI_MODEL),
+                "base_url": OPENAI_BASE, "source": "env"}
     try:
         d = json.loads(_file().read_text())
         if d.get("api_key"):
-            return {"api_key": str(d["api_key"]),
-                    "model": str(d.get("model") or DEFAULT_MODEL),
-                    "base_url": str(d.get("base_url") or DEFAULT_BASE),
+            prov = str(d.get("provider") or _provider_for(str(d["api_key"])))
+            return {"api_key": str(d["api_key"]), "provider": prov,
+                    "model": str(d.get("model") or (
+                        DEFAULT_MODEL if prov == "anthropic"
+                        else DEFAULT_OPENAI_MODEL)),
+                    "base_url": str(d.get("base_url") or (
+                        DEFAULT_BASE if prov == "anthropic" else OPENAI_BASE)),
                     "source": "file"}
     except (OSError, ValueError):
         pass
-    return {"api_key": "", "model": DEFAULT_MODEL,
+    return {"api_key": "", "provider": None, "model": DEFAULT_MODEL,
             "base_url": DEFAULT_BASE, "source": None}
 
 
 def set_config(api_key: str, model: str = "") -> dict:
     """Write (or clear) the Settings-page key. 0600 like proxy.json —
-    a credential file is nobody else's business."""
+    a credential file is nobody else's business. The provider is read off
+    the key's own shape (sk-ant-… vs the web app's OpenAI key)."""
     f = _file()
     if not api_key:
         f.unlink(missing_ok=True)
         return status()
     f.write_text(json.dumps({"api_key": api_key,
-                             "model": model or DEFAULT_MODEL}))
+                             "provider": _provider_for(api_key),
+                             "model": model or ""}))
     f.chmod(0o600)
     return status()
 
@@ -82,6 +105,7 @@ def status() -> dict:
     c = get_config()
     key = c["api_key"]
     return {"enabled": bool(key), "source": c["source"], "model": c["model"],
+            "provider": c.get("provider"),
             "key_masked": (f"…{key[-4:]}" if len(key) > 8 else "set")
             if key else None}
 
@@ -94,18 +118,35 @@ def complete(prompt: str, system: str = "", max_tokens: int = 1200,
     c = get_config()
     if not c["api_key"]:
         raise RuntimeError("no API key configured — Settings → AI, or "
-                           "ANTHROPIC_API_KEY in the environment")
-    body = json.dumps({
-        "model": c["model"], "max_tokens": max_tokens,
-        **({"system": system} if system else {}),
-        "messages": [{"role": "user", "content": prompt}],
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        c["base_url"].rstrip("/") + "/v1/messages", data=body, method="POST",
-        headers={"Content-Type": "application/json",
-                 "x-api-key": c["api_key"],
-                 "anthropic-version": ANTHROPIC_VERSION,
-                 "User-Agent": "control-z-suite"})
+                           "ANTHROPIC_API_KEY / OPENAI_API_KEY in the "
+                           "environment")
+    if c.get("provider") == "openai":
+        body = json.dumps({
+            "model": c["model"],
+            "max_completion_tokens": max_tokens,
+            "messages": ([{"role": "system", "content": system}]
+                         if system else [])
+            + [{"role": "user", "content": prompt}],
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            c["base_url"].rstrip("/") + "/v1/chat/completions", data=body,
+            method="POST",
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {c['api_key']}",
+                     "User-Agent": "control-z-suite"})
+    else:
+        body = json.dumps({
+            "model": c["model"], "max_tokens": max_tokens,
+            **({"system": system} if system else {}),
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            c["base_url"].rstrip("/") + "/v1/messages", data=body,
+            method="POST",
+            headers={"Content-Type": "application/json",
+                     "x-api-key": c["api_key"],
+                     "anthropic-version": ANTHROPIC_VERSION,
+                     "User-Agent": "control-z-suite"})
     try:
         raw = urllib.request.urlopen(req, timeout=timeout).read()
     except urllib.error.HTTPError as e:
@@ -125,8 +166,12 @@ def complete(prompt: str, system: str = "", max_tokens: int = 1200,
         raise RuntimeError(f"couldn't reach the API ({e})") from e
     try:
         data = json.loads(raw.decode("utf-8", "replace"))
-        text = "".join(b.get("text", "") for b in data.get("content", [])
-                       if b.get("type") == "text")
+        if c.get("provider") == "openai":
+            text = ((data.get("choices") or [{}])[0]
+                    .get("message", {}).get("content") or "")
+        else:
+            text = "".join(b.get("text", "") for b in data.get("content", [])
+                           if b.get("type") == "text")
     except ValueError as e:
         raise RuntimeError("the API answered with something that isn't "
                            "JSON") from e

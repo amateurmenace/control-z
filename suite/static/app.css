@@ -770,3 +770,18 @@ a { color: var(--cream-dim); }
 }
 #credit a { color: var(--cream-dim); text-decoration: none; }
 #credit a:hover { text-decoration: underline; }
+
+/* Highlighter: the loading terminal — everything visibly in motion */
+.hl-term {
+  margin-top: 12px; background: #101209; border-radius: 10px;
+  border: 1px solid #23261D; padding: 12px 14px; height: 150px;
+  overflow-y: auto; font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11.5px; line-height: 1.75; color: #B9BDB2;
+}
+.hl-term .tl { white-space: pre-wrap; word-break: break-all; }
+.hl-term .tl b { color: #22C55E; font-weight: 600; }
+.hl-term .tl.ok { color: #22C55E; }
+.hl-term .tl:last-child::after {
+  content: "▋"; color: #22C55E; animation: hlblink 1s steps(1) infinite;
+}
+@keyframes hlblink { 50% { opacity: 0; } }

@@ -479,6 +479,24 @@ def register_highlighter(app, jobs, frames):
                                 status_code=409)
         meta = _session_meta(Path(source)) if _is_session(source) else {}
         title = meta.get("title") or Path(source).name
+        # one meeting, one spend: the summary caches beside the transcript
+        # and reopening answers from disk unless the words changed
+        p = Path(source)
+        cache_p = (p / "ai-brief.json") if p.is_dir() \
+            else p.with_suffix(".ai-brief.json")
+        if cache_p.exists() and not body.get("fresh"):
+            try:
+                cached = json.loads(cache_p.read_text())
+                if cached.get("n_segments") == len(t["segments"]):
+                    def cached_work(job):
+                        job.message = "executive summary — cached"
+                        return cached
+                    return jobs.start("ai-brief", cached_work,
+                                      tool="highlighter",
+                                      label=f"AI brief (cached) — {title[:50]}"
+                                      ).to_dict()
+            except ValueError:
+                pass
 
         def work(job):
             job.message = f"asking {llm.status()['model']} (your key)…"
@@ -495,7 +513,10 @@ def register_highlighter(app, jobs, frames):
                         "each starting with its [MM:SS], 3) one sentence on "
                         "what's next. Under 250 words."))
             job.message = "brief written — generative, your key"
-            return {"text": text, "model": llm.status()["model"]}
+            out = {"text": text, "model": llm.status()["model"],
+                   "n_segments": len(t["segments"])}
+            cache_p.write_text(json.dumps(out))
+            return out
 
         return jobs.start("ai-brief", work, tool="highlighter",
                           label=f"AI brief — {title[:60]}").to_dict()

@@ -46,6 +46,7 @@ const HighlighterPage = (() => {
             <input type="text" id="hl-url" placeholder="Paste a YouTube / meeting URL here" spellcheck="false">
             <button class="btn cta" id="hl-load">Load Meeting</button>
           </div>
+          <div class="hl-term" id="hl-term" style="display:none"></div>
           <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap">
             <div id="hl-drop" style="flex:1;min-width:260px;border:2px dashed var(--line);border-radius:10px;
                  padding:13px 16px;text-align:center;color:var(--cream-dim);font-size:12.5px">
@@ -391,22 +392,55 @@ const HighlighterPage = (() => {
   }
 
   /* ---------------- ingest / open ---------------- */
+  /* the loading terminal — the web app's sign that everything is in motion */
+  function termLine(text, cls) {
+    const t = $("#hl-term", el);
+    t.style.display = "";
+    t.insertAdjacentHTML("beforeend",
+      `<div class="tl${cls ? " " + cls : ""}">${text}</div>`);
+    t.scrollTop = t.scrollHeight;
+  }
+
   async function ingest(url) {
     if (!url) return;
     const btn = $("#hl-load", el);
     btn.disabled = true;
     btn.textContent = "Reading…";
+    const t = $("#hl-term", el);
+    t.innerHTML = "";
+    termLine(`<b>$</b> highlighter read ${esc(url.slice(0, 70))}`);
+    termLine(`<b>$</b> yt-dlp --skip-download --write-subs · watch-page timedtext · racing…`);
+    let lastMsg = "";
     try {
       const job = await api("/api/highlighter/ingest", { url });
+      const off = watchJob(job.id, j => {
+        if (j.message && j.message !== lastMsg) {
+          lastMsg = j.message;
+          termLine(`  ${esc(j.message)}`);
+        }
+      });
       const done = await jobDone(job.id);
+      off();
       btn.disabled = false;
       btn.textContent = "Load Meeting";
-      if (done.status === "error") { toast(done.error, true); return; }
+      if (done.status === "error") {
+        termLine(`✗ ${esc(done.error || "failed")}`, "err");
+        toast(done.error, true);
+        return;
+      }
       if (done.status !== "done") return;
+      const nseg = done.result.transcript?.segments?.length || 0;
+      termLine(`✓ ${nseg} segments · brief, entities, agenda computing locally`, "ok");
+      termLine(`✓ opening the meeting…`, "ok");
       $("#hl-url", el).value = "";
       if (done.result.captions_note) toast(done.result.captions_note, true);
+      setTimeout(() => { t.style.display = "none"; }, 400);
       open(done.result.source);
-    } catch (e) { btn.disabled = false; btn.textContent = "Load Meeting"; toast(e.message, true); }
+    } catch (e) {
+      btn.disabled = false; btn.textContent = "Load Meeting";
+      termLine(`✗ ${esc(e.message)}`, "err");
+      toast(e.message, true);
+    }
   }
 
   async function open(source) {
@@ -678,6 +712,9 @@ const HighlighterPage = (() => {
       ? b.map(x => `<p><span class="tpill" data-t="${x.t}">${fmtTime(x.t)}</span>${esc(x.text)}</p>`).join("")
       : `<div class="hint">not enough words for a brief yet</div>`;
     $$("#hl-brief .tpill", el).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+    // with a key, the executive summary writes itself — the web app's way;
+    // the extractive read above stands in until it lands (and without a key)
+    if (S.llm?.enabled && b.length) aiBrief(true);
     const wf = S.insight.wordfreq || [];
     const maxc = Math.max(...wf.map(w => w.count), 1);
     $("#hl-cloud", el).innerHTML = wf.length ? wf.map((w, i) =>
@@ -1253,22 +1290,37 @@ const HighlighterPage = (() => {
       });
   }
 
-  async function aiBrief() {
+  async function aiBrief(auto) {
     const btn = $("#hl-aibrief", el);
-    const out = $("#hl-aibrief-out", el);
+    const box = $("#hl-brief", el);
+    const src = S.source;
     btn.disabled = true;
-    out.style.display = "";
-    out.innerHTML = `<div class="hint">asking with your key…</div>`;
+    if (!auto) box.insertAdjacentHTML("afterbegin",
+      `<div class="hint" id="hl-briefwip">rewriting the executive summary…</div>`);
+    else box.insertAdjacentHTML("afterbegin",
+      `<div class="hint" id="hl-briefwip">✍ writing the executive summary — ${esc(S.llm?.model || "your key")}…</div>`);
     try {
-      const job = await api("/api/highlighter/ai-brief", { path: S.source });
-      watchJob(job.id, j => { out.innerHTML = `<div class="hint">${esc(j.message || j.status)}</div>`; });
+      const job = await api("/api/highlighter/ai-brief",
+        { path: src, fresh: !auto });
       const done = await jobDone(job.id);
       btn.disabled = false;
-      if (done.status !== "done") { out.innerHTML = `<div class="hint">${esc(done.error || "stopped")}</div>`; return; }
-      out.innerHTML = `<div class="hint" style="margin-bottom:4px">generative — ${esc(done.result.model)}, your key · every [time] is clickable</div>`
-        + done.result.text.split(/\n+/).map(p => `<p>${linkifyTimes(p)}</p>`).join("");
-      $$(".tpill", out).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
-    } catch (e) { btn.disabled = false; out.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
+      if (S.source !== src) return;   // user moved on to another meeting
+      $("#hl-briefwip", el)?.remove();
+      if (done.status !== "done") {
+        box.insertAdjacentHTML("afterbegin",
+          `<div class="hint">${esc(done.error || "stopped")} — the extractive read below stands</div>`);
+        return;
+      }
+      box.innerHTML = `<div class="hint" style="margin-bottom:5px">executive summary — generative (${esc(done.result.model)}, your key) · every [time] cites its moment</div>`
+        + done.result.text.split(/\n+/).map(p =>
+            `<p>${linkifyTimes(p.replace(/^#+\s*/, "").replace(/\*\*/g, ""))}</p>`).join("");
+      $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+      $("#hl-aibrief", el).textContent = "↻ Regenerate summary";
+    } catch (e) {
+      btn.disabled = false;
+      $("#hl-briefwip", el)?.remove();
+      if (!auto) toast(e.message, true);
+    }
   }
 
   async function askAI() {
