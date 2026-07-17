@@ -24,6 +24,19 @@ def runtime_status() -> dict:
         import torch  # noqa: F401
         from sam2.build_sam import build_sam2_video_predictor  # noqa: F401
     except ImportError as e:
+        import sys
+        if getattr(sys, "frozen", False):
+            # A frozen .app has no venv and no pip — telling the user to run
+            # them would be an instruction they physically cannot follow
+            # (specs/09 §5). The on-demand runtime component is v1.1.
+            return {"available": False,
+                    "hint": "Stencil's GPU runtime (torch + SAM 2, ~900 MB) "
+                            "isn't bundled in this app, and this build can't "
+                            "download it yet — that lands in v1.1. To use "
+                            "Stencil today, run the suite from a source "
+                            "checkout: github.com/amateurmenace/control-z "
+                            "(README: 'Stencil runtime'). Every other tool "
+                            "in this app is fully functional without it."}
         return {"available": False,
                 "hint": f"Stencil's runtime isn't installed ({e.name} missing). "
                         "In the suite's venv, in this order: "

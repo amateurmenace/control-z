@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 import subprocess
 from pathlib import Path
+
+from czcore.tools import ToolNotFound
 
 AUDIO_SUFFIXES = {".wav", ".aif", ".aiff", ".flac"}
 
@@ -45,10 +46,9 @@ def _audio_source(path: str) -> Path:
     wav = _cache_dir(path) / "extracted.wav"
     if wav.exists():
         return wav
-    exe = shutil.which("ffmpeg")
-    if not exe:
-        raise RuntimeError("ffmpeg isn't installed — Clear needs it to pull "
-                           "audio out of a video (brew install ffmpeg)")
+    from czcore.tools import ffmpeg_path
+
+    exe = ffmpeg_path()  # raises the honest sentence if truly absent
     try:
         if probe(str(p)).audio_streams == 0:
             raise NoAudioError(
@@ -193,6 +193,10 @@ def register_clear(app, jobs, frames):
             return JSONResponse(
                 {"error": f"{e} There's nothing here for Clear to rescue."},
                 status_code=415)
+        except ToolNotFound as e:
+            # missing ffmpeg = OUR failure (500) — before the RuntimeError
+            # clause, which must stay 415 for genuine extraction failures
+            return JSONResponse({"error": str(e)}, status_code=500)
         except RuntimeError as e:
             return JSONResponse({"error": str(e)}, status_code=415)
         except Exception as e:
@@ -321,7 +325,8 @@ def register_clear(app, jobs, frames):
                     if probe(path).video is not None:
                         mux = str(Path(path).with_name(
                             f"{Path(path).stem}.clear{Path(path).suffix}"))
-                        exe = shutil.which("ffmpeg")
+                        from czcore.tools import ffmpeg_path
+                        exe = ffmpeg_path()  # raises, never passes None to subprocess
                         subprocess.run(
                             [exe, "-y", "-v", "quiet", "-i", path, "-i", out,
                              "-map", "0:v", "-map", "1:a", "-c:v", "copy",

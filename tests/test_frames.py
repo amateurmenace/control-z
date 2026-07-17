@@ -28,16 +28,31 @@ def make_clip(path: str):
     import numpy as np
 
     with av.open(path, "w") as out:
-        v = out.add_stream("libx264", rate=24,
-                           options={"crf": "10", "g": "12"})  # real GOPs: seeks matter
+        # mpeg4, not libx264: the shipped FFmpeg is the LGPL build with no GPL
+        # encoders (specs/09 §3), and the tests must run against exactly what
+        # ships. sc_threshold effectively-infinite is load-bearing: these flat
+        # frames all differ uniformly, and mpeg4's scene-change detector
+        # otherwise promotes EVERY frame to an I-frame at this bitrate — which
+        # silently turns the GOP-crossing seek tests into a no-op (caught by
+        # adversarial review; the keyframe assertion below keeps it caught).
+        v = out.add_stream("mpeg4", rate=24,
+                           options={"g": "12",              # real GOPs: seeks matter
+                                    "sc_threshold": "1000000000"})
         v.width, v.height = W, H
         v.pix_fmt = "yuv420p"
+        v.bit_rate = 4_000_000  # ~transparent at 192x108: flat frames survive
         for i in range(N_FRAMES):
             img = np.full((H, W, 3), i * 5, dtype=np.uint8)
             for pkt in v.encode(av.VideoFrame.from_ndarray(img, format="bgr24")):
                 out.mux(pkt)
         for pkt in v.encode():
             out.mux(pkt)
+    # The clip must actually HAVE inter frames, or every "seek across GOPs"
+    # test below degenerates into "decode any frame". 48 frames at g=12 -> 4.
+    with av.open(path) as inp:
+        keys = sum(1 for pk in inp.demux(video=0)
+                   if pk.is_keyframe and pk.size > 0)
+    assert 2 <= keys <= 8, f"synthetic clip lost its GOPs ({keys} keyframes)"
 
 
 def jpeg_level(path: Path) -> float:
@@ -75,7 +90,7 @@ class TestFrameService(unittest.TestCase):
         f = svc.frame_path(self.clip, 10, height=54, prefetch=False)
         self.assertIsNotNone(f)
         self.assertTrue(f.exists())
-        # frame 10 is gray level 50 (x264 crf10 keeps it within a couple of codes)
+        # frame 10 is gray level 50 (mpeg4 at 4 Mbps keeps it within a couple of codes)
         self.assertAlmostEqual(jpeg_level(f), 50, delta=4)
         svc.close_all()
 

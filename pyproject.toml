@@ -22,6 +22,11 @@ suite = ["numpy", "av", "opencv-python",
 stencil = ["torch", "sam2 @ git+https://github.com/facebookresearch/sam2.git"]
 site = ["jinja2", "pyyaml"]
 dev = []
+# The macOS bundle builder (specs/09). Deliberately NOT part of the `suite`
+# runtime extra: the shipped app should not carry its own builder, and
+# PyInstaller must run from THIS venv (a foreign venv is a hard error in
+# PyInstaller 7).
+packaging = ["pyinstaller>=6.21"]
 
 [project.scripts]
 suite = "suite.__main__:main"

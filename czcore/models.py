@@ -45,7 +45,13 @@ REGISTRY = {
         sha256="dd1d2f07a16673d1ae02ae9576ff8465ceb87f7bc2f2fa7c99fe3c9eebd42750",
         license="BSD-3-Clause (xinntao/Real-ESRGAN)",
         card="Real-ESRGAN x4 — reconstructs detail when upscaling. Synthesizes texture (labeled).",
-        hint="run: python -m rise.convert",
+        # An honest hint, not a command a packaged app can't run: rise.convert
+        # needs torch, which the .app deliberately doesn't bundle (specs/09
+        # §5). Until the converted ONNX is hosted as a release asset, only a
+        # source checkout can produce it — and Rise says what it falls back to.
+        hint=("not hosted for download yet. From a source checkout: "
+              "python -m rise.convert (needs torch). Without it, Rise "
+              "upscales with plain Lanczos resampling and says so."),
     ),
     "midas_small": ModelSpec(
         name="midas_small",

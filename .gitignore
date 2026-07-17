@@ -12,6 +12,12 @@ out/
 # editor/agent scratch
 .claude/
 
+# vendored native builds (LGPL ffmpeg prefix + sources) — rebuilt by
+# packaging/build_ffmpeg.sh, never committed
+packaging/vendor/
+packaging/dist/
+packaging/build/
+
 # downloaded weights never live in the repo (see the Suite's Models page)
 models/
 

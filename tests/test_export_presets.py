@@ -32,13 +32,47 @@ class TestPresetMapping(unittest.TestCase):
         self.assertEqual(spec["container"], "mov")
 
     def test_software_fallback(self):
-        fake_availability({"prores_ks", "libx264", "libx265", "dnxhd"})
+        fake_availability({"prores_ks", "dnxhd"})
         spec = media.resolve_preset("prores-hq")
         self.assertEqual(spec["codec"], "prores_ks")
         self.assertFalse(spec["hardware"])
         self.assertEqual(spec["options"], {"profile": "3"})
+
+    def test_h264_without_hardware_is_a_sentence(self):
+        # There is deliberately no software H.264/HEVC fallback: those were
+        # libx264/libx265, which are GPL (specs/09 §3). No encoder -> an
+        # honest error, never a silent GPL re-link.
+        fake_availability({"prores_ks", "dnxhd"})
+        with self.assertRaises(RuntimeError) as ctx:
+            media.resolve_preset("h264")
+        self.assertIn("h264_videotoolbox", str(ctx.exception))
+        self.assertNotIn("libx264", str(ctx.exception))
+
+    def test_no_gpl_candidate_ever(self):
+        # The next contributor who wants better low-bitrate H.264 will reach
+        # for x264; this is the tripwire that stops the preset table first.
+        # Prefix match, not equality: libx264rgb, libx262 and friends are the
+        # same GPL library wearing different encoder names. (The *linked*
+        # tree is checked with otool in tests/test_packaging.py.)
+        gpl_prefixes = ("libx264", "libx265", "libx262", "libxvid", "libxavs")
+        for p in media.EXPORT_PRESETS.values():
+            for c in p.candidates:
+                self.assertFalse(
+                    c.codec.startswith(gpl_prefixes),
+                    f"GPL encoder offered by preset {p.id}: {c.codec}")
+
+    def test_h264_hevc_success_shape(self):
+        # rise-cli derives the output EXTENSION from spec["container"]; a
+        # wrong value here (say "mpeg4") writes files no muxer matches and
+        # every h264 render dies at av.open. Pin the whole resolved shape.
+        fake_availability({"h264_videotoolbox", "hevc_videotoolbox"})
         h264 = media.resolve_preset("h264")
-        self.assertEqual(h264["codec"], "libx264")
+        self.assertEqual(h264["codec"], "h264_videotoolbox")
+        self.assertEqual(h264["container"], "mp4")
+        self.assertTrue(h264["hardware"])
+        hevc = media.resolve_preset("hevc")
+        self.assertEqual(hevc["codec"], "hevc_videotoolbox")
+        self.assertEqual(hevc["container"], "mp4")
 
     def test_4444_alpha_honored(self):
         fake_availability({"prores_ks"})
@@ -69,7 +103,7 @@ class TestPresetMapping(unittest.TestCase):
             media.resolve_preset("prores-9999")
 
     def test_report_shape(self):
-        fake_availability({"prores_ks", "libx264"})
+        fake_availability({"prores_ks"})
         report = media.presets_report()
         ids = {r["id"] for r in report}
         self.assertEqual(ids, set(media.EXPORT_PRESETS))

@@ -30,6 +30,7 @@ STATIC = Path(__file__).parent / "static"
 
 def create_suite_app():
     from czcore.media import presets_report, probe
+    from czcore.tools import ToolNotFound
 
     # job updates arrive on worker threads; they need the serving loop to hand
     # the send off to, and the only place that knows it is a running server
@@ -114,6 +115,11 @@ def create_suite_app():
                 {"error": f"no such file: {p}"}, status_code=404)
         try:
             info = probe(str(p))
+        except ToolNotFound as e:
+            # A missing dependency is OUR failure, not the file's — labeling
+            # it 415 "couldn't read that file" blamed the wrong thing on
+            # every open (specs/09 §5, "failures are sentences" inverted).
+            return JSONResponse({"error": str(e)}, status_code=500)
         except Exception as e:
             return JSONResponse(
                 {"error": f"couldn't read that file as media: {e}"},

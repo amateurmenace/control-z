@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -73,13 +72,10 @@ def parse_probe(path: str, data: dict) -> MediaInfo:
 
 
 def probe(path: str) -> MediaInfo:
-    """Probe a media file. Needs ffprobe on PATH (bundled in packaged builds)."""
-    exe = shutil.which("ffprobe")
-    if not exe:
-        raise RuntimeError(
-            "ffprobe not found. Install ffmpeg (brew install ffmpeg) or use a "
-            "packaged control-z build, which bundles it."
-        )
+    """Probe a media file. czcore.tools resolves ffprobe (bundled or PATH)."""
+    from czcore.tools import ffprobe_path
+
+    exe = ffprobe_path()
     out = subprocess.run(
         [exe, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
         capture_output=True,
@@ -149,19 +145,19 @@ EXPORT_PRESETS = {
     "h264": ExportPreset(
         id="h264", label="H.264", container="mp4",
         candidates=(
+            # Hardware only, deliberately: the software fallbacks that used to
+            # sit here were libx264/libx265, which are GPL — shipping them
+            # relicenses the whole app (specs/09 §3). No candidate may ever be
+            # a GPL encoder; tests/test_export_presets.py pins this.
             EncoderChoice("h264_videotoolbox", "yuv420p",
                           (("q:v", "55"),), hardware=True),
-            EncoderChoice("libx264", "yuv420p",
-                          (("crf", "18"), ("preset", "medium"))),
         ),
-        note="Delivery/social — hardware encode when available."),
+        note="Delivery/social — hardware encode."),
     "hevc": ExportPreset(
         id="hevc", label="HEVC", container="mp4",
         candidates=(
             EncoderChoice("hevc_videotoolbox", "yuv420p",
                           (("q:v", "55"),), hardware=True),
-            EncoderChoice("libx265", "yuv420p",
-                          (("crf", "20"), ("preset", "medium"))),
         ),
         note="Half the size of H.264 — slower players."),
 }

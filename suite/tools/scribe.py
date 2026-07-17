@@ -12,6 +12,7 @@ import json
 import tempfile
 from pathlib import Path
 
+from czcore.tools import ToolNotFound
 from scribe.transcript import Transcript
 
 from .clear import NoAudioError, _audio_source
@@ -66,10 +67,11 @@ def register_scribe(app, jobs, frames):
             wav = str(_audio_source(path))
             # ASR wants 16k mono; resample the cached extract to a temp wav
             import subprocess
-            import shutil
+
+            from czcore.tools import ffmpeg_path
             with tempfile.TemporaryDirectory(prefix="scribe-suite-") as td:
                 wav16 = str(Path(td) / "audio.16k.wav")
-                exe = shutil.which("ffmpeg")
+                exe = ffmpeg_path()
                 subprocess.run([exe, "-y", "-v", "quiet", "-i", wav, "-ac", "1",
                                 "-ar", "16000", wav16], check=True)
                 job.check_cancel()
@@ -179,6 +181,9 @@ def register_scribe(app, jobs, frames):
             return JSONResponse({"error": "file moved or deleted"}, status_code=404)
         try:
             f = _audio_source(p)
+        except ToolNotFound as e:
+            # missing dependency = OUR failure (500), never the file's (415)
+            return JSONResponse({"error": str(e)}, status_code=500)
         except (NoAudioError, RuntimeError) as e:
             return JSONResponse({"error": str(e)}, status_code=415)
         except Exception as e:

@@ -25,3 +25,38 @@ is czcore/models.py.
 Demo imagery on control-z.org comes from freely-licensed Pexels clips; the
 site footer credits the creators. Site sources: site/make_slides.py documents
 the footage rule.
+
+Bundled native libraries (the packaged macOS app)
+--------------------------------------------------
+
+The packaged app bundles a shared-library FFmpeg built from unmodified
+upstream sources by packaging/build_ffmpeg.sh:
+
+  FFmpeg 8.1.2                             LGPL-2.1-or-later
+    Configured WITHOUT --enable-gpl, --enable-version3, or --enable-nonfree.
+    It contains no libx264, no libx265, no LAME, no opencore-amr — H.264 and
+    HEVC encode through Apple VideoToolbox hardware. The same build supplies
+    the bundled ffmpeg and ffprobe executables. (The upstream PyAV wheel links
+    GPL x264/x265; the app deliberately does not ship it. otool -L, not
+    package metadata, is the authority — see specs/09-packaging.md §3.)
+
+Complete corresponding source for that FFmpeg: the pinned upstream tarball
+(version + SHA-256) and the entire build configuration are
+packaging/build_ffmpeg.sh in this repository, and each packaged release
+links them from its release page. If you cannot reach either, open an issue
+at https://github.com/amateurmenace/control-z and the source will be
+provided at no charge.
+
+Relinking note: the shipped app is code-signed with the hardened runtime,
+which refuses a substituted libavcodec inside the signed bundle. To exercise
+the LGPL relink freedom, rebuild the bundle from this repository
+(packaging/) or run the tools from a source checkout — the same libraries
+load unsigned there.
+
+Other native runtimes redistributed unmodified from their upstream wheels:
+
+  ONNX Runtime (incl. CoreML EP)           MIT
+  OpenCV (rebuilt without FFmpeg)          Apache-2.0
+  CTranslate2 (faster-whisper backend)     MIT
+  sherpa-onnx                              Apache-2.0
+  libsndfile (via python-soundfile)        LGPL-2.1 (its COPYING ships beside it)

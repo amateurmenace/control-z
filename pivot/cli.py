@@ -70,10 +70,18 @@ def cmd_render(args) -> int:
         if args.out_size:
             w, h = args.out_size.lower().split("x")
             out_size = (int(w), int(h))
-        report = render(analysis, aspect, out, codec=args.codec, out_size=out_size,
-                        audio=not args.no_audio, enhance=args.enhance,
-                        enhance_model=args.enhance_model,
-                        progress=(lambda n: print(f"  …{n} frames", end="\r", flush=True)))
+        try:
+            report = render(analysis, aspect, out, codec=args.codec, out_size=out_size,
+                            audio=not args.no_audio, enhance=args.enhance,
+                            enhance_model=args.enhance_model,
+                            progress=(lambda n: print(f"  …{n} frames", end="\r", flush=True)))
+        except RuntimeError as e:
+            # h264/hevc have no software fallback by design (specs/09 §3); on
+            # an FFmpeg without VideoToolbox that is a sentence and a nonzero
+            # exit, not a traceback — and the remaining aspects still run.
+            print(f"  {aspect}: {e} — prores works on every build (--codec prores).")
+            rc = 2
+            continue
         print(f"  {aspect}: {report['frames']} frames → {report['out']} "
               f"({report['size'][0]}x{report['size'][1]}, audio: {report['audio']})")
         if report["punch_in"] > 1.001:

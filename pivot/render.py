@@ -7,14 +7,11 @@ from typing import Optional, Tuple
 from .analyze import Analysis
 from .aspect import CropGeometry, rect_for_center
 
-CODECS = {
-    "h264": dict(codec="libx264", pix_fmt="yuv420p",
-                 options={"crf": "18", "preset": "medium"}),
-    "hevc": dict(codec="libx265", pix_fmt="yuv420p",
-                 options={"crf": "20", "preset": "medium"}),
-    "prores": dict(codec="prores_ks", pix_fmt="yuv422p10le",
-                   options={"profile": "3"}),  # ProRes 422 HQ
-}
+# Legacy CLI names -> czcore export presets. The codec table that used to live
+# here carried libx264/libx265 (GPL) as software paths; every encode now goes
+# through czcore.media.resolve_preset so there is exactly one codec-choosing
+# code path, and it never offers a GPL encoder (specs/09 §3).
+PRESET_FOR = {"h264": "h264", "hevc": "hevc", "prores": "prores-hq"}
 
 
 def render(
@@ -33,9 +30,10 @@ def render(
 ) -> dict:
     """Render one aspect. Returns a small report dict (frames, punch-in, output).
 
-    codec_spec (from czcore.media.resolve_preset) overrides the legacy CODECS
-    table — the suite's export-panel path. should_stop() -> True aborts the
-    render, removes the partial file, and raises JobCancelled.
+    codec_spec (from czcore.media.resolve_preset) overrides the default
+    resolution of `codec` through PRESET_FOR — the suite's export-panel path.
+    should_stop() -> True aborts the render, removes the partial file, and
+    raises JobCancelled.
 
     denoise=True cleans each crop with the Hush core BEFORE any scaling —
     punch-ins amplify noise, and Rise's synthesis model fed noise invents
@@ -47,7 +45,7 @@ def render(
     import cv2
 
     from czcore.appshell.jobs import JobCancelled
-    from czcore.media import copy_color_tags
+    from czcore.media import copy_color_tags, resolve_preset
 
     solve = analysis.aspects[aspect]
     geom = CropGeometry(analysis.width, analysis.height,
@@ -56,7 +54,7 @@ def render(
         out_size = (geom.crop_w, geom.crop_h)  # native: never upscale silently
     ow, oh = out_size
     punch_in = ow / geom.crop_w
-    spec = codec_spec or CODECS[codec]
+    spec = codec_spec or resolve_preset(PRESET_FOR[codec])
 
     try:
         with av.open(analysis.source) as inp, av.open(out_path, "w") as out:

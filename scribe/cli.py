@@ -15,10 +15,13 @@ from .transcript import Transcript
 
 def _extract_wav(path: str, out_dir: Path) -> str:
     """Media -> 16k mono wav for ASR/diarization (bundled-ffmpeg in packages)."""
-    import shutil
+    from czcore.tools import ToolNotFound, ffmpeg_path
 
     wav = out_dir / (Path(path).stem + ".16k.wav")
-    exe = shutil.which("ffmpeg")
+    try:
+        exe = ffmpeg_path()
+    except ToolNotFound:
+        exe = None  # PyAV fallback below keeps dev setups working
     if exe:
         subprocess.run([exe, "-y", "-v", "quiet", "-i", path, "-ac", "1",
                         "-ar", "16000", str(wav)], check=True)

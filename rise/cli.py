@@ -34,7 +34,7 @@ def cmd_probe(args) -> int:
 
 
 def cmd_up(args) -> int:
-    from czcore.media import probe
+    from czcore.media import probe, resolve_preset
 
     from .engine import resolve_model
     from .video import InterlacedSourceError, upscale_video
@@ -43,7 +43,19 @@ def cmd_up(args) -> int:
     v = info.video
     model = resolve_model(args.model)
     scale = args.scale
-    ext = ".mov" if args.codec == "prores" else ".mp4"
+    # One codec-choosing path for the whole program: czcore's export presets.
+    # The libx264/libx265 table that used to live here silently overrode
+    # upscale_video's correct default AND offered GPL encoders (specs/09 §3).
+    # No-encoder is a sentence + exit 2, never a traceback: h264/hevc have no
+    # software fallback by design, and a source build without VideoToolbox
+    # (Linux, conda PyAV) hits this on the first explicit --codec h264.
+    try:
+        spec = resolve_preset(
+            {"h264": "h264", "hevc": "hevc", "prores": "prores-hq"}[args.codec])
+    except RuntimeError as e:
+        print(f"{e} — prores works on every build (--codec prores).")
+        return 2
+    ext = "." + spec["container"]
     out_path = args.output or str(Path(args.input).with_name(
         f"{Path(args.input).stem}.rise-x{scale}{ext}"))
     print(f"Rise — {Path(args.input).name} {v.width}x{v.height} → "
@@ -55,18 +67,10 @@ def cmd_up(args) -> int:
     if args.force:
         print("  ! interlace guard bypassed (--force)")
 
-    # the CLI's long-standing codec table (suite uses czcore export presets)
-    CODECS = {"h264": dict(codec="libx264", pix_fmt="yuv420p",
-                           options={"crf": "16", "preset": "medium"}),
-              "hevc": dict(codec="libx265", pix_fmt="yuv420p",
-                           options={"crf": "18", "preset": "medium"}),
-              "prores": dict(codec="prores_ks", pix_fmt="yuv422p10le",
-                             options={"profile": "3"})}
-
     try:
         report = upscale_video(
             args.input, out_path, scale=scale, model=model, tile=args.tile,
-            stabilize=args.stabilize, codec_spec=CODECS[args.codec],
+            stabilize=args.stabilize, codec_spec=spec,
             force=args.force,
             denoise="hush" if args.denoise else "off",
             progress=lambda n, total: print(f"  …{n} frames", end="\r", flush=True))
