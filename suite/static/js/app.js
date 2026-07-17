@@ -43,6 +43,8 @@
     g("M4 6h12M4 10h12M4 14h8"), null));
   railSuite.appendChild(railItem("ofx", "Install OpenFX",
     g("M10 4v8m0 0 3-3m-3 3-3-3M4.5 15.5h11"), null));
+  railSuite.appendChild(railItem("davinci", "DaVinci Tools",
+    g("M4 5.5h12v9H4zM4 8h12M7.5 5.5V8m5-2.5V8m-6 4h7"), null));
   railSuite.appendChild(railItem("models", "Models",
     g("M10 3.5 16 7v6l-6 3.5L4 13V7zM10 10l6-3M10 10 4 7m6 3v6.5"), null));
   railSuite.appendChild(railItem("settings", "Settings",
@@ -75,6 +77,8 @@
     ...TOOLS.filter(t => t.ready).map(t => ({
       id: t.id, label: t.long || t.name, hint: t.one || t.verb || "" })),
     { id: "home", label: "Home", hint: "the three doors" },
+    { id: "davinci", label: "DaVinci Tools", hint: "grades · node tree · fusion templates" },
+    { id: "ofx", label: "Install OpenFX", hint: "the plugins, into Resolve" },
     { id: "queue", label: "Queue", hint: "every job, live" },
     { id: "models", label: "Models", hint: "what's downloaded" },
     { id: "settings", label: "Settings", hint: "proxy · AI · caches" },

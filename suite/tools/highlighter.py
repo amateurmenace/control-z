@@ -542,6 +542,82 @@ def register_highlighter(app, jobs, frames):
         return jobs.start("ai-ask", work, tool="highlighter",
                           label=f"AI answer — {q[:60]}").to_dict()
 
+    @app.post("/api/highlighter/ai-reel")
+    def api_ai_reel(body: dict = Body(...)):
+        """The web app's "Make AI Highlight Reel", bring-your-own-key: the
+        model reads the timestamped transcript and answers with moments;
+        every pick is validated against the transcript's own clock before
+        it becomes a clip. Local scoring stays the no-key default."""
+        from czcore import llm
+
+        if not llm.enabled():
+            return JSONResponse({"error": "no API key configured — "
+                                          "Settings → AI (the local Make "
+                                          "Highlight Reel needs none)"},
+                                status_code=409)
+        source = str(Path(body["path"]).expanduser())
+        target = float(body.get("target", 90.0))
+        t, origin = _load_transcript(source)
+        if not t or not t.get("segments"):
+            return JSONResponse({"error": "no transcript yet"}, status_code=409)
+        duration = max(float(s.get("end", 0)) for s in t["segments"])
+        meta = _session_meta(Path(source)) if _is_session(source) else {}
+        title = meta.get("title") or Path(source).name
+
+        def work(job):
+            job.message = f"asking {llm.status()['model']} for the moments…"
+            raw = llm.complete(
+                system=("You pick highlight moments from civic meeting "
+                        "transcripts for a public highlight reel. Answer "
+                        "with ONLY a JSON array, no prose: "
+                        '[{"start": seconds, "end": seconds, '
+                        '"label": "5-9 words", "reason": "why it matters"}]. '
+                        "Each moment 8-45 seconds, complete thoughts, the "
+                        "most consequential decisions/testimony first."),
+                prompt=(f"Meeting: {title}\nTotal length: {duration:.0f}s\n"
+                        f"Pick moments totaling ~{target:.0f}s.\n\n"
+                        f"Transcript:\n{_transcript_lines(t)}"),
+                max_tokens=1500)
+            m = re.search(r"\[.*\]", raw, re.S)
+            if not m:
+                raise RuntimeError("the model answered without a JSON array "
+                                   "of moments — try again")
+            try:
+                rows = json.loads(m.group(0))
+            except ValueError as e:
+                raise RuntimeError("the model's answer wasn't valid JSON "
+                                   f"({e}) — try again") from e
+            picks = []
+            for i, r in enumerate(rows[:10]):
+                try:
+                    a = max(0.0, min(float(r["start"]), duration - 1))
+                    b = min(float(r["end"]), duration)
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if b - a < 3:          # too short to mean anything on air
+                    continue
+                picks.append({
+                    "start": round(a, 1), "end": round(b, 1),
+                    "text": str(r.get("label", ""))[:90],
+                    "reasons": [f"AI pick: {str(r.get('reason', ''))[:120]}"],
+                    "score": round(1.0 - i * 0.06, 2),
+                })
+            if not picks:
+                raise RuntimeError("no usable moments survived validation — "
+                                   "the local Make Highlight Reel still works")
+            payload = {"picks": picks, "target": target,
+                       "origin": f"ai:{llm.status()['model']}",
+                       "keywords": [], "lane": []}
+            _, hl, _ = _sidecars(source)
+            hl.write_text(json.dumps(payload))
+            total = sum(p["end"] - p["start"] for p in picks)
+            job.message = (f"{len(picks)} moments · {total:.0f}s — "
+                           f"generative, your key")
+            return payload
+
+        return jobs.start("ai-reel", work, tool="highlighter",
+                          label=f"AI highlight reel — {title[:55]}").to_dict()
+
     @app.post("/api/highlighter/detect")
     def api_detect(body: dict = Body(...)):
         from highlighter.highlights import (audio_energy, blend_energy,

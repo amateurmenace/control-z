@@ -2,6 +2,45 @@
 
 ## unreleased
 
+### 1.4.0: the web app's three rooms, the two doors out — 2026-07-17
+- **Highlighter wears the web app's exact shape now**: the three sections
+  are **Meeting Highlighter · Highlight Video Editor · Meeting Analyzer**,
+  and the local pick-the-moments button reads **✨ Make Highlight Reel**
+  beside a new **🤖 Make AI Highlight Reel** (BYO key): the model reads
+  the timestamped transcript and proposes moments; every pick is clamped
+  to the meeting's own clock, spans under 3 s are refused, and the origin
+  line says "picks are generative (model, your key) — timestamps
+  validated locally". No key → the button isn't there and nothing changes.
+- **One big Export Video button, two doors out** (the web app's contract,
+  desktop-sized):
+  - **🔗 Share a reel link** — the deployed web player's own URL format
+    (`?mode=play&v=…&clips=start-end,…&titles=…`), built entirely
+    client-side: the clips live in the link, nothing uploads, nothing
+    renders. Verified live: a desktop-built link for the March 10 Select
+    Board reel loaded in the deployed player — title bar, 1/5 counter,
+    Play Reel transport, five progress segments.
+  - **⬇ Download & edit on this computer** — one flow with the progress
+    stated stage by stage: "1 · Download 5 clips from YouTube — ✓ 5 clips
+    landed, only 29s left YouTube" → "2 · Cut the MP4 with ffmpeg (+ title
+    cards)" → "✓ Your video" with a Reveal in Finder button. Spans already
+    on disk skip the download honestly ("nothing re-downloads"). Local
+    files skip straight to the cut. Verified end-to-end: 5 spans → 5 clips
+    → one MP4 with 5 title cards, 36.76 s.
+- **DaVinci Tools** — a new page in the suite rail: the Node Tree
+  PowerGrade, the **Middle Gray Contrast Anchor** (the site's newest
+  tool), and the Fusion Template Pack, each with its size, its guide link
+  on control-z.org, and a Download that lands in ~/Downloads and reveals
+  itself (a dev checkout serves its own bytes; the packaged app fetches
+  the same files from the project's GitHub). The OpenFX installer keeps
+  its own page, cross-linked. ⌘K knows both pages.
+- **The credit footer** — every page now ends with the line that names the
+  makers: design + developed by Stephen Walter (weirdmachine.org) with
+  Brookline Interactive Group, Neighborhood AI, and Claude Code — part of
+  the Community AI Project (communityai.studio).
+- 4 new tests (`test_davinci.py`: the three zips exist in the repo, are
+  actual zips, guides live on control-z.org, raw URL matches the layout).
+  247 pass; the packaging gates remain the signing machine's business.
+
 ### 1.3.0: the meeting shows its shape, the reel gets its cards — 2026-07-17
 - **The reel can wear title cards now.** One checkbox in the render panel
   and every kept moment gets an ink card before it — the meeting's name

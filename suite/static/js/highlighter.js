@@ -107,9 +107,9 @@ const HighlighterPage = (() => {
       </div>
 
       <div class="hl-pills" id="hl-pills">
-        <button class="hl-pill on" data-sec="highlight">Highlight</button>
-        <button class="hl-pill" data-sec="edit">Edit</button>
-        <button class="hl-pill" data-sec="analyze">Analyze</button>
+        <button class="hl-pill on" data-sec="highlight">Meeting Highlighter</button>
+        <button class="hl-pill" data-sec="edit">Highlight Video Editor</button>
+        <button class="hl-pill" data-sec="analyze">Meeting Analyzer</button>
         <span class="hl-meta-line" id="hl-metaline"></span>
       </div>
 
@@ -167,7 +167,12 @@ const HighlighterPage = (() => {
                   <option value="180">~3 minutes</option>
                   <option value="300">~5 minutes</option>
                 </select>
-                <button class="btn cta bright" id="hl-detect" style="flex:1">Make Highlights</button>
+                <button class="btn cta bright" id="hl-detect" style="flex:1"
+                  title="local scoring — every pick says why, no key needed">✨ Make Highlight Reel</button>
+              </div>
+              <div style="display:none;margin-bottom:8px" id="hl-aireel-row">
+                <button class="btn" id="hl-aireel" style="width:100%"
+                  title="generative — the model reads the timestamped transcript with YOUR key and proposes moments; each is validated against the clock">🤖 Make AI Highlight Reel — your key</button>
               </div>
               <div class="progmsg" id="hl-detectmsg"></div>
               <div class="hl-hilist" id="hl-hilist"><div class="hint">pick a style and Make Highlights —
@@ -205,8 +210,8 @@ const HighlighterPage = (() => {
             <button class="btn" id="hl-playreel">▶ Play reel</button>
             <button class="btn" id="hl-next">⏭</button>
             <button class="btn" id="hl-clear">Clear</button>
-            <button class="btn cta" id="hl-export">Export reel</button>
             <button class="btn" id="hl-edl">Selects EDL</button>
+            <button class="btn cta bright" id="hl-export" style="padding:8px 22px;font-weight:700">Export Video</button>
           </div>
           <div class="hl-timeline" id="hl-timeline">
             <div class="hint" style="padding:20px;color:#8C9086">nothing on the timeline —
@@ -261,6 +266,50 @@ const HighlighterPage = (() => {
       <!-- ANALYZE -->
       <div id="hl-sec-analyze" style="display:none">
         <div class="hl-ana" id="hl-ana"></div>
+      </div>
+    </div>
+
+    <!-- EXPORT VIDEO modal: two doors out -->
+    <div id="hl-exportmodal" style="display:none">
+      <div class="hl-modal">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <h2 style="margin:0;font-size:19px">Export Video</h2>
+          <span class="hint" id="hl-exp-meta"></span>
+          <button class="btn" id="hl-exp-close" style="margin-left:auto;width:auto;padding:3px 12px">✕</button>
+        </div>
+        <div class="hl-exp-doors">
+          <div class="hl-exp-door" id="hl-exp-sharedoor">
+            <h3>🔗 Share a reel link</h3>
+            <p>A link to the web player — the reel plays right in the browser
+              through YouTube, nothing rendered, nothing uploaded. The clips
+              live in the link itself.</p>
+            <button class="btn cta" id="hl-exp-share" style="width:100%">Create share link</button>
+            <div id="hl-exp-shareout" style="display:none;margin-top:8px">
+              <textarea id="hl-exp-url" readonly rows="3" spellcheck="false"
+                style="width:100%;font-size:11px;font-family:inherit;border:1px solid var(--line);border-radius:7px;padding:6px;background:#fff;resize:none"></textarea>
+              <div style="display:flex;gap:8px;margin-top:6px">
+                <button class="btn" id="hl-exp-copy" style="flex:1">📋 Copy URL</button>
+                <button class="btn" id="hl-exp-open" style="flex:1">Open player</button>
+              </div>
+            </div>
+            <div class="hint" id="hl-exp-sharenote" style="margin-top:6px"></div>
+          </div>
+          <div class="hl-exp-door">
+            <h3>⬇ Download &amp; edit on this computer</h3>
+            <p id="hl-exp-dlwhat">Only the kept spans leave YouTube, then ffmpeg
+              cuts them into one MP4 — with title cards if you've checked them.</p>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <select id="hl-exp-quality" style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px">
+                <option value="best">best available</option>
+                <option value="1080" selected>1080p</option>
+                <option value="720">720p</option>
+                <option value="480">480p</option>
+              </select>
+              <button class="btn cta bright" id="hl-exp-go" style="flex:1">Make the MP4</button>
+            </div>
+            <div id="hl-exp-stages"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>`;
@@ -1036,45 +1085,118 @@ const HighlighterPage = (() => {
     } catch (e) { toast(e.message, true); }
   }
 
-  async function exportReel() {
-    if (!S.timeline.length) { toast("the timeline is empty", true); return; }
+  /* ---------------- Export Video: two doors out ---------------- */
+  const PLAYER_BASE = "https://community-highlighter.onrender.com/";
+
+  function shareLink() {
+    // the web player's whole contract lives in the URL: video id, clip
+    // spans, labels — nothing is uploaded, nothing is stored anywhere
+    const clips = S.timeline.map(c =>
+      `${Math.round(c.start)}-${Math.round(c.end)}`).join(",");
+    const titles = S.timeline.map(c =>
+      (c.label || "").replace(/\|/g, "/")).join("|");
+    return `${PLAYER_BASE}?mode=play&v=${encodeURIComponent(ytId())}`
+      + `&clips=${clips}&titles=${encodeURIComponent(titles)}&labels=on`;
+  }
+
+  function openExportModal() {
+    if (!S.timeline.length) { toast("the timeline is empty — keep some moments first", true); return; }
+    const total = S.timeline.reduce((a, c) => a + (c.end - c.start), 0);
+    $("#hl-exp-meta", el).textContent =
+      `${S.timeline.length} clip${S.timeline.length === 1 ? "" : "s"} · ${total.toFixed(0)}s`;
+    const canShare = S.session && !!ytId();
+    const door = $("#hl-exp-sharedoor", el);
+    door.style.opacity = canShare ? "" : ".45";
+    $("#hl-exp-share", el).disabled = !canShare;
+    $("#hl-exp-sharenote", el).textContent = canShare
+      ? "plays through the public web player — anyone with the link can watch"
+      : "share links need a YouTube source — this is a local file, use the MP4 door";
+    $("#hl-exp-shareout", el).style.display = "none";
+    $("#hl-exp-dlwhat", el).textContent = S.session
+      ? "Only the kept spans leave YouTube, then ffmpeg cuts them into one MP4 — with title cards if you've checked them."
+      : "The reel renders straight from the local file — with title cards if you've checked them.";
+    $("#hl-exp-stages", el).innerHTML = "";
+    $("#hl-exportmodal", el).style.display = "";
+  }
+
+  function stageRow(n, label) {
+    const box = $("#hl-exp-stages", el);
+    box.insertAdjacentHTML("beforeend",
+      `<div class="hl-stage" id="hl-stage-${n}"><b>${label}</b><span>queued</span></div>`);
+    const row = $(`#hl-stage-${n}`, el);
+    return {
+      set: (msg, cls) => {
+        $("span", row).textContent = msg;
+        row.className = "hl-stage" + (cls ? " " + cls : "");
+      },
+    };
+  }
+
+  async function makeMp4() {
+    const go = $("#hl-exp-go", el);
+    go.disabled = true;
     const preset = $("#hl-preset", el).value;
     const wantCards = $("#hl-cards", el).checked;
     const title = S.meta?.title || $("#hl-title", el).textContent || "";
+    $("#hl-exp-stages", el).innerHTML = "";
     try {
-      let job;
-      if (!S.session) {
-        job = await api("/api/highlighter/reel", {
-          path: S.source, preset, cards: wantCards, title,
-          ranges: S.timeline.map(c => ({ start: c.start, end: c.end,
-                                         label: c.label || "" })) });
-      } else if (S.sectionFiles && S.sectionFiles.length) {
-        // cards ride the span order: each downloaded [start-end] file gets
-        // the label of the timeline moment that starts inside it
-        const spanCards = wantCards ? S.sectionFiles.map(f => {
+      let files = null;
+      if (S.session) {
+        const spans = mergedSections();
+        const s1 = stageRow(1, `1 · Download ${spans.length} clip${spans.length === 1 ? "" : "s"} from YouTube`);
+        // a span that already landed as [start-end].mp4 never re-downloads
+        const match = s => (S.sectionFiles || []).find(f =>
+          f.includes(`[${Math.floor(s.start)}-${Math.floor(s.end)}]`));
+        if (spans.every(s => match(s))) {
+          files = spans.map(match);
+          s1.set(`✓ all ${files.length} clips already on disk — nothing re-downloads`, "ok");
+        } else {
+          const job = await api("/api/highlighter/fetch", {
+            url: S.meta?.url, quality: $("#hl-exp-quality", el).value, sections: spans });
+          watchJob(job.id, j => s1.set(j.status === "running"
+            ? `${Math.round(Math.max(0, j.progress) * 100)}% — ${j.message || "fetching"}` : j.status));
+          const done = await jobDone(job.id);
+          if (done.status !== "done") { s1.set(done.error || done.status, "err"); go.disabled = false; return; }
+          files = done.result.paths || [done.result.path];
+          S.sectionFiles = [...new Set([...(S.sectionFiles || []), ...files])];
+          renderDlFiles();
+          s1.set(`✓ ${files.length} clips landed — only ${spans.reduce((a, s) => a + s.end - s.start, 0).toFixed(0)}s left YouTube`, "ok");
+        }
+      }
+      const s2 = stageRow(2, `${S.session ? "2" : "1"} · Cut the MP4 with ffmpeg${wantCards ? " (+ title cards)" : ""}`);
+      let job2;
+      if (S.session) {
+        const spanCards = wantCards ? files.map(f => {
           const m = f.match(/\[(\d+)-(\d+)\]\.\w+$/);
           const a = m ? +m[1] : 0, b = m ? +m[2] : 1e9;
           const hit = S.timeline.find(c => c.start >= a - 1 && c.start <= b + 1);
           return { label: hit?.label || "", t: a };
         }) : null;
-        job = await api("/api/highlighter/stitch", {
-          files: S.sectionFiles, preset, cards: spanCards, title });
+        job2 = await api("/api/highlighter/stitch", {
+          files, preset, cards: spanCards, title });
       } else {
-        toast("URL session — download the kept sections first, then export", true);
-        return;
+        job2 = await api("/api/highlighter/reel", {
+          path: S.source, preset, cards: wantCards, title,
+          ranges: S.timeline.map(c => ({ start: c.start, end: c.end,
+                                         label: c.label || "" })) });
       }
-      watchJob(job.id, j => {
-        $("#hl-reelmsg", el).textContent = j.message ||
-          `${Math.round(Math.max(0, j.progress) * 100)}%`;
-      });
-      const done = await jobDone(job.id);
-      if (done.status === "done") {
-        const rep = $("#hl-report", el);
-        rep.classList.add("show");
-        rep.innerHTML += `<b>→</b> ${esc(done.result.out)}\n   ${done.result.clips} cuts · ${done.result.duration}s · ${esc(done.result.encoder)}\n`;
-        toast("reel rendered");
-      } else if (done.status === "error") toast(done.error, true);
+      watchJob(job2.id, j => s2.set(j.status === "running"
+        ? `${Math.round(Math.max(0, j.progress) * 100)}% — ${j.message || "cutting"}` : j.status));
+      const done2 = await jobDone(job2.id);
+      if (done2.status !== "done") { s2.set(done2.error || done2.status, "err"); go.disabled = false; return; }
+      const r = done2.result;
+      s2.set(`✓ ${r.clips} cuts${r.cards ? ` · ${r.cards} title cards` : ""} · ${r.duration}s · ${r.encoder}`, "ok");
+      const s3 = stageRow(3, "✓ Your video");
+      s3.set(r.out.split("/").pop());
+      $("#hl-exp-stages", el).insertAdjacentHTML("beforeend",
+        `<button class="btn" id="hl-exp-reveal" style="width:auto;margin-top:6px">Reveal in Finder</button>`);
+      $("#hl-exp-reveal", el).onclick = () => api("/api/media/reveal", { path: r.out }).catch(e => toast(e.message, true));
+      const rep = $("#hl-report", el);
+      rep.classList.add("show");
+      rep.innerHTML += `<b>→</b> ${esc(r.out)}\n   ${r.clips} cuts · ${r.duration}s · ${esc(r.encoder)}\n`;
+      toast("video exported");
     } catch (e) { toast(e.message, true); }
+    go.disabled = false;
   }
 
   async function exportEDL() {
@@ -1097,6 +1219,28 @@ const HighlighterPage = (() => {
     const on = !!(S.llm && S.llm.enabled);
     $("#hl-aibrief-row", el).style.display = on ? "" : "none";
     $("#hl-askai", el).style.display = on ? "" : "none";
+    $("#hl-aireel-row", el).style.display = on ? "" : "none";
+  }
+
+  async function aiReel() {
+    const btn = $("#hl-aireel", el);
+    btn.disabled = true;
+    try {
+      const job = await api("/api/highlighter/ai-reel", {
+        path: S.source, target: parseFloat($("#hl-target", el).value) });
+      watchJob(job.id, j => { $("#hl-detectmsg", el).textContent = j.message || j.status; });
+      const done = await jobDone(job.id);
+      btn.disabled = false;
+      if (done.status === "error") { $("#hl-detectmsg", el).textContent = done.error; toast(done.error, true); return; }
+      if (done.status !== "done") return;
+      S.lane = [];
+      applyPicks(done.result.picks || [], true);
+      renderTranscript();
+      renderHighlights();
+      drawSpark();
+      $("#hl-origin", el).textContent = `· picks are generative (${esc((done.result.origin || "").replace("ai:", ""))}, your key) — timestamps validated locally`;
+      toast(`${done.result.picks.length} AI moments — top 5 are on the timeline`);
+    } catch (e) { btn.disabled = false; toast(e.message, true); }
   }
 
   // [MM:SS] / [H:MM:SS] in generated prose become the same clickable pills
@@ -1336,8 +1480,27 @@ const HighlighterPage = (() => {
     $("#hl-next", el).onclick = () => playClip(Math.min(S.timeline.length - 1, S.curClip + 1), false);
     $("#hl-playreel", el).onclick = () => playClip(0, true);
     $("#hl-clear", el).onclick = () => { S.timeline = []; S.keep = new Set(); renderTimeline(); renderTranscript(); renderHighlights(); };
-    $("#hl-export", el).onclick = exportReel;
+    $("#hl-export", el).onclick = openExportModal;
     $("#hl-edl", el).onclick = exportEDL;
+    $("#hl-aireel", el).onclick = aiReel;
+
+    // the export modal's own wiring
+    $("#hl-exp-close", el).onclick = () => { $("#hl-exportmodal", el).style.display = "none"; };
+    $("#hl-exportmodal", el).onclick = e => {
+      if (e.target.id === "hl-exportmodal") $("#hl-exportmodal", el).style.display = "none";
+    };
+    $("#hl-exp-share", el).onclick = () => {
+      const url = shareLink();
+      $("#hl-exp-shareout", el).style.display = "";
+      $("#hl-exp-url", el).value = url;
+      $("#hl-exp-sharenote", el).textContent = "✓ link created — the clips live in the URL itself, nothing was uploaded";
+    };
+    $("#hl-exp-copy", el).onclick = async () => {
+      try { await navigator.clipboard.writeText($("#hl-exp-url", el).value); toast("link copied"); }
+      catch (e) { $("#hl-exp-url", el).select(); toast("copy blocked — the URL is selected, ⌘C copies it", true); }
+    };
+    $("#hl-exp-open", el).onclick = () => window.open($("#hl-exp-url", el).value, "_blank");
+    $("#hl-exp-go", el).onclick = makeMp4;
     $("#hl-dlfull", el).onclick = () => download(false);
     $("#hl-dlsections", el).onclick = () => download(true);
 

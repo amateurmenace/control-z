@@ -234,6 +234,7 @@ def create_suite_app():
     # -- tools ----------------------------------------------------------------------------
 
     from .tools.clear import register_clear
+    from .tools.davinci import register_davinci
     from .tools.depth import register_depth
     from .tools.grabber import register_grabber
     from .tools.highlighter import register_highlighter
@@ -248,6 +249,7 @@ def create_suite_app():
     from .tools.stencil import register_stencil
 
     register_clear(app, jobs, frames)
+    register_davinci(app, jobs, frames)
     register_depth(app, jobs, frames)
     register_grabber(app, jobs, frames)
     register_highlighter(app, jobs, frames)
