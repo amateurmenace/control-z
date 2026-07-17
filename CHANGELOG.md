@@ -2,6 +2,41 @@
 
 ## unreleased
 
+### the Webshare workaround comes to the desktop — 2026-07-17
+- **Why:** YouTube now gates caption/timedtext delivery by IP reputation.
+  Investigated live: the community-highlighter **web app's Webshare
+  residential proxy is active and working** (Render reports proxy_enabled,
+  and a transcript fetch through the deployment succeeds in seconds), while
+  from a bare home IP every yt-dlp caption route is currently walled
+  (android_vr lists no tracks, web wants a PO token, tv trips the DRM
+  experiment) and the raw timedtext URL answers with YouTube's empty-200
+  gate. Video downloads still work; only captions are gated.
+- **`czcore/proxy.py`** — the web app's exact configuration, shared: same
+  env var names (`WEBSHARE_PROXY_USERNAME/PASSWORD/HOST`, one account serves
+  both apps), or a Settings-page file in app support (chmod 600); same URL
+  construction (rotating `-1` session suffix, URL-encoded credentials). The
+  status surface masks the username and never returns the password.
+- **`czcore/captions.py`** — the web app's transcript mechanism in stdlib:
+  watch page → captionTracks → timedtext VTT (manual-English beats auto
+  beats other-language), through the proxy when configured. YouTube's
+  empty-200 is refused as success and named for what it is, with the fix:
+  "Configure your Webshare proxy in Settings → fetch network and retry."
+- Every YouTube-facing yt-dlp call (probe, search, captions, downloads)
+  passes `--proxy` when configured; the nightly self-update never does
+  (that's GitHub, not YouTube). Highlighter's ingest chains: yt-dlp
+  captions → watch-page timedtext (+ proxy) → honest sentence; the job says
+  which path won.
+- **Settings → fetch network**: credential fields, live status ("active
+  (tes…on @ p.webshare.io:80)"), Save/Remove; env-var deployments are
+  reported and locked from UI edits. The yt-dlp chips on Highlighter and
+  Grabber append "· webshare" and say in their tooltip that fetches ride
+  the user's residential pool — covenant: it's the user's own account,
+  user-configured, used only for the fetches they ask for.
+- 13 new tests (URL building/suffix/encoding, env-over-file precedence,
+  masking, captionTracks parsing/ranking, video-id forms). Verified live:
+  config roundtrip through the API and UI, chip state, and the full ingest
+  fallback chain ending in the honest gated-IP sentence from a bare IP.
+
 ### Highlighter goes web-app-shaped, the suite goes paper — 2026-07-16
 - **Community Highlighter now mirrors the web app** (community-highlighter
   v9.5's shape), rebuilt on local reads that say what they are:

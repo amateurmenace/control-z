@@ -87,10 +87,14 @@ const GrabberPage = (() => {
         st = (await api("/api/grabber/status")).ytdlp;
       }
       const ok = st.phase === "ok" || st.present;
-      chip.textContent = "yt-dlp " + (st.installed ? `nightly ${st.installed}` : "missing");
+      const viaProxy = st.proxy && st.proxy.enabled;
+      chip.textContent = "yt-dlp " + (st.installed ? `nightly ${st.installed}` : "missing")
+        + (viaProxy ? " · webshare" : "");
       chip.classList.toggle("ok", ok);
       chip.classList.toggle("err", !ok);
-      chip.title = st.detail || chip.title;
+      chip.title = (st.detail || "") + (viaProxy
+        ? ` — fetches ride your Webshare residential proxy (${st.proxy.username_masked})`
+        : " — no proxy configured (Settings → fetch network, if YouTube gates fetches)");
     } catch (e) { chip.textContent = "yt-dlp ?"; }
   }
 

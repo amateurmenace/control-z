@@ -138,6 +138,9 @@ def register_highlighter(app, jobs, frames):
             return JSONResponse({"error": "paste a video URL"}, status_code=422)
 
         def work(job):
+            from czcore import captions as ctext
+            from czcore import proxy
+
             job.message = "reading the page…"
             meta = ytdlp.probe_url(url)
             vid = re.sub(r"[^\w-]", "", str(meta.get("id") or "")) or \
@@ -145,19 +148,36 @@ def register_highlighter(app, jobs, frames):
             d = _meetings_dir() / vid
             d.mkdir(parents=True, exist_ok=True)
             job.message = "fetching the captions…"
+            note = None
             try:
-                got = ytdlp.fetch_captions(url, d)
+                ytdlp.fetch_captions(url, d)
             except RuntimeError as e:
-                got = {"vtt": None, "info": None, "error": str(e)}
+                note = str(e)
             info_p = d / "meeting.info.json"
             if not info_p.exists():
                 info_p.write_text(json.dumps({**meta, "webpage_url": url}))
+            how = "captions via yt-dlp"
+            if not _captions_for(d):
+                # yt-dlp's caption routes are walled one by one — the watch
+                # page's own timedtext is what the web app runs on, through
+                # the user's Webshare proxy when one is configured
+                purl = proxy.proxy_url()
+                job.message = ("captions via watch page"
+                               + (" + your proxy…" if purl else "…"))
+                try:
+                    got = ctext.fetch_vtt(url, proxy=purl)
+                    (d / "meeting.en.vtt").write_text(got["vtt"])
+                    how = ("captions via watch page"
+                           + (" through your Webshare proxy" if purl else ""))
+                    note = None
+                except RuntimeError as e:
+                    note = str(e)
             t, origin = _load_transcript(str(d))
-            job.message = (f"{len(t['segments'])} segments from captions"
+            job.message = (f"{len(t['segments'])} segments — {how}"
                            if t else "no captions — transcribe after download")
             return {"source": str(d), "meta": _session_meta(d),
                     "transcript": t, "origin": origin,
-                    "captions_note": got.get("error")}
+                    "captions_note": None if t else note}
 
         return jobs.start("ingest", work, tool="highlighter",
                           label=f"read — {url[:70]}").to_dict()

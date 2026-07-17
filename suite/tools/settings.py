@@ -89,3 +89,24 @@ def register_settings(app, jobs, frames):
     def api_clear_history():
         n = jobs.clear_finished()
         return {"ok": True, "removed": n}
+
+    # -- fetch network: the Webshare residential proxy (shared with the
+    #    community-highlighter web app — same env var names, one account) ----
+
+    @app.get("/api/settings/proxy")
+    def api_proxy_get():
+        from czcore import proxy
+        return proxy.status()
+
+    @app.post("/api/settings/proxy")
+    def api_proxy_set(body: dict = Body(...)):
+        from czcore import proxy
+        st = proxy.get_config()
+        if st["source"] == "env" and body.get("username"):
+            return JSONResponse(
+                {"error": "the proxy is set by environment variables — "
+                          "change WEBSHARE_PROXY_USERNAME/PASSWORD there"},
+                status_code=409)
+        return proxy.set_config(str(body.get("username", "")),
+                                str(body.get("password", "")),
+                                str(body.get("host", "")))

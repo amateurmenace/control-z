@@ -167,3 +167,29 @@ the local-search spirit; embeddings/ChromaDB stay out of the dependency
 tree), local MT translation (the Google-Translate copy-paste path ships,
 exactly like the web app's long-transcript fallback), streaming-LLM chat
 prose (retrieval instead), YouTube Data API metadata (yt-dlp only).
+
+## Wave 3 (2026-07-17): the Webshare proxy, shared with the web app
+
+YouTube gates caption/timedtext delivery by IP reputation. Live findings:
+the web app's Webshare residential proxy IS active (Render `proxy_enabled:
+true`; transcript fetch through the deployment works), while a bare IP gets
+android_vr=no tracks, web=PO-token wall, tv=DRM experiment, timedtext=empty
+200. Desktop answer, three pieces:
+
+- `czcore/proxy.py`: same env names as the web app
+  (WEBSHARE_PROXY_USERNAME/PASSWORD/HOST) so one account serves both; else
+  a Settings-written `proxy.json` (0600) in app support. Same URL build
+  (`-1` rotating session suffix, quoted creds). Status masks the username,
+  never returns the password. Env beats file; the UI refuses to edit an
+  env-sourced config.
+- `czcore/captions.py`: watch page → captionTracks → timedtext VTT — the
+  youtube-transcript-api route in stdlib, proxied when configured.
+  Empty-200 = gated IP, refused as success, sentence names the Settings fix.
+- Wiring: `ytdlp._proxy_args()` on probe/search/captions/downloads (never
+  the GitHub nightly check). Highlighter ingest chain: yt-dlp captions →
+  timedtext (+proxy) → sentence; job message says which path won. Chips
+  append "· webshare". Settings → "fetch network" section.
+
+The proxy is the user's own account, user-configured, used only for asked-
+for fetches — stated in the UI. Testing without credentials proves the
+chain up to the gate; the web app proves the pool itself, daily.

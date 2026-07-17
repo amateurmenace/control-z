@@ -239,11 +239,60 @@ const SettingsPage = (() => {
   el.innerHTML = `<div class="page-pad" style="max-width:720px">
     <div class="tag">suite</div>
     <h1 style="margin-top:6px">Settings</h1>
-    <div id="se-caches" style="margin-top:16px"></div>
+    <div id="se-proxy" style="margin-top:16px"></div>
+    <div id="se-caches" style="margin-top:22px"></div>
     <div id="se-about" style="margin-top:22px"></div>
   </div>`;
 
+  async function refreshProxy() {
+    const box = $("#se-proxy", el);
+    let p = { enabled: false, source: null, host: "", username_masked: "" };
+    try { p = await api("/api/settings/proxy"); } catch (e) {}
+    const envLocked = p.source === "env";
+    box.innerHTML = `
+      <div class="tag" style="margin-bottom:6px">fetch network — webshare residential proxy</div>
+      <div class="hint" style="margin-bottom:8px;line-height:1.6">
+        YouTube gates caption delivery by IP reputation; the community-highlighter web
+        app routes those fetches through a
+        <a href="https://www.webshare.io/" target="_blank" rel="noopener">Webshare</a>
+        rotating residential proxy, and the same account works here. Your credentials
+        stay in app support on this machine and are used only for the fetches you ask
+        for. Status: <b style="color:${p.enabled ? "var(--ok)" : "var(--cream-dim)"}">${
+          p.enabled ? `active (${esc(p.username_masked)} @ ${esc(p.host)}${envLocked ? ", via environment" : ""})`
+                    : "not configured"}</b></div>
+      ${envLocked ? "" : `
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="text" id="se-pxuser" placeholder="proxy username" spellcheck="false"
+          style="flex:1;min-width:150px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+        <input type="password" id="se-pxpass" placeholder="proxy password"
+          style="flex:1;min-width:150px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+        <input type="text" id="se-pxhost" placeholder="p.webshare.io:80" spellcheck="false"
+          style="flex:0 1 150px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+        <button class="btn" id="se-pxsave" style="width:auto">Save</button>
+        ${p.enabled ? `<button class="btn" id="se-pxclear" style="width:auto">Remove</button>` : ""}
+      </div>`}`;
+    const save = $("#se-pxsave", box);
+    if (save) save.onclick = async () => {
+      try {
+        await api("/api/settings/proxy", {
+          username: $("#se-pxuser", box).value,
+          password: $("#se-pxpass", box).value,
+          host: $("#se-pxhost", box).value,
+        });
+        toast("proxy saved — fetches now ride your Webshare pool");
+        refreshProxy();
+      } catch (e) { toast(e.message, true); }
+    };
+    const clear = $("#se-pxclear", box);
+    if (clear) clear.onclick = async () => {
+      await api("/api/settings/proxy", { username: "", password: "" });
+      toast("proxy removed — fetches go direct again");
+      refreshProxy();
+    };
+  }
+
   async function refresh() {
+    refreshProxy();
     const d = await api("/api/settings/info");
     $("#se-caches", el).innerHTML =
       `<div class="tag" style="margin-bottom:6px">caches — all regenerable, nothing here can lose work</div>` +

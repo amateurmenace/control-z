@@ -80,11 +80,15 @@ def newer(latest: str, installed: Optional[str]) -> bool:
 
 
 def status() -> dict:
-    """What the tool pages show: version, freshness, and any check in flight."""
+    """What the tool pages show: version, freshness, any check in flight,
+    and whether fetches ride the user's Webshare proxy."""
+    from . import proxy as _proxy
+
     with _lock:
         s = dict(_state)
     s["installed"] = installed_version()
     s["present"] = binary_path().exists()
+    s["proxy"] = _proxy.status()
     try:
         s["checked_at"] = json.loads(_meta_path().read_text()).get("checked_at", 0)
     except (OSError, ValueError):
@@ -172,6 +176,15 @@ def check_async(force: bool = False) -> dict:
     return status()
 
 
+def _proxy_args() -> list:
+    """--proxy for every YouTube-facing call when the user configured one.
+    The nightly self-update never uses it — that's GitHub, not YouTube."""
+    from . import proxy as _proxy
+
+    url = _proxy.proxy_url()
+    return ["--proxy", url] if url else []
+
+
 def _run_json(args: list, timeout: float = 60.0):
     """yt-dlp -J … -> parsed JSON (one object per line for playlists)."""
     exe = binary_path()
@@ -191,7 +204,7 @@ def _run_json(args: list, timeout: float = 60.0):
 def probe_url(url: str) -> dict:
     """Metadata without downloading a byte of video: title, duration,
     uploader, and whether captions exist to seed a transcript from."""
-    rows = _run_json(["-J", "--skip-download", "--no-playlist", url])
+    rows = _run_json(["-J", "--skip-download", "--no-playlist", *_proxy_args(), url])
     if not rows:
         raise RuntimeError("that URL answered with no metadata")
     d = rows[0]
@@ -215,7 +228,7 @@ def fetch_captions(url: str, outdir: Path) -> dict:
         raise RuntimeError("yt-dlp isn't installed yet — the nightly check "
                            "installs it on page open; get online once.")
     out = subprocess.run(
-        [str(exe), url, "--skip-download", "--no-playlist",
+        [str(exe), url, "--skip-download", "--no-playlist", *_proxy_args(),
          "--write-info-json", "--write-subs", "--write-auto-subs",
          "--sub-langs", "en,en-orig", "--sub-format", "vtt/srt",
          "-o", str(outdir / "meeting.%(ext)s"),
@@ -235,8 +248,8 @@ def fetch_captions(url: str, outdir: Path) -> dict:
 
 def search(query: str, n: int = 12) -> list:
     """YouTube search through yt-dlp itself — no API key, flat and fast."""
-    rows = _run_json(["-J", "--flat-playlist", f"ytsearch{max(1, min(30, n))}:{query}"],
-                     timeout=45)
+    rows = _run_json(["-J", "--flat-playlist", *_proxy_args(),
+                     f"ytsearch{max(1, min(30, n))}:{query}"], timeout=45)
     entries = (rows[0].get("entries") or []) if rows else []
     return [{"id": e.get("id"), "title": e.get("title"),
              "duration": e.get("duration"),
@@ -269,7 +282,7 @@ def download(url: str, outdir: Path, quality: str = "best",
     template = "%(title).120B [%(id)s].%(ext)s"
     # subtitles: just en + en-orig — asking for en.* pulls every translated
     # variant and trips YouTube's 429 rate limit, killing the whole fetch
-    cmd = [str(exe), url,
+    cmd = [str(exe), url, *_proxy_args(),
            "-f", FORMATS.get(quality, quality),
            "--newline", "--no-playlist",
            "--merge-output-format", "mp4",
