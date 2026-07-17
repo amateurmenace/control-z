@@ -70,6 +70,62 @@
     }
   });
 
+  /* ---------- ⌘K: jump anywhere ---------- */
+  const DESTS = [
+    ...TOOLS.filter(t => t.ready).map(t => ({
+      id: t.id, label: t.long || t.name, hint: t.one || t.verb || "" })),
+    { id: "home", label: "Home", hint: "the three doors" },
+    { id: "queue", label: "Queue", hint: "every job, live" },
+    { id: "models", label: "Models", hint: "what's downloaded" },
+    { id: "settings", label: "Settings", hint: "proxy · AI · caches" },
+    { id: "about", label: "About", hint: "the covenant" },
+  ];
+  const pal = document.createElement("div");
+  pal.id = "palette";
+  pal.innerHTML = `<div class="pal-box">
+    <input id="pal-q" placeholder="jump to a tool… (esc closes)" spellcheck="false" autocomplete="off">
+    <div id="pal-list"></div></div>`;
+  pal.style.display = "none";
+  document.body.appendChild(pal);
+  let palSel = 0;
+  function palRender() {
+    const q = $("#pal-q", pal).value.trim().toLowerCase();
+    const hits = DESTS.filter(d => !q || d.label.toLowerCase().includes(q)
+      || d.id.includes(q) || (d.hint || "").toLowerCase().includes(q));
+    palSel = Math.min(palSel, Math.max(0, hits.length - 1));
+    $("#pal-list", pal).innerHTML = hits.map((d, i) =>
+      `<button class="pal-row${i === palSel ? " sel" : ""}" data-id="${d.id}">
+        <b>${d.label}</b><span>${d.hint || ""}</span></button>`).join("")
+      || `<div class="pal-row" style="opacity:.6">nothing called that</div>`;
+    $$(".pal-row[data-id]", pal).forEach(b => b.onclick = () => { palClose(); go(b.dataset.id); });
+    return hits;
+  }
+  function palOpen() {
+    pal.style.display = "";
+    $("#pal-q", pal).value = "";
+    palSel = 0;
+    palRender();
+    $("#pal-q", pal).focus();
+  }
+  function palClose() { pal.style.display = "none"; }
+  pal.onclick = e => { if (e.target === pal) palClose(); };
+  $("#pal-q", pal).addEventListener("input", () => { palSel = 0; palRender(); });
+  $("#pal-q", pal).addEventListener("keydown", e => {
+    const hits = DESTS.filter(d => { const q = $("#pal-q", pal).value.trim().toLowerCase();
+      return !q || d.label.toLowerCase().includes(q) || d.id.includes(q)
+        || (d.hint || "").toLowerCase().includes(q); });
+    if (e.key === "Escape") palClose();
+    else if (e.key === "ArrowDown") { e.preventDefault(); palSel = Math.min(palSel + 1, hits.length - 1); palRender(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); palSel = Math.max(palSel - 1, 0); palRender(); }
+    else if (e.key === "Enter" && hits[palSel]) { palClose(); go(hits[palSel].id); }
+  });
+  addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      pal.style.display === "none" ? palOpen() : palClose();
+    }
+  });
+
   /* ---------- go ---------- */
   await loadSession();
   connectWS();

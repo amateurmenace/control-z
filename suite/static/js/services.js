@@ -240,9 +240,55 @@ const SettingsPage = (() => {
     <div class="tag">suite</div>
     <h1 style="margin-top:6px">Settings</h1>
     <div id="se-proxy" style="margin-top:16px"></div>
+    <div id="se-llm" style="margin-top:22px"></div>
     <div id="se-caches" style="margin-top:22px"></div>
     <div id="se-about" style="margin-top:22px"></div>
   </div>`;
+
+  async function refreshLLM() {
+    const box = $("#se-llm", el);
+    let s = { enabled: false, source: null, model: "", key_masked: null };
+    try { s = await api("/api/settings/llm"); } catch (e) {}
+    const envLocked = s.source === "env";
+    box.innerHTML = `
+      <div class="tag" style="margin-bottom:6px">AI — your own key, optional</div>
+      <div class="hint" style="margin-bottom:8px;line-height:1.6">
+        Every reading in the suite works locally and says what it is — the brief is
+        extractive, ask is retrieval. If you have your own
+        <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic API key</a>,
+        Highlighter adds two <i>generative</i> buttons (narrative brief, AI answers), labeled
+        as such, sending only the transcript you're looking at, only when you click.
+        No key ships with the app; nothing here requires one.
+        Status: <b style="color:${s.enabled ? "var(--ok)" : "var(--cream-dim)"}">${
+          s.enabled ? `active (${esc(s.key_masked || "set")} · ${esc(s.model)}${envLocked ? ", via environment" : ""})`
+                    : "not configured"}</b></div>
+      ${envLocked ? "" : `
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="password" id="se-llmkey" placeholder="sk-ant-…" spellcheck="false"
+          style="flex:2;min-width:220px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+        <input type="text" id="se-llmmodel" placeholder="claude-haiku-4-5 (default)" spellcheck="false"
+          style="flex:1;min-width:170px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+        <button class="btn" id="se-llmsave" style="width:auto">Save</button>
+        ${s.enabled ? `<button class="btn" id="se-llmclear" style="width:auto">Remove</button>` : ""}
+      </div>`}`;
+    const save = $("#se-llmsave", box);
+    if (save) save.onclick = async () => {
+      const key = $("#se-llmkey", box).value.trim();
+      if (!key) { toast("paste a key first", true); return; }
+      try {
+        await api("/api/settings/llm", { api_key: key,
+          model: $("#se-llmmodel", box).value.trim() });
+        toast("key saved — Highlighter's ✨ buttons are live");
+        refreshLLM();
+      } catch (e) { toast(e.message, true); }
+    };
+    const clear = $("#se-llmclear", box);
+    if (clear) clear.onclick = async () => {
+      await api("/api/settings/llm", { api_key: "" });
+      toast("key removed — everything keeps working locally");
+      refreshLLM();
+    };
+  }
 
   async function refreshProxy() {
     const box = $("#se-proxy", el);
@@ -305,6 +351,7 @@ const SettingsPage = (() => {
 
   async function refresh() {
     refreshProxy();
+    refreshLLM();
     const d = await api("/api/settings/info");
     $("#se-caches", el).innerHTML =
       `<div class="tag" style="margin-bottom:6px">caches — all regenerable, nothing here can lose work</div>` +

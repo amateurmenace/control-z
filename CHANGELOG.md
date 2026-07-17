@@ -2,6 +2,69 @@
 
 ## unreleased
 
+### 1.2.0: the meeting reads in seconds, Whisper learns the names — 2026-07-17
+- **URL ingest races the web app now — and the routes race each other.**
+  YouTube links skip the yt-dlp probe entirely (the id is in the URL), the
+  two local caption routes run **concurrently** on threads (first one home
+  wins), the metadata rides free on the watch page the caption fetch
+  already reads (`captions.parse_video_details`; even a *failed* caption
+  fetch hands back the title), and YouTube's empty-200 gate tell breaks
+  straight to the community relay instead of waiting out the other doomed
+  route. Measured on a 7-hour Select Board meeting from a caption-gated IP:
+  **7.4 s** to 8,363 readable segments (the deployed web app, warm, same
+  video: 5.2 s — and the desktop's winning route *was* that relay plus two
+  honest local attempts; ungated or proxied, the watch page wins in ~2 s).
+  **Re-opening a known session: 0.1 s** — a session that's already read
+  answers from disk instead of re-asking YouTube. The job message states
+  the time and the route: "read in 7.1s — 8363 segments, captions via the
+  community service."
+- **Whisper gets the names right now — teach it before it listens.**
+  faster-whisper's `hotwords` ride through the whole stack (`scribe/
+  transcribe.py` → `/api/scribe/transcribe` → both UIs): a comma list of
+  people/places/boards the audio likely carries biases the decoder every
+  window. Highlighter **harvests the list from the meeting itself**
+  (`insight.hotwords()` — entity people first, then places, orgs, names
+  scraped from the title; deduped, capped, cut on a comma) and prefills an
+  editable field: fix "John Vancoyak" to "John VanScoyoc" before Scribe
+  runs and the transcript follows your spelling. Scribe's page grew the
+  same field ("teach it the names"). Both model menus add **large-v3 —
+  most accurate (names)** above turbo; job labels say "names taught."
+- **Downloads say what leaves YouTube.** The Edit panel is now *clips
+  first*: one green button — **"⬇ Download highlight clips (N · Ns)"** —
+  fetches only the kept spans (merged, keyframe-cut, one file per span,
+  named `[start-end].mp4`), with the hint counting what stays behind
+  ("only these spans leave YouTube — 5 clips, 29s of a 3:33.0 meeting").
+  The **full recording is its own explicit button** below a rule, wearing
+  the meeting's duration so nobody grabs 7 hours by accident. Quality
+  applies to every fetch and the ladder grew: best / **4K / 1440p** / 1080p
+  / 720p / **480p / audio-only** (Grabber's fetch menu got the same rungs,
+  and its fetches finally honor a chosen quality instead of always "best").
+  Every highlight row grew a **↓ clip** button — fetch just that span.
+  Landed clips list themselves under the progress line with **Reveal**
+  buttons (`/api/media/reveal` — Finder on the Mac, the file manager
+  elsewhere). Verified live: 5 spans → 5 files, each the span's length.
+- **AI, bring-your-own-key, never the default** (`czcore/llm.py`). Paste
+  an Anthropic key in **Settings → AI** (chmod-600 file, masked to its
+  tail, env `ANTHROPIC_API_KEY` wins over the file, a stray
+  `ANTHROPIC_BASE_URL` alone activates nothing) and Highlighter grows two
+  labeled *generative* buttons: **✨ AI narrative brief** (bulleted, every
+  claim carrying its [MM:SS], rendered as the same clickable pills) and
+  **✨ AI** beside Ask (answers ONLY from the retrieval passages, cites
+  inline, says so when they don't contain the answer). Long meetings
+  stride-sample to fit the budget. Without a key nothing changes anywhere;
+  errors are sentences ("the API key was refused (401) — check it in
+  Settings → AI" — verified live with a fake key). stdlib urllib, zero new
+  dependencies, no key ever ships.
+- **⌘K jumps anywhere.** A command palette over the whole suite — type a
+  few letters of any tool (or Queue, Models, Settings, About), Enter, and
+  you're there. Index rows grew **→ Highlighter** (send any cataloged clip
+  straight to the moments-finder), and Highlighter answers transport keys:
+  space play/pause, ←/→ ±5 s — never while you're typing.
+- 13 new tests (`test_llm_names.py`: key precedence/masking/0600, the
+  stray-base-URL guard, watch-page videoDetails parsing incl. the
+  shape-change case, hotwords harvest/dedupe/cap). 238 pass; the 2
+  standing failures are the known cv2-ffmpeg packaging gates.
+
 ### 1.1.0 prep: the icon, the DMG's face, and zero-setup captions — 2026-07-17
 - **The suite has an icon**: a cream caret over the amber z — *control z* as
   a rebus. `packaging/make_icon.py` renders it (ink squircle, 2× supersample,

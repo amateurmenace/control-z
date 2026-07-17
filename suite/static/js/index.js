@@ -108,7 +108,9 @@ const IndexPage = (() => {
               ${row.missing ? `<span class="badge warn">missing — drive unplugged?</span>` : ""}
               ${row.sidecar_mtime ? `<span class="badge">words</span>` : ""}</div>
             <div class="ix-meta">${fmtTime(row.duration)} · ${res}${row.fps ? " @ " + (+row.fps).toFixed(2) : ""} ·
-              ${esc(row.folder.split("/").pop())}</div>
+              ${esc(row.folder.split("/").pop())}
+              ${row.missing ? "" : `<button class="ix-hit" data-hl="${esc(row.path)}"
+                title="open this clip in Community Highlighter — find the moments">→ Highlighter</button>`}</div>
             ${(row.matches || []).map(m => `<button class="ix-hit" data-path="${esc(row.path)}" data-t="${m.t}"
                 title="open in Scribe at this moment">${fmtTime(m.t)} “${esc(m.text)}”</button>`).join("")}
           </div>
@@ -118,8 +120,9 @@ const IndexPage = (() => {
         c.checked ? S.picked.add(c.dataset.path) : S.picked.delete(c.dataset.path);
         selMeta();
       });
-      $$(".ix-hit", box).forEach(b => b.onclick = () =>
-        go("scribe", { openPath: b.dataset.path }));
+      $$(".ix-hit", box).forEach(b => b.onclick = () => b.dataset.hl
+        ? go("highlighter", { openPath: b.dataset.hl })
+        : go("scribe", { openPath: b.dataset.path }));
       $$(".ix-row .ix-thumb", box).forEach(img => img.onclick = () => {
         const p = img.closest(".ix-row").dataset.path;
         go("scribe", { openPath: p });

@@ -56,9 +56,15 @@ const ScribePage = (() => {
               <option value="base" selected>base — quick + decent</option>
               <option value="small">small — better</option>
               <option value="medium">medium — strong (1.5 GB)</option>
-              <option value="large-v3-turbo">large-v3-turbo — best (1.6 GB)</option>
+              <option value="large-v3-turbo">large-v3-turbo — best balance (1.6 GB)</option>
+              <option value="large-v3">large-v3 — most accurate, best on names (3 GB)</option>
             </select>
             <div class="hint">first use of a size downloads it into the shared model store</div>
+          </div>
+          <div class="field"><label>teach it the names (optional)</label>
+            <input type="text" id="sc-hotwords" spellcheck="false"
+              placeholder="Bernard Greene, Harvard Street, Select Board…"
+              title="people, places, boards the audio likely carries — the decoder is biased toward them so proper names land right">
           </div>
           <div class="checkrow"><input type="checkbox" id="sc-diarize" checked>
             <span>label speakers <div class="hint" id="sc-dzhint"></div></span>
@@ -436,6 +442,7 @@ const ScribePage = (() => {
         diarize: $("#sc-diarize", el).checked,
         speakers: parseInt($("#sc-speakern", el).value) || -1,
         language: $("#sc-lang", el).value.trim() || null,
+        hotwords: $("#sc-hotwords", el).value.trim(),
       });
       watchJob(job.id, j => {
         $("#sc-msg", el).textContent = j.status === "queued" ? "queued" : (j.message || j.status);

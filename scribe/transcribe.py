@@ -24,7 +24,13 @@ def transcribe(
     language: Optional[str] = None,
     device: str = "auto",
     progress=None,
+    hotwords: Optional[str] = None,
 ) -> Transcript:
+    """hotwords: names and terms the audio is likely to carry — board
+    members, streets, the town itself. Whisper's decoder is biased toward
+    them in every window, which is what stops "Councilor Vitolo" landing
+    as "counselor of it all". Callers harvest these from the meeting's own
+    captions/metadata; ~1000 chars is plenty."""
     from faster_whisper import WhisperModel
 
     if progress:
@@ -34,6 +40,7 @@ def transcribe(
     segments, info = wm.transcribe(
         path, language=language, word_timestamps=True, vad_filter=True,
         vad_parameters={"min_silence_duration_ms": 500},
+        hotwords=(hotwords or None),
     )
     segs = []
     for s in segments:

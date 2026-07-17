@@ -98,6 +98,11 @@ const HighlighterPage = (() => {
         <div style="flex:1;min-width:320px" class="hl-panel">
           <span class="tag">executive brief — extractive, the meeting's own sentences</span>
           <div class="hl-brief" id="hl-brief"><div class="hint">reading…</div></div>
+          <div id="hl-aibrief-row" style="display:none;margin-top:8px">
+            <button class="btn" id="hl-aibrief" style="width:auto"
+              title="generative — sends this transcript to Anthropic with YOUR key (Settings → AI); the local brief above stays">✨ AI narrative brief</button>
+          </div>
+          <div class="hl-brief" id="hl-aibrief-out" style="display:none;margin-top:8px;border-top:1px dashed var(--line);padding-top:8px"></div>
         </div>
       </div>
 
@@ -128,14 +133,20 @@ const HighlighterPage = (() => {
               <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
                 <button class="btn" id="hl-transcribe" style="width:auto">Upgrade words with Scribe</button>
                 <select id="hl-model" style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px">
-                  <option value="base" selected>base — quick</option>
+                  <option value="base">base — quick</option>
                   <option value="small">small — better</option>
-                  <option value="large-v3-turbo">large-v3-turbo — best</option>
+                  <option value="large-v3-turbo" selected>large-v3-turbo — best balance</option>
+                  <option value="large-v3">large-v3 — most accurate (names)</option>
                 </select>
                 <button class="btn" id="hl-txt" style="width:auto">Transcript .txt</button>
                 <button class="btn" id="hl-srt" style="width:auto">.srt</button>
                 <button class="btn" id="hl-gtranslate" style="width:auto"
                   title="copies the transcript, opens Google Translate — the honest free path for any language">Google Translate…</button>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                <input type="text" id="hl-hotwords" spellcheck="false" placeholder="names to teach Whisper — auto-filled from this meeting; edit freely"
+                  title="people, places and boards from this meeting's own captions/title — Whisper's decoder is biased toward them so proper names land right"
+                  style="flex:1;background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px">
               </div>
             </div>
           </div>
@@ -168,6 +179,8 @@ const HighlighterPage = (() => {
                 <div class="hl-searchrow">
                   <input type="text" id="hl-askq" placeholder="What happened with the crosswalk?" spellcheck="false">
                   <button class="btn cta" id="hl-askgo" style="padding:8px 14px">Ask</button>
+                  <button class="btn" id="hl-askai" style="padding:8px 10px;display:none"
+                    title="generative answer grounded in the retrieved passages — your Anthropic key (Settings → AI)">✨ AI</button>
                 </div>
               </div>
             </div>
@@ -197,18 +210,27 @@ const HighlighterPage = (() => {
         </div>
         <div class="hl-grid" style="padding-top:0">
           <div class="hl-panel">
-            <span class="tag">smart download — get only what you need</span>
+            <span class="tag">download clips — only the moments you kept</span>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
-              <select id="hl-quality" style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px">
+              <select id="hl-quality" title="applies to every download on this page"
+                style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px">
+                <option value="best">best available</option>
+                <option value="2160">4K (2160p)</option>
+                <option value="1440">1440p</option>
                 <option value="1080" selected>1080p</option>
                 <option value="720">720p</option>
-                <option value="best">best</option>
+                <option value="480">480p</option>
+                <option value="audio">audio only</option>
               </select>
-              <button class="btn" id="hl-dlfull" style="width:auto">Download full video</button>
-              <button class="btn cta" id="hl-dlsections" style="width:auto">Download kept sections only</button>
+              <button class="btn cta bright" id="hl-dlsections" style="flex:1;min-width:200px">⬇ Download highlight clips</button>
             </div>
             <div class="hint" id="hl-dlhint" style="margin-top:6px"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)">
+              <button class="btn" id="hl-dlfull" style="width:auto">Download full video</button>
+              <span class="hint" id="hl-dlfullhint" style="flex:1">the whole recording — only if you really want all of it</span>
+            </div>
             <div class="progmsg" id="hl-dlmsg"></div>
+            <div id="hl-dlfiles" style="margin-top:6px"></div>
           </div>
           <div class="hl-panel">
             <span class="tag">render</span>
@@ -332,7 +354,11 @@ const HighlighterPage = (() => {
     try {
       S.source = source;
       S.keep = new Set(); S.timeline = []; S.picks = []; S.lane = [];
-      S.insight = null; S.curClip = -1;
+      S.insight = null; S.curClip = -1; S.sectionFiles = [];
+      renderDlFiles();
+      $("#hl-aibrief-out", el).style.display = "none";
+      $("#hl-aibrief-out", el).innerHTML = "";
+      llmCheck();
       const tr = await api("/api/highlighter/transcript", { path: source });
       S.session = tr.session;
       S.meta = tr.meta;
@@ -383,6 +409,7 @@ const HighlighterPage = (() => {
         { event: "command", func: "seekTo", args: [t, true] }), "*");
       if (play) f.contentWindow.postMessage(JSON.stringify(
         { event: "command", func: "playVideo", args: [] }), "*");
+      if (play) S.ytPlaying = true;
     } else {
       audio.currentTime = t;
       if (play) audio.play();
@@ -393,6 +420,7 @@ const HighlighterPage = (() => {
     if (S.session) {
       $("#hl-ytframe", el).contentWindow.postMessage(JSON.stringify(
         { event: "command", func: "pauseVideo", args: [] }), "*");
+      S.ytPlaying = false;
     } else audio.pause();
   }
   function syncFrame(force) {
@@ -478,11 +506,22 @@ const HighlighterPage = (() => {
       ? `reel: ${S.timeline.length} clip${S.timeline.length === 1 ? "" : "s"} · ${total.toFixed(0)}s` : "";
     $("#hl-clipcount", el).textContent =
       `${S.timeline.length} clip${S.timeline.length === 1 ? "" : "s"} · ${total.toFixed(0)}s`;
+    const spans = mergedSections();
+    const dl = $("#hl-dlsections", el);
+    dl.textContent = spans.length
+      ? `⬇ Download highlight clips (${spans.length} · ${total.toFixed(0)}s)`
+      : "⬇ Download highlight clips";
+    dl.disabled = !S.session || !spans.length;
     $("#hl-dlhint", el).textContent = S.session
-      ? (S.timeline.length
-        ? `kept sections = ${S.timeline.length} spans, ${total.toFixed(0)}s — a fraction of the meeting`
-        : "keep moments first, then download only those spans")
+      ? (spans.length
+        ? `only these spans leave YouTube — ${spans.length} clip${spans.length === 1 ? "" : "s"}, `
+          + `${total.toFixed(0)}s of a ${S.meta?.duration ? fmtTime(S.meta.duration) : "long"} meeting`
+        : "keep moments first (✓ in the transcript, or Make Highlights) — then download only those spans")
       : "this source is already local — downloads are for URL sessions";
+    const full = $("#hl-dlfull", el);
+    full.disabled = !S.session;
+    full.textContent = S.meta?.duration
+      ? `Download full video (${fmtTime(S.meta.duration)})` : "Download full video";
   }
 
   /* ---------------- insight (brief, cloud, analyze) ---------------- */
@@ -515,6 +554,12 @@ const HighlighterPage = (() => {
     });
     renderSuggestions((S.insight.topics || []).slice(0, 3)
       .map(t => `What was said about ${t.topic}?`));
+    // teach Whisper this meeting's names — prefilled, user-editable
+    const hw = $("#hl-hotwords", el);
+    if (!hw.value || hw.value === S.autoHotwords) {
+      hw.value = S.insight.hotwords || "";
+      S.autoHotwords = hw.value;
+    }
     renderAnalyze();
   }
 
@@ -663,10 +708,17 @@ const HighlighterPage = (() => {
         <span class="tpill" data-t="${p.start}">${fmtTime(p.start)}</span>
         <span style="flex:1">${esc((p.text || "").slice(0, 90))}
           <span class="hl-why" title="${esc((p.reasons || []).join(" · "))}">why</span></span>
+        ${S.session ? `<button class="add" data-dl="${k}"
+          title="download just this span (${(p.end - p.start).toFixed(0)}s) at the chosen quality">↓ clip</button>` : ""}
         <button class="add${inTl ? " in" : ""}" data-k="${k}">${inTl ? "✓ in reel" : "+ Add"}</button>
       </div>`;
     }).join("");
     $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+    $$("button[data-dl]", box).forEach(b => b.onclick = () => {
+      const p = S.picks[+b.dataset.dl];
+      download(true, [{ start: p.start, end: p.end }]);
+      toast(`fetching ${fmtTime(p.start)}–${fmtTime(p.end)} — watch the Edit tab for progress`);
+    });
     $$("button.add", box).forEach(b => b.onclick = () => {
       const p = S.picks[+b.dataset.k];
       const inTl = S.timeline.some(c => Math.abs(c.start - p.start) < 0.5);
@@ -771,10 +823,27 @@ const HighlighterPage = (() => {
     return out;
   }
 
-  async function download(sectionsOnly) {
+  function renderDlFiles() {
+    const box = $("#hl-dlfiles", el);
+    const files = S.sectionFiles || [];
+    box.innerHTML = files.map(f => {
+      const name = f.split("/").pop();
+      return `<div style="display:flex;gap:8px;align-items:center;font-size:12px;padding:3px 0">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${esc(f)}">🎬 ${esc(name)}</span>
+        <button class="btn" style="width:auto;padding:2px 10px;font-size:11px" data-reveal="${esc(f)}">Reveal</button>
+      </div>`;
+    }).join("");
+    $$("button[data-reveal]", box).forEach(b => b.onclick = async () => {
+      try { await api("/api/media/reveal", { path: b.dataset.reveal }); }
+      catch (e) { toast(e.message, true); }
+    });
+  }
+
+  async function download(sectionsOnly, spans) {
     const url = S.meta?.url;
     if (!url) { toast("this source has no URL — it's already a local file", true); return; }
-    const sections = sectionsOnly ? mergedSections() : null;
+    const sections = sectionsOnly ? (spans || mergedSections()) : null;
     if (sectionsOnly && !sections.length) { toast("keep some moments first", true); return; }
     try {
       const job = await api("/api/highlighter/fetch", {
@@ -788,8 +857,10 @@ const HighlighterPage = (() => {
       if (done.status !== "done") return;
       loadLibrary();
       if (sectionsOnly) {
-        S.sectionFiles = done.result.paths || [done.result.path];
-        toast(`${S.sectionFiles.length} section clips landed — Export reel now stitches them`);
+        const landed = done.result.paths || [done.result.path];
+        S.sectionFiles = [...new Set([...(S.sectionFiles || []), ...landed])];
+        renderDlFiles();
+        toast(`${landed.length} clip${landed.length === 1 ? "" : "s"} landed — Export reel stitches them`);
       } else {
         toast("full video downloaded — opening the local copy");
         open(done.result.path);
@@ -838,6 +909,64 @@ const HighlighterPage = (() => {
       rep.innerHTML += `<b>→</b> ${esc(r.out)}\n   ${r.selects} events · ${esc(r.note)}\n`;
       toast("selects EDL written");
     } catch (e) { toast(e.message, true); }
+  }
+
+  /* ---------------- the generative upgrade (your key) ---------------- */
+  async function llmCheck() {
+    try { S.llm = await api("/api/settings/llm"); } catch (e) { S.llm = null; }
+    const on = !!(S.llm && S.llm.enabled);
+    $("#hl-aibrief-row", el).style.display = on ? "" : "none";
+    $("#hl-askai", el).style.display = on ? "" : "none";
+  }
+
+  // [MM:SS] / [H:MM:SS] in generated prose become the same clickable pills
+  // the extractive brief wears — every AI claim stays checkable
+  function linkifyTimes(text) {
+    return esc(text).replace(/\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g,
+      (m, a, b, c) => {
+        const t = c ? (+a * 3600 + +b * 60 + +c) : (+a * 60 + +b);
+        return `<span class="tpill" data-t="${t}">${c ? a + ":" + b + ":" + c : a + ":" + b}</span>`;
+      });
+  }
+
+  async function aiBrief() {
+    const btn = $("#hl-aibrief", el);
+    const out = $("#hl-aibrief-out", el);
+    btn.disabled = true;
+    out.style.display = "";
+    out.innerHTML = `<div class="hint">asking with your key…</div>`;
+    try {
+      const job = await api("/api/highlighter/ai-brief", { path: S.source });
+      watchJob(job.id, j => { out.innerHTML = `<div class="hint">${esc(j.message || j.status)}</div>`; });
+      const done = await jobDone(job.id);
+      btn.disabled = false;
+      if (done.status !== "done") { out.innerHTML = `<div class="hint">${esc(done.error || "stopped")}</div>`; return; }
+      out.innerHTML = `<div class="hint" style="margin-bottom:4px">generative — ${esc(done.result.model)}, your key · every [time] is clickable</div>`
+        + done.result.text.split(/\n+/).map(p => `<p>${linkifyTimes(p)}</p>`).join("");
+      $$(".tpill", out).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+    } catch (e) { btn.disabled = false; out.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
+  }
+
+  async function askAI() {
+    const q = $("#hl-askq", el).value.trim();
+    if (!q || !S.source) return;
+    const log = $("#hl-chatlog", el);
+    log.innerHTML += `<div class="hl-msg q">${esc(q)}</div>`;
+    $("#hl-askq", el).value = "";
+    log.scrollTop = log.scrollHeight;
+    const holder = document.createElement("div");
+    holder.className = "hl-msg a";
+    holder.innerHTML = `<span class="hint">asking with your key…</span>`;
+    log.appendChild(holder);
+    try {
+      const job = await api("/api/highlighter/ai-ask", { path: S.source, q });
+      const done = await jobDone(job.id);
+      if (done.status !== "done") { holder.innerHTML = esc(done.error || "stopped"); return; }
+      holder.innerHTML = `<div class="hint" style="margin-bottom:3px">generative — ${esc(done.result.model)}, your key</div>`
+        + done.result.text.split(/\n+/).map(p => `<div style="margin-bottom:4px">${linkifyTimes(p)}</div>`).join("");
+      $$(".tpill", holder).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+      log.scrollTop = log.scrollHeight;
+    } catch (e) { holder.innerHTML = esc(e.message); }
   }
 
   /* ---------------- ask the meeting ---------------- */
@@ -914,7 +1043,8 @@ const HighlighterPage = (() => {
     btn.disabled = true;
     try {
       const job = await api("/api/scribe/transcribe", {
-        path: S.source, model: $("#hl-model", el).value, diarize: true });
+        path: S.source, model: $("#hl-model", el).value, diarize: true,
+        hotwords: $("#hl-hotwords", el).value.trim() });
       watchJob(job.id, j => { $("#hl-detectmsg", el).textContent = j.message || j.status; });
       const done = await jobDone(job.id);
       btn.disabled = false;
@@ -983,6 +1113,29 @@ const HighlighterPage = (() => {
     $("#hl-gtranslate", el).onclick = gTranslate;
     $("#hl-askgo", el).onclick = askMeeting;
     $("#hl-askq", el).addEventListener("keydown", e => { if (e.key === "Enter") askMeeting(); });
+    $("#hl-aibrief", el).onclick = aiBrief;
+    $("#hl-askai", el).onclick = askAI;
+
+    // transport keys, NLE muscle memory: space play/pause, arrows ±5s —
+    // never while typing in a field
+    addEventListener("keydown", e => {
+      if (CZ.current !== "highlighter" || !S.source) return;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (S.session) {
+          // the embed owns its clock; we track only our last command
+          const f = $("#hl-ytframe", el);
+          f.contentWindow.postMessage(JSON.stringify({ event: "command",
+            func: S.ytPlaying ? "pauseVideo" : "playVideo", args: [] }), "*");
+          S.ytPlaying = !S.ytPlaying;
+        } else audio.paused ? audio.play() : audio.pause();
+      } else if (!S.session && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        seek(Math.max(0, audio.currentTime + (e.key === "ArrowLeft" ? -5 : 5)),
+             !audio.paused);
+      }
+    });
 
     $("#hl-prev", el).onclick = () => playClip(Math.max(0, S.curClip - 1), false);
     $("#hl-next", el).onclick = () => playClip(Math.min(S.timeline.length - 1, S.curClip + 1), false);

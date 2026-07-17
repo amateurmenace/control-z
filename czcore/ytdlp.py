@@ -31,8 +31,11 @@ NIGHTLY_API = ("https://api.github.com/repos/yt-dlp/"
 # quality presets the UIs offer — every one merges to mp4 for edit-friendliness
 FORMATS = {
     "best": "bv*+ba/b",
+    "2160": "bv*[height<=2160]+ba/b[height<=2160]",
+    "1440": "bv*[height<=1440]+ba/b[height<=1440]",
     "1080": "bv*[height<=1080]+ba/b[height<=1080]",
     "720": "bv*[height<=720]+ba/b[height<=720]",
+    "480": "bv*[height<=480]+ba/b[height<=480]",
     "audio": "ba/b",
 }
 

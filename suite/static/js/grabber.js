@@ -22,6 +22,16 @@ const GrabberPage = (() => {
       <input type="date" id="gb-from" class="gb-date">
       <input type="date" id="gb-to" class="gb-date">
       <button class="btn" style="width:auto" id="gb-search">Search</button>
+      <select id="gb-quality" title="every fetch uses this — best is the archive default"
+        style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:4px 6px;font-size:11.5px">
+        <option value="best" selected>fetch: best</option>
+        <option value="2160">fetch: 4K</option>
+        <option value="1440">fetch: 1440p</option>
+        <option value="1080">fetch: 1080p</option>
+        <option value="720">fetch: 720p</option>
+        <option value="480">fetch: 480p</option>
+        <option value="audio">fetch: audio</option>
+      </select>
       <span class="ytdlp-chip" id="gb-ytdlp" title="the fetch engine — nightly build, checked on every open">yt-dlp —</span>
     </div>
     <div class="ws-body">
@@ -43,8 +53,11 @@ const GrabberPage = (() => {
           <div class="field"><label>height</label>
             <select id="gb-height">
               <option value="">keep source</option>
+              <option value="2160">2160 — 4K</option>
+              <option value="1440">1440</option>
               <option value="1080">1080</option>
               <option value="720">720</option>
+              <option value="480">480</option>
             </select>
           </div>
           <div class="field"><label>frame rate</label>
@@ -160,7 +173,8 @@ const GrabberPage = (() => {
     if (!url) return;
     if (btn) btn.disabled = true;
     try {
-      const job = await api("/api/grabber/fetch", { url, name: name || "" });
+      const job = await api("/api/grabber/fetch", { url, name: name || "",
+        quality: $("#gb-quality", el).value });
       toast("fetching — it lands in the bin below");
       const row = document.createElement("div");
       row.className = "batchrow";

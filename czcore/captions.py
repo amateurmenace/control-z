@@ -24,6 +24,8 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
 _TRACKS = re.compile(r'"captionTracks":(\[.*?\])[,}]')
 _VIDEO_ID = re.compile(
     r"(?:v=|youtu\.be/|/shorts/|/live/|/embed/)([\w-]{11})")
+_DETAILS = re.compile(r'"videoDetails":\s*({.*?})\s*,\s*"(?:annotations|'
+                      r'playerConfig|storyboards|microformat)"', re.S)
 
 
 def video_id(url_or_id: str) -> Optional[str]:
@@ -58,6 +60,31 @@ def parse_tracks(html: str) -> List[dict]:
     return out
 
 
+def parse_video_details(html: str) -> dict:
+    """Title, duration, channel out of the watch page itself — the same
+    HTML the caption fetch already paid for, so the fast path needs no
+    second metadata request. Empty dict when the page shape changed."""
+    m = _DETAILS.search(html)
+    if not m:
+        return {}
+    try:
+        d = json.loads(m.group(1))
+    except ValueError:
+        return {}
+    out = {}
+    if d.get("title"):
+        out["title"] = str(d["title"])
+    if d.get("author"):
+        out["uploader"] = str(d["author"])
+    if d.get("videoId"):
+        out["id"] = str(d["videoId"])
+    try:
+        out["duration"] = int(d.get("lengthSeconds") or 0) or None
+    except (TypeError, ValueError):
+        pass
+    return out
+
+
 def pick_track(tracks: List[dict], lang: str = "en") -> Optional[dict]:
     """Manual captions in the language beat auto; auto beats other-language
     manual; anything beats nothing."""
@@ -82,9 +109,10 @@ def fetch_vtt(url_or_id: str, lang: str = "en",
               proxy: Optional[str] = None, timeout: float = 25.0) -> dict:
     """Watch page → captionTracks → timedtext VTT.
 
-    Returns {"vtt": text, "track": {…}}. Raises RuntimeError with a sentence
-    for every distinct way this fails — including YouTube's empty-200 gate,
-    which names the Settings fix.
+    Returns {"vtt": text, "track": {…}, "meta": {title, duration, uploader}}
+    — the metadata rides along free because the watch page was already
+    fetched. Raises RuntimeError with a sentence for every distinct way this
+    fails — including YouTube's empty-200 gate, which names the Settings fix.
     """
     vid = video_id(url_or_id)
     if not vid:
@@ -98,10 +126,15 @@ def fetch_vtt(url_or_id: str, lang: str = "en",
         html = op.open(req, timeout=timeout).read().decode("utf-8", "replace")
     except Exception as e:
         raise RuntimeError(f"couldn't reach the watch page {via} ({e})") from e
+    meta = parse_video_details(html)
     tracks = parse_tracks(html)
     if not tracks:
-        raise RuntimeError("the watch page lists no caption tracks — this "
+        # the page answered, so hand the metadata to the caller even though
+        # the captions didn't — a session deserves its title either way
+        err = RuntimeError("the watch page lists no caption tracks — this "
                            "video has no captions (or the page shape changed)")
+        err.meta = meta
+        raise err
     track = pick_track(tracks, lang)
     try:
         req = urllib.request.Request(track["base_url"] + "&fmt=vtt",
@@ -110,14 +143,16 @@ def fetch_vtt(url_or_id: str, lang: str = "en",
     except Exception as e:
         raise RuntimeError(f"the caption fetch broke {via} ({e})") from e
     if not body.strip():
-        raise RuntimeError(
+        err = RuntimeError(
             "YouTube answered the caption request with an empty body — its "
             "tell for a gated IP. " +
             ("Even through the proxy; try again (rotating pool) or check the "
              "Webshare account." if proxy else
              "Configure your Webshare proxy in Settings → fetch network and "
              "retry."))
-    return {"vtt": body, "track": track}
+        err.meta = meta
+        raise err
+    return {"vtt": body, "track": track, "meta": meta}
 
 
 # -- the community caption service ------------------------------------------

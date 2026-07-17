@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -146,6 +147,30 @@ def create_suite_app():
                 "pivot": p.with_suffix(".pivot.json").exists(),
             },
         }
+
+    @app.post("/api/media/reveal")
+    def api_media_reveal(body: dict = Body(...)):
+        """Show a finished file where it landed — Finder on the Mac, the
+        file manager elsewhere. Refuses paths that don't exist rather than
+        opening an empty window."""
+        import subprocess
+        p = Path(str(body.get("path", "")).strip()).expanduser()
+        if not p.exists():
+            return JSONResponse({"error": f"nothing at {p} to reveal"},
+                                status_code=404)
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["open", "-R", str(p)], check=True, timeout=10)
+            elif sys.platform.startswith("win"):
+                subprocess.run(["explorer", "/select,", str(p)], timeout=10)
+            else:
+                subprocess.run(["xdg-open", str(p.parent)], check=True,
+                               timeout=10)
+        except Exception as e:
+            return JSONResponse({"error": f"couldn't open the file browser "
+                                          f"({e.__class__.__name__})"},
+                                status_code=500)
+        return {"ok": True}
 
     @app.get("/api/media/frame")
     def api_media_frame(path: str, i: int, h: int = 540):

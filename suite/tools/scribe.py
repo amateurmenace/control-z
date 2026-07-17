@@ -47,6 +47,10 @@ def register_scribe(app, jobs, frames):
         language = body.get("language") or None
         do_diarize = bool(body.get("diarize", True))
         speakers = int(body.get("speakers", -1))
+        # proper names the audio likely carries — biased into the decoder so
+        # people and places transcribe as themselves (capped: it's a bias,
+        # not a document)
+        hotwords = str(body.get("hotwords", "")).strip()[:1200] or None
         name = Path(path).name
         if not Path(path).is_file():
             return JSONResponse({"error": f"no such file: {path}"}, status_code=404)
@@ -79,7 +83,8 @@ def register_scribe(app, jobs, frames):
                 def prog(m):
                     job.message = m[:120]
 
-                t = transcribe(wav16, model=model, language=language, progress=prog)
+                t = transcribe(wav16, model=model, language=language,
+                               progress=prog, hotwords=hotwords)
                 t.source = str(Path(path).resolve())
                 job.check_cancel()
                 if do_diarize:
@@ -95,7 +100,9 @@ def register_scribe(app, jobs, frames):
                            + (f" · {len(t.speakers)} speakers" if t.speakers else ""))
             return json.loads(t.to_json())
 
-        label = f"{name} — transcribe ({model}{', speakers' if do_diarize else ''})"
+        label = (f"{name} — transcribe ({model}"
+                 f"{', speakers' if do_diarize else ''}"
+                 f"{', names taught' if hotwords else ''})")
         return jobs.start("transcribe", work, tool="scribe", label=label).to_dict()
 
     @app.post("/api/scribe/save")

@@ -129,6 +129,35 @@ def entities(segments: List[dict], top: int = 12) -> Dict[str, List[dict]]:
             for k, v in buckets.items()}
 
 
+def hotwords(segments: List[dict], meta: Optional[dict] = None,
+             cap: int = 1000) -> str:
+    """Names the recording likely carries, as one comma-joined string for
+    Whisper's decoder — people first (they mis-transcribe worst), then
+    places and organizations, then names scraped from the title. Built
+    from the meeting's own captions/metadata; nothing invented, and the
+    caller can edit before it's used."""
+    ent = entities(segments, top=16)
+    seen, out = set(), []
+
+    def add(name: str):
+        n = " ".join(str(name).split())
+        if len(n) < 3 or n.lower() in seen:
+            return
+        seen.add(n.lower())
+        out.append(n)
+
+    # every bucket is tail-word- or shape-verified upstream, and a hotword
+    # the audio never says biases nothing — so one mention is enough
+    for bucket in ("people", "places", "organizations"):
+        for row in ent.get(bucket, []):
+            add(row["name"])
+    for key in ("title", "uploader"):
+        for m in _CAP_RUN.findall(str((meta or {}).get(key) or "")):
+            add(m)
+    s = ", ".join(out)
+    return s[:cap].rsplit(", ", 1)[0] if len(s) > cap else s
+
+
 def participation(segments: List[dict]) -> List[dict]:
     """Talk time per labeled speaker. Empty when nobody ran diarization."""
     talk: Dict[str, float] = defaultdict(float)

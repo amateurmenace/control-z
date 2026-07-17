@@ -130,10 +130,97 @@ def register_highlighter(app, jobs, frames):
         return {"ytdlp": ytdlp.check_async(force=bool(body.get("force")))}
 
     # -- ingest: URL -> a readable meeting, before any video moves ---------
+    #
+    # The web app answers in one round trip; this matches it. YouTube URLs
+    # skip the yt-dlp probe entirely (the id is in the URL, the title is in
+    # the watch page the caption fetch already reads) and the two local
+    # caption routes RACE on threads — first one home wins. The community
+    # relay only runs after both local routes lose. A session that was
+    # already read returns instantly.
+
+    def _finish_ingest(job, d, how, note, t0):
+        t, origin = _load_transcript(str(d))
+        took = time.monotonic() - t0
+        job.message = (f"read in {took:.1f}s — {len(t['segments'])} segments, "
+                       f"{how}" if t
+                       else "no captions — transcribe after download")
+        return {"source": str(d), "meta": _session_meta(d),
+                "transcript": t, "origin": origin,
+                "captions_note": None if t else note}
+
+    def _ingest_youtube(job, url, vid, t0):
+        from concurrent.futures import (FIRST_COMPLETED, ThreadPoolExecutor,
+                                        wait)
+
+        from czcore import captions as ctext
+        from czcore import proxy
+
+        d = _meetings_dir() / vid
+        d.mkdir(parents=True, exist_ok=True)
+        purl = proxy.proxy_url()
+        job.message = ("asking YouTube both ways at once…"
+                       + (" (your proxy rides along)" if purl else ""))
+
+        def watch_page():
+            got = ctext.fetch_vtt(url, proxy=purl)
+            return {"how": "captions via watch page"
+                           + (" through your Webshare proxy" if purl else ""),
+                    "vtt": got["vtt"], "meta": got.get("meta") or {}}
+
+        def via_ytdlp():
+            ytdlp.fetch_captions(url, d)   # writes info.json + vtt into d
+            if not _captions_for(d):
+                raise RuntimeError("yt-dlp reached the page but captions "
+                                   "didn't come")
+            return {"how": "captions via yt-dlp", "vtt": None, "meta": {}}
+
+        notes, scraped_meta, winner = [], {}, None
+        gated = False
+        ex = ThreadPoolExecutor(max_workers=2)
+        try:
+            pending = {ex.submit(watch_page), ex.submit(via_ytdlp)}
+            while pending and winner is None and not gated:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for f in done:
+                    try:
+                        winner = winner or f.result()
+                    except Exception as e:  # each loser explains itself
+                        notes.append(str(e))
+                        scraped_meta.update(getattr(e, "meta", None) or {})
+                        # the empty-200 is YouTube's definitive gate tell —
+                        # don't wait out the other doomed route, go to relay
+                        gated = gated or "empty body" in str(e)
+        finally:
+            # the loser may still be running; let it finish in the background
+            # (same files, same session dir) rather than stalling the answer
+            ex.shutdown(wait=False, cancel_futures=True)
+
+        if winner and winner.get("vtt"):
+            (d / "meeting.en.vtt").write_text(winner["vtt"])
+        if winner:
+            scraped_meta.update(winner.get("meta") or {})
+        if not _captions_for(d) and proxy.relay_enabled():
+            # last resort, zero setup: the web app's own public transcript
+            # engine (BIG's deployment, its residential proxy behind it).
+            # Off by one switch in Settings for the fully-independent.
+            job.message = "captions via the community service…"
+            try:
+                got = ctext.fetch_vtt_relay(url)
+                (d / "meeting.en.vtt").write_text(got["vtt"])
+                winner = {"how": "captions via the community service"}
+            except RuntimeError as e:
+                notes.append(str(e))
+        info_p = d / "meeting.info.json"
+        if not info_p.exists():
+            info_p.write_text(json.dumps(
+                {"id": vid, "webpage_url": url, **scraped_meta}))
+        how = winner["how"] if winner else "no route"
+        return _finish_ingest(job, d, how, " · ".join(notes[-2:]) or None, t0)
 
     @app.post("/api/highlighter/ingest")
     def api_ingest(body: dict = Body(...)):
         url = str(body.get("url", "")).strip()
+        fresh = bool(body.get("fresh"))
         if not url.lower().startswith(("http://", "https://")):
             return JSONResponse({"error": "paste a video URL"}, status_code=422)
 
@@ -141,11 +228,23 @@ def register_highlighter(app, jobs, frames):
             from czcore import captions as ctext
             from czcore import proxy
 
+            t0 = time.monotonic()
+            vid = ctext.video_id(url)
+            if vid:
+                d = _meetings_dir() / vid
+                sc, _, _ = _sidecars(str(d))
+                if d.exists() and sc.exists() and not fresh:
+                    return _finish_ingest(job, d, "already read (cached)",
+                                          None, t0)
+                return _ingest_youtube(job, url, vid, t0)
+
+            # not YouTube-shaped: yt-dlp knows the other thousand sites —
+            # probe for the id first, then ask it for captions
             job.message = "reading the page…"
             meta = ytdlp.probe_url(url)
-            vid = re.sub(r"[^\w-]", "", str(meta.get("id") or "")) or \
+            svid = re.sub(r"[^\w-]", "", str(meta.get("id") or "")) or \
                 re.sub(r"[^\w-]", "", url)[-24:]
-            d = _meetings_dir() / vid
+            d = _meetings_dir() / svid
             d.mkdir(parents=True, exist_ok=True)
             job.message = "fetching the captions…"
             note = None
@@ -156,40 +255,7 @@ def register_highlighter(app, jobs, frames):
             info_p = d / "meeting.info.json"
             if not info_p.exists():
                 info_p.write_text(json.dumps({**meta, "webpage_url": url}))
-            how = "captions via yt-dlp"
-            if not _captions_for(d):
-                # yt-dlp's caption routes are walled one by one — the watch
-                # page's own timedtext is what the web app runs on, through
-                # the user's Webshare proxy when one is configured
-                purl = proxy.proxy_url()
-                job.message = ("captions via watch page"
-                               + (" + your proxy…" if purl else "…"))
-                try:
-                    got = ctext.fetch_vtt(url, proxy=purl)
-                    (d / "meeting.en.vtt").write_text(got["vtt"])
-                    how = ("captions via watch page"
-                           + (" through your Webshare proxy" if purl else ""))
-                    note = None
-                except RuntimeError as e:
-                    note = str(e)
-            if not _captions_for(d) and proxy.relay_enabled():
-                # last resort, zero setup: the web app's own public transcript
-                # engine (BIG's deployment, its residential proxy behind it).
-                # Off by one switch in Settings for the fully-independent.
-                job.message = "captions via the community service…"
-                try:
-                    got = ctext.fetch_vtt_relay(url)
-                    (d / "meeting.en.vtt").write_text(got["vtt"])
-                    how = "captions via the community service"
-                    note = None
-                except RuntimeError as e:
-                    note = str(e)
-            t, origin = _load_transcript(str(d))
-            job.message = (f"{len(t['segments'])} segments — {how}"
-                           if t else "no captions — transcribe after download")
-            return {"source": str(d), "meta": _session_meta(d),
-                    "transcript": t, "origin": origin,
-                    "captions_note": None if t else note}
+            return _finish_ingest(job, d, "captions via yt-dlp", note, t0)
 
         return jobs.start("ingest", work, tool="highlighter",
                           label=f"read — {url[:70]}").to_dict()
@@ -321,6 +387,7 @@ def register_highlighter(app, jobs, frames):
             except ValueError:
                 pass
         segs = t["segments"]
+        meta = _session_meta(Path(source)) if _is_session(source) else None
         data = {
             "origin": origin, "n_segments": len(segs),
             "brief": insight.brief(segs),
@@ -330,6 +397,9 @@ def register_highlighter(app, jobs, frames):
             "participation": insight.participation(segs),
             "topics": insight.topics(segs),
             "decisions": insight.decisions(segs),
+            # names for Whisper's decoder — harvested here so the Scribe
+            # upgrade can teach it the people/places before it listens
+            "hotwords": insight.hotwords(segs, meta),
         }
         cache.write_text(json.dumps(data))
         return data
@@ -344,6 +414,102 @@ def register_highlighter(app, jobs, frames):
             return JSONResponse({"error": "no transcript to ask"},
                                 status_code=409)
         return insight.ask(t["segments"], str(body.get("q", "")))
+
+    # -- the generative upgrade: the user's own key, the meeting's own words --
+    #
+    # These two endpoints exist only when the user configured a key
+    # (Settings → AI). The local extractive/retrieval reads stay the
+    # default; these are labeled generative in the UI and cite timestamps
+    # so every claim can be clicked and checked.
+
+    def _transcript_lines(t, budget: int = 60000) -> str:
+        lines = [f"[{int(s['start'] // 60):02d}:{int(s['start'] % 60):02d}] "
+                 f"{(s.get('speaker') + ': ') if s.get('speaker') else ''}"
+                 f"{s.get('text', '')}"
+                 for s in t["segments"]]
+        text = "\n".join(lines)
+        if len(text) <= budget:
+            return text
+        # long meeting: keep every line's timestamp shape but stride-sample
+        stride = max(2, len(text) // budget + 1)
+        return "\n".join(lines[::stride])
+
+    @app.post("/api/highlighter/ai-brief")
+    def api_ai_brief(body: dict = Body(...)):
+        from czcore import llm
+
+        if not llm.enabled():
+            return JSONResponse({"error": "no API key configured — "
+                                          "Settings → AI"}, status_code=409)
+        source = str(Path(body["path"]).expanduser())
+        t, _ = _load_transcript(source)
+        if not t or not t.get("segments"):
+            return JSONResponse({"error": "no transcript to brief"},
+                                status_code=409)
+        meta = _session_meta(Path(source)) if _is_session(source) else {}
+        title = meta.get("title") or Path(source).name
+
+        def work(job):
+            job.message = f"asking {llm.status()['model']} (your key)…"
+            text = llm.complete(
+                system=("You write executive briefs of public civic meetings "
+                        "for busy residents. Ground every claim in the "
+                        "transcript; keep the [MM:SS] timestamps you quote "
+                        "inline so readers can click them. Plain language, "
+                        "no filler, no speculation."),
+                prompt=(f"Meeting: {title}\n\nTranscript (timestamped):\n"
+                        f"{_transcript_lines(t)}\n\n"
+                        "Write: 1) a two-sentence what-happened lede, "
+                        "2) 4-6 bullet points of decisions/major discussion "
+                        "each starting with its [MM:SS], 3) one sentence on "
+                        "what's next. Under 250 words."))
+            job.message = "brief written — generative, your key"
+            return {"text": text, "model": llm.status()["model"]}
+
+        return jobs.start("ai-brief", work, tool="highlighter",
+                          label=f"AI brief — {title[:60]}").to_dict()
+
+    @app.post("/api/highlighter/ai-ask")
+    def api_ai_ask(body: dict = Body(...)):
+        from czcore import llm
+
+        from highlighter import insight
+
+        if not llm.enabled():
+            return JSONResponse({"error": "no API key configured — "
+                                          "Settings → AI"}, status_code=409)
+        source = str(Path(body["path"]).expanduser())
+        q = str(body.get("q", "")).strip()
+        if not q:
+            return JSONResponse({"error": "ask something"}, status_code=422)
+        t, _ = _load_transcript(source)
+        if not t:
+            return JSONResponse({"error": "no transcript to ask"},
+                                status_code=409)
+        # retrieval grounds the generation: the model answers FROM the
+        # passages, and says so when they don't contain the answer
+        hits = insight.ask(t["segments"], q, k=8)
+
+        def work(job):
+            job.message = f"asking {llm.status()['model']} (your key)…"
+            passages = "\n".join(
+                f"[{int(p['t'] // 60):02d}:{int(p['t'] % 60):02d}] "
+                f"{(p.get('speaker') + ': ') if p.get('speaker') else ''}"
+                f"{p['text']}" for p in hits.get("passages", []))
+            text = llm.complete(
+                system=("Answer questions about a civic meeting using ONLY "
+                        "the provided transcript passages. Cite [MM:SS] "
+                        "inline for every claim. If the passages don't "
+                        "answer it, say exactly that."),
+                prompt=f"Passages:\n{passages or '(none matched)'}\n\n"
+                       f"Question: {q}",
+                max_tokens=600)
+            job.message = "answered — generative, your key"
+            return {"text": text, "passages": hits.get("passages", []),
+                    "model": llm.status()["model"]}
+
+        return jobs.start("ai-ask", work, tool="highlighter",
+                          label=f"AI answer — {q[:60]}").to_dict()
 
     @app.post("/api/highlighter/detect")
     def api_detect(body: dict = Body(...)):

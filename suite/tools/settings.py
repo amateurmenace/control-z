@@ -112,3 +112,20 @@ def register_settings(app, jobs, frames):
         return proxy.set_config(str(body.get("username", "")),
                                 str(body.get("password", "")),
                                 str(body.get("host", "")))
+
+    # -- AI: the user's own Anthropic key, optional, never the default -------
+
+    @app.get("/api/settings/llm")
+    def api_llm_get():
+        from czcore import llm
+        return llm.status()
+
+    @app.post("/api/settings/llm")
+    def api_llm_set(body: dict = Body(...)):
+        from czcore import llm
+        if llm.get_config()["source"] == "env" and body.get("api_key"):
+            return JSONResponse(
+                {"error": "the key is set by ANTHROPIC_API_KEY in the "
+                          "environment — change it there"}, status_code=409)
+        return llm.set_config(str(body.get("api_key", "")).strip(),
+                              str(body.get("model", "")).strip())

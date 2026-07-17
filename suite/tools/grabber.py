@@ -54,6 +54,7 @@ def register_grabber(app, jobs, frames):
     def api_fetch(body: dict = Body(...)):
         url = str(body.get("url", "")).strip()
         name = str(body.get("name", "")).strip()
+        quality = str(body.get("quality", "best")) or "best"
         if not url.lower().startswith(("http://", "https://")):
             return JSONResponse({"error": "that link isn't a URL"},
                                 status_code=422)
@@ -72,7 +73,7 @@ def register_grabber(app, jobs, frames):
                                          cancelled=lambda: job.cancel_requested,
                                          name=name)
             else:
-                got = ytdlp.download(url, lib, quality="best", progress=prog,
+                got = ytdlp.download(url, lib, quality=quality, progress=prog,
                                      cancelled=lambda: job.cancel_requested)
             job.message = f"fetched {Path(got['path']).name}" + (
                 f" (+{got['clips'] - 1} more clips)" if got.get("clips", 1) > 1 else "")
