@@ -165,9 +165,15 @@ class FrameService:
         with self._lock:
             try:
                 reader = self._reader(path)
+                # cache passed frames ONLY near the target: a far seek walks a
+                # whole GOP, and JPEG-encoding every walked frame under the
+                # lock is what made scrubbing a 10-second wait — decode-only
+                # for the walk, encode for the dozen frames the user is about
+                # to look at
                 frame, got = reader.read(
                     index,
-                    on_pass=lambda i, f: self._write_jpeg(f, path, i, height))
+                    on_pass=lambda i, f: (self._write_jpeg(f, path, i, height)
+                                          if i >= index - 12 else None))
                 if frame is not None:
                     self._write_jpeg(frame, path, got, height)
             except Exception:

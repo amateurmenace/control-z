@@ -19,6 +19,45 @@ CHECKPOINT = "sam2.1_hiera_small.pt"
 CONFIG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 ANALYSIS_HEIGHT = 720
 
+# one cached image predictor for click-preview — the model loads once and
+# every later click answers in well under a second
+_img_pred = None
+_img_lock = None
+
+
+def preview_mask(img_bgr, points_norm, labels):
+    """One frame, one answer: the mask SAM 2.1 cuts for these clicks RIGHT
+    NOW, before any propagation — the feedback loop clicking deserves.
+    points_norm: [(x, y)] in 0..1 of the given image. Returns (mask u8, conf)."""
+    global _img_pred, _img_lock
+    import threading
+
+    import numpy as np
+    import torch
+    from sam2.build_sam import build_sam2
+    from sam2.sam2_image_predictor import SAM2ImagePredictor
+
+    if _img_lock is None:
+        _img_lock = threading.Lock()
+    with _img_lock:
+        if _img_pred is None:
+            ckpt = models.model_path("sam21_small")
+            _img_pred = SAM2ImagePredictor(
+                build_sam2(CONFIG, str(ckpt), device=_device()))
+        h, w = img_bgr.shape[:2]
+        pts = np.array([[x * w, y * h] for x, y in points_norm],
+                       dtype=np.float32)
+        with torch.inference_mode():
+            # ascontiguousarray: the BGR→RGB flip is a negative-stride view,
+            # which torch refuses to wrap
+            _img_pred.set_image(np.ascontiguousarray(img_bgr[:, :, ::-1]))
+            masks, scores, _ = _img_pred.predict(
+                point_coords=pts,
+                point_labels=np.array(labels, dtype=np.int32),
+                multimask_output=False)
+    m = (masks[0] > 0.5).astype("uint8") * 255
+    return m, float(scores[0])
+
 
 @dataclass
 class Prompt:

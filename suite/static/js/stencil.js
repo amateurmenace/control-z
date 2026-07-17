@@ -166,8 +166,37 @@ const StencilPage = (() => {
     ST.maskCache.clear(); alphaCache.clear();
   }
 
+  /* ---------- click preview: the mask, the moment you ask ---------- */
+  let previewSeq = 0;
+  async function clickPreview(frame) {
+    const pts = ST.prompts.filter(p => p.frame === frame);
+    if (!pts.length || !ST.clip) return;
+    const seq = ++previewSeq;
+    try {
+      const r = await api("/api/stencil/click-preview", {
+        path: ST.clip.path, frame,
+        points: pts.map(p => ({ x: p.x, y: p.y, label: p.label })) });
+      if (seq !== previewSeq) return;      // a newer click superseded this one
+      const img = new Image();
+      img.onload = () => {
+        if (seq !== previewSeq) return;
+        ST.preview = { frame, img, alpha: maskToAlpha(img), conf: r.conf };
+        viewer.draw();
+      };
+      img.src = "data:image/png;base64," + r.png;
+    } catch (e) { toast(e.message, true); }
+  }
+
   /* ---------- overlay ---------- */
   function overlay(g, v) {
+    if (ST.preview && ST.preview.frame === v.frame && ST.tint
+        && !(ST.result && alphaMask(v.frame))) {
+      g.save();
+      g.globalAlpha = 0.5;
+      g.drawImage(tinted(ST.preview.alpha, "#8E6B9E", 0.5),
+                  v.x, v.y, v.iw * v.scale, v.ih * v.scale);
+      g.restore();
+    }
     if (ST.result && ST.tint) {
       const a = alphaMask(v.frame);
       if (a) {
@@ -357,8 +386,12 @@ const StencilPage = (() => {
       ST.prompts.push({ frame: viewer.i, x: nx, y: ny, label: e.altKey ? 0 : 1 });
       updatePromptCount();
       viewer.draw();
+      clickPreview(viewer.i);
     });
-    $("#st-clear", el).onclick = () => { ST.prompts = []; updatePromptCount(); viewer.draw(); };
+    $("#st-clear", el).onclick = () => {
+      ST.prompts = []; ST.preview = null;
+      updatePromptCount(); viewer.draw();
+    };
     $("#st-tint", el).onclick = e => { ST.tint = !ST.tint; e.target.classList.toggle("on", ST.tint); viewer.draw(); };
     $("#st-onion", el).onclick = e => { ST.onion = !ST.onion; e.target.classList.toggle("on", ST.onion); viewer.draw(); };
     $("#st-open", el).onclick = () => { const p = $("#st-path", el).value.trim(); if (p) open(p); };

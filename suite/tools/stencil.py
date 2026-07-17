@@ -102,6 +102,51 @@ def register_stencil(app, jobs, frames):
     def api_status():
         return runtime_status()
 
+    @app.post("/api/stencil/click-preview")
+    def api_click_preview(body: dict = Body(...)):
+        """The instant answer: run SAM 2.1's image predictor on the ONE
+        frame being clicked, so a mask appears the moment the subject is
+        chosen — propagation stays the follow-through, not the reveal."""
+        import base64
+
+        import cv2
+
+        path = str(body.get("path", ""))
+        frame = int(body.get("frame", 0))
+        pts = body.get("points") or []
+        pos = [(float(p["x"]), float(p["y"])) for p in pts]
+        labels = [int(p.get("label", 1)) for p in pts]
+        if not pos:
+            return JSONResponse({"error": "click the subject first"},
+                                status_code=422)
+        img = frames.native_frame(path, frame)
+        if img is None:
+            return JSONResponse({"error": "couldn't read that frame"},
+                                status_code=415)
+        h, w = img.shape[:2]
+        if h > 720:                       # preview at analysis res: speed
+            nw = max(2, int(round(w * 720 / h / 2)) * 2)
+            img = cv2.resize(img, (nw, 720), interpolation=cv2.INTER_AREA)
+        try:
+            from stencil.core import preview_mask
+            mask, conf = preview_mask(img, pos, labels)
+        except (ImportError, ModuleNotFoundError):
+            return JSONResponse(
+                {"error": "click-to-matte needs the optional runtime — "
+                          ".venv/bin/pip install torch "
+                          "'git+https://github.com/facebookresearch/sam2.git'"},
+                status_code=501)
+        except Exception as e:
+            return JSONResponse({"error": f"the preview pass failed "
+                                          f"({e.__class__.__name__}: "
+                                          f"{str(e)[:120]})"}, status_code=500)
+        ok, buf = cv2.imencode(".png", mask)
+        if not ok:
+            return JSONResponse({"error": "couldn't encode the mask"},
+                                status_code=500)
+        return {"png": base64.b64encode(buf.tobytes()).decode(),
+                "conf": round(conf, 3), "frame": frame}
+
     @app.post("/api/stencil/propagate")
     def api_propagate(body: dict = Body(...)):
         path = str(Path(body["path"]).expanduser())
