@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}The node tree · control-z{% endblock %}
+{% block desc %}A blank DaVinci Resolve grading scaffold — a working grade's skeleton with none of the grade in it. What each node is for, how to install it as a PowerGrade, and the thinking behind it.{% endblock %}
+{% block style %}
+  .nt-hero { padding:52px 0 8px; }
+  .dlbar { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin:22px 0 6px; }
+  .zip-note { font:500 12.5px var(--mono); color:var(--text-lt); letter-spacing:.03em; }
+
+  /* ---- the grade tree diagram (Resolve node-editor look) ---- */
+  .gtree { background:#191921; border:1px solid #2c2c34; border-radius:var(--r-lg); padding:24px 20px 20px; margin:8px 0 6px; }
+  .gscroll { overflow-x:auto; padding-bottom:6px; }
+  .gflow { display:flex; align-items:center; gap:0; min-width:900px; }
+  .gn { flex:none; position:relative; width:98px; box-sizing:border-box; background:#26262f;
+    border:1.5px solid #45454f; border-radius:8px; padding:8px 9px 7px; cursor:pointer; text-align:left;
+    color:#b9b9c6; transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease; font:inherit; }
+  .gn:hover { transform:translateY(-2px); }
+  .gn .gx { font:700 9px var(--mono); letter-spacing:.12em; color:#7a7a88; }
+  .gn b { display:block; font:700 13.5px "Space Grotesk"; color:#e6e6ee; margin-top:1px; line-height:1.1; }
+  .gn small { display:block; font:500 9.5px var(--mono); color:#8a8a98; margin-top:3px; letter-spacing:.02em; }
+  .gn.sel { box-shadow:0 0 0 1px var(--nc,#6a6a78), 0 0 18px color-mix(in srgb, var(--nc,#6a6a78) 26%, transparent); }
+  .gn.hush { --nc:#5B8C65; border-color:#5B8C65; } .gn.hush b { color:#8FBF9A; }
+  .gn.speak { --nc:#E0A94A; border-color:#C99A3A; } .gn.speak b { color:#E4BA6A; }
+  .gn.mix { width:56px; text-align:center; padding:10px 6px; }
+  .gn.mix b { font-size:19px; margin:0; }
+  .gn.io { flex:none; width:auto; background:transparent; border:1.5px dashed #3a3a44; color:#8a8a98;
+    cursor:default; font:700 10px var(--mono); letter-spacing:.14em; padding:16px 10px; }
+  .gn.io:hover { transform:none; }
+  .gw { flex:none; width:26px; height:2px; background:#45454f; position:relative; overflow:hidden; }
+  .gw i { position:absolute; top:-2px; left:-6px; width:6px; height:6px; border-radius:50%; background:var(--amber); animation:gflow 3s linear infinite; }
+  @keyframes gflow { from{left:-6px;} to{left:26px;} }
+  @media (prefers-reduced-motion:reduce){ .gw i { display:none; } }
+  .gpar { flex:none; display:flex; flex-direction:column; gap:16px; }
+  .gfork { flex:none; width:26px; height:120px; align-self:center; }
+  .gfork path { fill:none; stroke:#45454f; stroke-width:2; }
+  .gn-detail { margin-top:16px; background:#101015; border:1px solid #2c2c34; border-radius:8px;
+    padding:15px 18px; color:#c4c4d0; font-size:15px; line-height:1.55; min-height:70px; }
+  .gn-detail .dt { font:700 11px var(--mono); letter-spacing:.12em; text-transform:uppercase; margin-bottom:5px; color:#e6e6ee; }
+  .gn-detail .dt.hush { color:#8FBF9A; } .gn-detail .dt.speak { color:#E4BA6A; }
+  .ghint { font:500 11px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--text-lt); margin:2px 0 0; }
+  .ghint::before { content:"▸ "; color:var(--amber); }
+
+  /* plug-point cards */
+  .plugs { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
+  @media (max-width:700px){ .plugs { grid-template-columns:1fr; } }
+  .plug { border:1px solid var(--border); border-left-width:4px; border-radius:var(--r-md); background:var(--card); padding:18px 20px; }
+  .plug .pk { font:700 11px var(--mono); letter-spacing:.12em; text-transform:uppercase; }
+  .plug h4 { font:700 20px "Space Grotesk"; margin:4px 0 6px; }
+  .plug p { font-size:14.5px; margin:0 0 10px; }
+  .plug a.btn { font-size:13px; padding:9px 16px; }
+{% endblock %}
+{% block body %}
+<div class="wrap">
+  <section class="nt-hero">
+    <span class="k" style="color:#5B8C65">powergrade · a blank scaffold</span>
+    <h1 style="font-size:clamp(34px,5vw,52px);letter-spacing:-.02em;color:var(--green)">
+      The grade, without the grade in it.</h1>
+    <p class="lede" style="max-width:60ch;margin-top:10px">A DaVinci Resolve PowerGrade that carries the
+      <b>structure</b> of a working grade and none of the look — nine nodes, labelled, wired, and empty.
+      Import it once and start every clip on a real tree instead of a blank Node&nbsp;01.</p>
+    <div class="dlbar">
+      <a class="btn btn-green" href="https://github.com/amateurmenace/control-z/raw/main/grades/control-z-node-tree.zip">Download the tree (.zip) ↓</a>
+      <span class="zip-note">.drx + .dpx · ~31 MB · MIT</span>
+    </div>
+    <p class="meta">Free-edition safe — zero OFX / ResolveFX in the grade data. The tree below is the
+      real thing, read straight out of the .drx with Resolve's own API.</p>
+  </section>
+
+  <section style="padding:26px 0 0">
+    <div class="kicker">the tree</div>
+    <h2>Nine nodes, all empty.</h2>
+    <p>Signal runs left to right. Clean-up first, creative look last, with a foreground / background split
+      in the middle for when a shot needs its subject and its world graded apart. Tap any node to read
+      what it's there to hold.</p>
+    <div class="gtree">
+      <div class="gscroll">
+        <div class="gflow" id="gflow">
+          <span class="gn io">IN</span>
+          <span class="gw"><i></i></span>
+          <button class="gn hush" data-t="Noise Reduction" data-k="hush"
+            data-b="First in the tree — clean before anything else touches the image. This is the node Resolve's own spatial/temporal NR would occupy, except that NR is Studio-only, which is the whole reason Hush exists. Drop <b>Hush</b> here and clean at the top of the stack.">
+            <span class="gx">01 · NR</span><b>Noise&nbsp;Reduction</b><small>Free NR → Hush</small></button>
+          <span class="gw"><i></i></span>
+          <button class="gn" data-t="Exposure"
+            data-b="Set the base level — lift the shadows, place the highlights — before you shape contrast, so every node above it works on a sane exposure.">
+            <span class="gx">02</span><b>Exposure</b><small>base level</small></button>
+          <span class="gw"><i></i></span>
+          <button class="gn" data-t="Contrast"
+            data-b="The tone curve: pivot, S-curve, the overall punch. Kept separate from exposure so you can push contrast without re-placing your black and white points.">
+            <span class="gx">03</span><b>Contrast</b><small>tone curve</small></button>
+          <span class="gw"><i></i></span>
+          <button class="gn" data-t="Balance"
+            data-b="Neutralise the colour — white balance and any cast — so the creative grade above it starts from true, not from whatever the camera decided.">
+            <span class="gx">04</span><b>Balance</b><small>white balance</small></button>
+          <span class="gw"><i></i></span>
+          <button class="gn" data-t="Sat"
+            data-b="Saturation on its own node, so you can pull or push colour intensity without disturbing tone — and so the split below it inherits a settled base.">
+            <span class="gx">05</span><b>Sat</b><small>saturation</small></button>
+          <svg class="gfork" viewBox="0 0 26 120" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0 60 H8 M8 60 V22 H26 M8 60 V98 H26"/></svg>
+          <div class="gpar">
+            <button class="gn" data-t="FG (foreground)"
+              data-b="The foreground layer. Window or key your subject here and grade it on its own; it recombines with BG through the Parallel Mixer. Empty by default — the split is pre-wired, the key is yours.">
+              <span class="gx">06</span><b>FG</b><small>subject</small></button>
+            <button class="gn" data-t="BG (background)"
+              data-b="The background layer — grade the world behind the subject separately, then recombine. The other half of the foreground/background split most grades reach for eventually.">
+              <span class="gx">07</span><b>BG</b><small>the world</small></button>
+          </div>
+          <svg class="gfork" viewBox="0 0 26 120" preserveAspectRatio="none" aria-hidden="true" style="transform:scaleX(-1)">
+            <path d="M0 60 H8 M8 60 V22 H26 M8 60 V98 H26"/></svg>
+          <button class="gn mix" data-t="Parallel Mixer"
+            data-b="Combines the FG and BG layers back into one image — the recombine point of the split. The one node in the tree that carries a tool instead of a label, because the structure needs it.">
+            <span class="gx">08</span><b>⧉</b></button>
+          <span class="gw"><i></i></span>
+          <button class="gn speak" data-t="Look" data-k="speak"
+            data-b="The final creative layer, last in the tree. Film tone, subtractive colour, halation, grain — reconstruct late, once everything below is clean and balanced. This is where <b>Speak</b> goes.">
+            <span class="gx">09 · look</span><b>Look</b><small>Look → Speak</small></button>
+          <span class="gw"><i></i></span>
+          <span class="gn io">OUT</span>
+        </div>
+      </div>
+      <p class="ghint">click a node</p>
+      <div class="gn-detail" id="gnDetail"></div>
+    </div>
+    <p style="font-size:13.5px;color:var(--text-lt);max-width:64ch">Read live from the exported grade with
+      Resolve's scripting API: nine nodes, eight labelled plus the Parallel Mixer, every one carrying zero
+      corrections — the scaffold, not a look.</p>
+  </section>
+</div>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="kicker">install it once</div>
+    <h2>Import as a PowerGrade.</h2>
+    <ol class="install">
+      <li><b>Unzip — and keep both files together.</b> You get a <code>.drx</code> (the grade) and a
+        <code>.dpx</code> (its thumbnail). Resolve reads the grade from one and the still from the other;
+        the import fails if they're not in the same folder.</li>
+      <li><b>Open the Gallery on the Color page.</b> Color page → <b>Gallery</b> → open the album list on
+        the left.</li>
+      <li><b>Right-click a PowerGrade album → Import.</b> Pick the <code>.drx</code>. The still lands in
+        the album.</li>
+      <li><b>Apply it to a clip.</b> Drag the still onto a clip, or right-click it → <b>Apply Grade</b>.
+        The whole node tree appears on the clip, wired and empty, ready to build on.</li>
+    </ol>
+    <p style="margin-top:4px">Works in the <b>free</b> edition — there are no Studio-only effects in the
+      grade, by design (verified: zero OFX / ResolveFX references in the data).</p>
+  </div>
+</section>
+
+<div class="wrap">
+  <section style="padding:44px 0 8px">
+    <div class="kicker">why a blank tree</div>
+    <h2>Structure is the part worth sharing.</h2>
+    <p class="lede" style="max-width:64ch">Looks don't travel — they're tied to a camera, a timeline
+      colour space, a shot. Structure does. A good grade almost always ends up with the same skeleton;
+      shipping that skeleton, empty, saves you rebuilding it on every project and starting each clip
+      staring at a single blank node.</p>
+    <div class="tips">
+      <div class="tipcard"><span class="tn">clean early, reconstruct late</span>
+        <b>The two ends are the suite.</b>
+        <p>Noise Reduction sits first, Look sits last — and those are exactly where Hush and Speak plug
+          in. Take the noise out at the top of the tree; put the optical character back at the bottom.
+          The scaffold is shaped around that order on purpose.</p></div>
+      <div class="tipcard"><span class="tn">the split, pre-wired</span>
+        <b>Subject and world, apart.</b>
+        <p>The FG / BG parallel branch is the move most grades reach for eventually — key the subject,
+          grade it separately from its background, recombine. It's here from the start so you add a
+          window, not a whole node structure, when the shot needs it.</p></div>
+      <div class="tipcard"><span class="tn">honest by construction</span>
+        <b>Nothing to mistranslate.</b>
+        <p>The tree carries no corrections, so there's nothing that can look wrong in your colour space
+          when you import it — but the look <i>you</i> build on it will be space-dependent, like every
+          grade. And with no Studio effects inside, it opens in the free edition the same as ours.</p></div>
+    </div>
+  </section>
+
+  <section style="padding:20px 0 8px">
+    <div class="kicker">where the suite plugs in</div>
+    <h2>Two nodes are doors.</h2>
+    <div class="plugs">
+      <div class="plug" style="border-left-color:#5B8C65">
+        <span class="pk" style="color:#5B8C65">node 01 · Free NR</span>
+        <h4 style="color:#3D5A47">→ Hush</h4>
+        <p>The node Resolve's own noise reduction would occupy — except its NR is Studio-only, which is
+          the entire reason Hush exists. Drop Hush on it and clean at the top of the tree, measured and
+          showing its work.</p>
+        <a class="btn btn-green" href="index.html#t-hush">Get Hush ↓</a>
+      </div>
+      <div class="plug" style="border-left-color:#C99A3A">
+        <span class="pk" style="color:#B07A28">node 09 · Look</span>
+        <h4 style="color:#9A6F1D">→ Speak</h4>
+        <p>Film tone, subtractive colour, halation and grain, at the end of the tree. Where the image gets
+          its voice back after everything else has cleaned and balanced it.</p>
+        <a class="btn btn-amber" href="https://github.com/amateurmenace/Speak">Get Speak ↓</a>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:28px 0 8px">
+    <div class="kicker">the honest notes</div>
+    <div class="tips">
+      <div class="tipcard"><span class="tn">the thumbnail</span>
+        <b>Hush's own test card.</b>
+        <p>The <code>.dpx</code> preview is Hush's synthetic validation card — no third-party footage is
+          embedded in either file.</p></div>
+      <div class="tipcard"><span class="tn">the 31 MB</span>
+        <b>It's the thumbnail, not the grade.</b>
+        <p>The grade is a 160&nbsp;KB <code>.drx</code>. The size is the uncompressed 4K <code>.dpx</code>
+          still, which barely zips — an HD export would be a fraction of it.</p></div>
+      <div class="tipcard"><span class="tn">colour space</span>
+        <b>Grades are space-dependent.</b>
+        <p>This one carries no corrections, so there's nothing to mistranslate on import — but keep the
+          look you build on it matched to your timeline's colour space.</p></div>
+    </div>
+  </section>
+</div>
+
+<section class="dark">
+  <div class="wrap" style="text-align:center">
+    <div class="kicker" style="color:var(--amber)">start on a real tree</div>
+    <h2 style="color:#fff">The scaffold. One import.</h2>
+    <p style="color:var(--sage);max-width:52ch;margin:0 auto 22px">Free, MIT, free-edition safe. Build your
+      look on it — and drop Hush and Speak on the two nodes shaped for them.</p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center">
+      <a class="btn btn-amber" href="https://github.com/amateurmenace/control-z/raw/main/grades/control-z-node-tree.zip">Download the tree (.zip) ↓</a>
+      <a class="btn btn-lt" href="index.html#downloads">All the downloads</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block script %}
+(function () {
+  var flow = document.getElementById('gflow'), detail = document.getElementById('gnDetail');
+  if (!flow) return;
+  var nodes = flow.querySelectorAll('.gn[data-t]');
+  function select(n) {
+    nodes.forEach(function (x) { x.classList.remove('sel'); });
+    n.classList.add('sel');
+    var k = n.getAttribute('data-k') || '';
+    detail.innerHTML = '<div class="dt ' + k + '">' + n.getAttribute('data-t') + '</div>' + n.getAttribute('data-b');
+  }
+  nodes.forEach(function (n) {
+    n.addEventListener('click', function () { select(n); });
+  });
+  select(flow.querySelector('.gn.hush') || nodes[0]);
+})();
+{% endblock %}

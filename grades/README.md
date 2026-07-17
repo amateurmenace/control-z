@@ -1,7 +1,8 @@
 # The control-z node tree
 
 A **blank grading scaffold** for DaVinci Resolve — the structure of a working
-grade with none of the grade in it. Ten labeled nodes, wired and empty.
+grade with none of the grade in it. Nine nodes (eight labeled, plus a Parallel
+Mixer), wired and empty.
 
 `control-z-node-tree.zip` → `control-z-node-tree.drx` + `control-z-node-tree.dpx`
 
@@ -20,10 +21,14 @@ design (verified: zero OFX/ResolveFX references in the grade data).
 
 ## The nodes
 
-`Contrast` · `Balance` · `FG` · `Exposure` · `BG` · `Sat` ·
-`Noise Reduction` (`Studio NR` / `Free NR`) · `Look`
+Signal order, left to right:
 
-Two of those are where the suite plugs in:
+`Noise Reduction` → `Exposure` → `Contrast` → `Balance` → `Sat` →
+( `FG` ∥ `BG` → `Parallel Mixer` ) → `Look`
+
+Eight labeled nodes plus the Parallel Mixer that recombines the FG/BG split.
+Every node is empty — the scaffold, not a look. Two of them are where the suite
+plugs in:
 
 - **`Free NR`** → drop [Hush](https://control-z.org) on it. That's the node
   Resolve's own noise reduction would occupy — except its NR is Studio-only,
