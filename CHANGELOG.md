@@ -2,6 +2,37 @@
 
 ## unreleased
 
+### The web app — wave 1: the record, open in any browser (specs/16) — 2026-07-18
+
+- **The record steps outside.** A new `web/` package presses the whole
+  corpus into a static edition — `python -m web.bake` reads everything
+  Memory knows and writes JSON, a search index, RSS, caption tracks, and
+  per-page HTML into `site/docs/app/`. No backend, no accounts, no
+  cookies, no analytics, no video rehosting: the covenant, carried
+  outdoors and machine-enforced by a strict Content-Security-Policy on
+  every page. A resident with only a phone can search the record and land
+  in the tape at the cited second; a journalist selects a sentence and
+  **Cites** it with receipts; a screen-reader user reads a meeting as a
+  document, because the transcript *is* the page — every meeting is a
+  complete, readable HTML document with JavaScript switched off.
+- **The whole suite, on one public rail.** The record (Memory) is fully
+  alive — Home is a measured dashboard, search runs in the browser, the
+  long view draws issue timelines exactly as the desk does. Every other
+  tool keeps its seat as a **locked door**: full dignity, a real demo, one
+  plain sentence on why it lives at the desk, and the download — locked
+  like a door, not hidden like a shame. The web app is the product's
+  living tour and the top of the funnel to the desktop app.
+- **Honest by construction.** The embed is a click-to-load facade
+  (nothing plays, no third party sees you, until you tap). Add-a-meeting
+  canonicalizes a pasted link and dedupes against the record — its URL
+  canon is a twin of `memory/ingest.py`, pinned by a golden table that the
+  reader's own JavaScript answers in the test suite. Anti-lock-in is a
+  page element: every meeting downloads as transcript, every timeline as
+  data. The bake is byte-idempotent (dates derived from the corpus, proven
+  by the manifest hash) and fails loud if an edition busts its size
+  budget. Pressed from the real two-meeting Brookline corpus — 30 issues,
+  16k segments, 279 KB gzipped — and walked end to end in a browser.
+
 ### 1.7.1: one timeline everywhere, the record drawn readable, and the spend in view — 2026-07-18
 
 - **The reel timeline rides every page.** Moments picked anywhere — the

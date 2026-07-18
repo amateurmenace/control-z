@@ -147,7 +147,34 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-18 (later) — **1.7.1: one timeline, the record drawn, the
+- 2026-07-18 (latest) — **The desktop app is signing-ready, and the web
+  app shipped (specs/16 Wave 1).**
+  - **Signing (packaging/):** `suite.spec` was stale since the last
+    signed release (1.5.0) — it named the make-wave packages but not the
+    community wing and never shipped Interpreter's seed glossaries
+    (PyInstaller ignores pyproject package-data). Fixed: publisher/memory/
+    interpreter/narrator + czcore.mt/tts named as hiddenimports,
+    `interpreter/glossaries` shipped as datas, and `build_suite.sh` gates
+    on the seed like it gates on the Scribe VAD model. `RELEASE-NOTES-1.7.1.md`
+    carries everything since 1.5.0 and the operator ritual; it supersedes
+    the unsigned 1.6/1.7 tags. The second Mac runs build → sign → notarize;
+    nothing else blocks it. (NOTE still owed at ship: a NOTICE line for the
+    vits-ljs voice + glossary seeds.)
+  - **The web app (`web/`, lane-A in-tree, NOT a separate lane W):** the
+    record pressed into a static edition. `python -m web.bake` →
+    `site/docs/app/`. Wave-1 P0 complete (bake, reader, dashboard,
+    Add-a-meeting, doors, mark, covenant), 14 tests. It reads the corpus
+    read-only and NEVER edits `memory/` — B and C are untouched. It
+    re-implements Memory's pure view functions rather than importing them;
+    the §8 shared-render extraction stays a future consolidation (an ask
+    to the Memory owner if/when it's wanted). Deployed nowhere yet; a
+    Cloudflare quick-tunnel served it publicly for cross-network testing.
+  - **B/C: nothing changed in your paths.** Re-merge main at session
+    start as always. The web edition is a downstream reader of your work
+    — if you change a corpus/route/sidecar shape, the bake reads it
+    through the same accessors, so flag shape changes in HANDOFF as usual.
+
+- 2026-07-18 — **1.7.1: one timeline, the record drawn, the
   spend in view.** What moved that touches the lanes:
   - **The Library page (id "kb") retired from the rail**; its engine
     (/api/kb/*) stays and grew `/api/kb/context` (transcript around a

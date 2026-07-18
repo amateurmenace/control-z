@@ -60,3 +60,19 @@ Other native runtimes redistributed unmodified from their upstream wheels:
   CTranslate2 (faster-whisper backend)     MIT
   sherpa-onnx                              Apache-2.0
   libsndfile (via python-soundfile)        LGPL-2.1 (its COPYING ships beside it)
+
+Models and data downloaded on first use (never bundled in the signed app):
+
+  vits-ljs TTS voice (Narrator)            Apache-2.0 — sherpa-onnx export of a
+                                           VITS model trained on the LJSpeech
+                                           corpus (public domain). CMU-lexicon
+                                           based, so no GPL espeak-ng data
+                                           rides along. Pinned by manifest hash
+                                           in czcore/models.py.
+
+Data shipped in this repository:
+
+  interpreter/glossaries/*.json            CC BY-SA 4.0 — per-town civic
+                                           glossary seeds (do-not-translate
+                                           names + vetted civic terms), marked
+                                           "suggested" until a human reviews.

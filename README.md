@@ -80,6 +80,7 @@ runs several times larger.
 | `memory/` | **Community Memory** (beta) — the record across meetings and years: corpus, search, the issue engine, the long view | Suite UI working |
 | `interpreter/` | **Community Interpreter** (beta) — meetings as caption tracks in seven languages + Simple English, town glossaries, review queue | Suite UI working |
 | `narrator/` | **Community Narrator** (beta) — audio description for VOD: gap map, DCMP-linted drafts, local voice, ducked mix | Suite UI working |
+| `web/` | **the web app** — the record pressed into a static edition (`python3 -m web.bake`), any browser, no backend | Wave 1 built → `site/docs/app` |
 | `site/` | control-z.org (bake: `python3 site/build.py`) | built, undeployed |
 
 Working = verified end-to-end on real footage this side of packaging. Not yet:
