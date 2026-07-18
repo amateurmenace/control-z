@@ -1,7 +1,7 @@
 # Community AI Studio
 ### The record, hosted — a civic memory that exists on its own
 
-**Status:** Draft spec, v0.1 · **Stage:** design (build in a fresh session) · **Owner:** Stephen Walter (Weird Machine / BIG) · **Family:** The Community AI Project · **Related:** Memory (specs/14 — the engine and the original cloud sketch this spec fulfills), the web app (specs/16 — becomes the Studio's reader), Publisher (specs/13 §P2 — the same "separate networked product" lane), PARALLEL.md
+**Status:** v0.1 · **Stage:** **wave 1 built** (branch `lane/studio`; nothing provisioned — see `studio/INFRA.md`) · **Owner:** Stephen Walter (Weird Machine / BIG) · **Family:** The Community AI Project · **Related:** Memory (specs/14 — the engine and the original cloud sketch this spec fulfills), the web app (specs/16 — becomes the Studio's reader), Publisher (specs/13 §P2 — the same "separate networked product" lane), PARALLEL.md
 
 > **The desk presses editions; the Studio keeps the record.** Today the public
 > record is a snapshot pressed from one Mac — brilliant, and stuck breathing
@@ -244,10 +244,26 @@ count (the anti-lock-in metric the covenant lets us count); uptime of the
 
 ## 13. Phasing
 
-- **Wave 1 — the record moves in.** `studio/` service + PG schema + store
-  seam; import Brookline; nightly YouTube connector for the two existing
-  bodies; semantic search live; reader pointed at pressed-from-cloud
-  editions; steward auth + submission queue. *The record exists on its own.*
+- **Wave 1 — the record moves in.** ✅ **BUILT 2026-07-18** (branch
+  `lane/studio`; **nothing provisioned** — `studio/INFRA.md` is the runbook,
+  and the whole wave was proven against `docker compose up`). `studio/`
+  service + PG schema + store seam; Brookline imported (16,443 segments, 41
+  issues, nothing re-derived); nightly YouTube connector written (RSS,
+  captions-first — **not scheduled**, and Brookline's channel id is still
+  owed); semantic search live as an API with the neural half pinned to
+  `gemini-embedding-001@768` behind a seam; the edition presses from
+  Postgres; steward auth + submission queue + audit and spend ledgers.
+  *The record exists on its own.*
+
+  **Three remainders, named rather than quietly carried:** the reader's search
+  field still uses its static index and its specs/16 copy — the API serves the
+  blend and §8's honest line, but wiring `web/static/app.js` (copied verbatim,
+  under `connect-src 'self'`) is a change to the shared reader that wanted a
+  decision; `press.sync_to_gcs` has only ever spoken to a stub; and the
+  connector has never fetched a live feed (this venv has no CA bundle). The
+  `control-z.org/app/*` redirect stubs are written and **deliberately not
+  run** — pointing a working edition at a Studio that does not exist yet would
+  break every civic citation minted so far.
 - **Wave 2 — many towns, one steward.** Town onboarding UI, CivicClerk
   connector port, rosters/glossaries per town, town picker, the drain
   (AsrTask + desk volunteer mode), audit log + spend ledger. *Boston joins
@@ -265,9 +281,15 @@ count (the anti-lock-in metric the covenant lets us count); uptime of the
 - **(Stephen)** GCP project/billing account to create — nothing in this
   spec has been provisioned; wave 1 starts with `gcloud` from a clean
   project so the bill is legible from day one.
-- **(Eng)** Embedding model + dimension pin (Gemini text-embedding vs a
-  self-hosted open model on the drain later); write the choice into the
-  schema comment the way models.py pins hashes.
+- ~~**(Eng)** Embedding model + dimension pin~~ — **decided:**
+  `gemini-embedding-001` at `output_dimensionality=768`, stored *beside* the
+  256-dim lexical vector, pinned in four places the way models.py pins hashes
+  (`studio/settings.py`, the `vector(768)` column, a CHECK constraint, and
+  `meta('embed_neural')` asserted at connect time). It is MRL-truncatable, so
+  1536 or 3072 is a re-embed away rather than a code change. Note the model
+  does **not** normalise below 3072 dimensions and `memory.embed.cosine()` is
+  a bare dot product — `studio/embed_neural.py` L2-normalises on the way in,
+  and that is load-bearing.
 - **(Eng)** Postgres FTS parity with FTS5's bm25 ranking — port the desk's
   ranking behavior or accept ts_rank; measure on the real corpus before
   choosing.

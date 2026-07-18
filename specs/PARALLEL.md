@@ -102,6 +102,16 @@ the change.
   `czcore/moments.py` during the Publisher build. Until it lands, B needing
   detection wraps highlighter internals behind its own `memory/detect.py`
   adapter and swaps when A announces the landing (in "state of main" below).
+- **Store seam.** `memory/store.py` grew an interface (`memory/seam.py`, the
+  `CorpusStore` Protocol) and a policy module (`memory/policy.py`) so the desk's
+  SQLite `Corpus` and the Studio's Postgres store (specs/17) run the same
+  engine. The SQLite implementation is unchanged in behavior and every existing
+  `tests/test_memory*.py` passes untouched — that is the acceptance test, not a
+  hope. Nobody reaches through `corpus._con()` any more: the two escapes in
+  `memory/issues.py` became `linked_seg_ids()` and `unlink_meeting()`. An
+  embedding is opaque across the seam — read it only through `embed.as_vec()`,
+  never `from_bytes()`, because pgvector hands back an array where SQLite hands
+  back bytes.
 - **LLM.** Generative passes go through `czcore/llm.py` (the guarded key,
   Anthropic or OpenAI by key shape) and every generative surface has an
   extractive fallback that stands alone without a key. No other network AI.
@@ -147,7 +157,45 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-18 (latest) — **1.9.0: the record, drawn — the desk's
+- 2026-07-18 (latest) — **the Studio, wave 1: the record moves in.
+  `studio/` joins the tree; `memory/` grows a store seam. 635 tests green
+  (39 skip without a Postgres).** On branch `lane/studio`, not yet merged.
+  Nothing is provisioned on GCP and no bill has started — the whole wave was
+  built and proven against a local Postgres, and `studio/INFRA.md` is the
+  runbook for the day that changes.
+  - **`memory/seam.py` + `memory/policy.py` NEW — the store seam.** One
+    interface, two implementations: the desk's SQLite `Corpus` and
+    `studio/store.py`'s `PgCorpus`. `tests/test_studio_store_parity.py`
+    states 73 guarantees once and runs them against both.
+  - **`studio/` NEW — the hosted record.** FastAPI (`app.py`), Postgres +
+    pgvector (`store.py`, `migrations/`), Google Sign-In on an allowlist
+    (`auth.py`), the eight curation verbs with an audit log (`steward.py`),
+    the nightly YouTube poll (`connectors/youtube.py`), the press
+    (`press.py`), the neural search seam (`embed_neural.py`), and the
+    `corpus.db → studio` import (`import_desk.py`).
+  - **`docker-compose.yml` + `studio/Dockerfile` NEW.** In-a-Box v2's shape,
+    and how wave 1 was proven.
+  - **`pyproject.toml`** gains the `studio` package, its `migrations/*.sql`
+    package-data, and a server-only `studio` extra. **Deliberately NOT added
+    to `packaging/suite.spec`** — a signed desktop DMG has no business
+    carrying a Postgres driver, and a silent omission is the bug the 1.9.0
+    audits taught us to name.
+
+  **B: your paths changed, for the first time.** `memory/store.py` gained
+  `linked_seg_ids()`, `unlink_meeting()`, `close()` and `unit()`; its shared
+  rules moved to the new `memory/policy.py` (with `_loads`,
+  `_dedupe_keep_order`, `_keyword_set`, `_MEETING_COLS` kept as aliases);
+  `search()`/`semantic()` gained a `town` argument defaulting to today's
+  behavior; and `forget()` now clears `issue_segments` — it never did, and
+  `list_issues` counted the orphans while `issue_appearances` hid them.
+  `memory/issues.py` lost its two `corpus._con()` escapes and
+  `memory/documents.py` reads embeddings through `embed.as_vec()`.
+  **No signature was removed, no return shape changed, and every
+  `tests/test_memory*.py` passed untouched.** Re-merge main before your next
+  wave; if you were mid-flight on either file, say so in HANDOFF and A will
+  rebase you.
+
+- 2026-07-18 — **1.9.0: the record, drawn — the desk's
   analytical eye goes public. 500 tests green; both version truths at
   1.9.0.** The public edition (`web/`) grew the desk's Highlighter-analyzer
   and Library reads, all baked (pure-view, deterministic, CSP-clean):
