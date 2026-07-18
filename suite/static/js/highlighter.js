@@ -999,6 +999,11 @@ const HighlighterPage = (() => {
           <span><i style="display:inline-block;width:9px;height:9px;background:#1E7F63;border-radius:2px"></i> decisions</span>
           <span><i style="display:inline-block;width:9px;height:9px;background:#B0542D;border-radius:2px"></i> tension</span>
         </div>
+      </div>
+      <div class="hl-panel" style="grid-column:1 / -1"><span class="tag">across
+          the record — tonight against every meeting on this machine (the
+          Library, moved in)</span>
+        <div id="hl-record-analytics"></div>
       </div>`;
     $$("#hl-ana .tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
     // every viz opens: clips buttons, investigate, speakers, topic cells, q-types
@@ -1045,6 +1050,9 @@ const HighlighterPage = (() => {
     if (S.docs) renderDocuments();
     else loadDocuments(false);
     drawCharts();
+    // the record's analytics, focused on tonight — drawn by the shared
+    // engine so Memory's Analytics view and this section stay one truth
+    czAnalytics.renderInto($("#hl-record-analytics", box), { focus: S.source });
   }
 
   /* -- cross-reference network: an SVG you can rearrange, every line a
@@ -1352,6 +1360,9 @@ const HighlighterPage = (() => {
         ${S.session ? `<button class="add" data-dl="${k}"
           title="download just this span (${(p.end - p.start).toFixed(0)}s) at the chosen quality">↓ clip</button>` : ""}
         <button class="add${inTl ? " in" : ""}" data-k="${k}">${inTl ? "✓ in reel" : "+ Add"}</button>
+        ${czTray.btnHTML({ source: S.source, start: p.start, end: p.end,
+          label: (p.text || "").slice(0, 80),
+          title: (S.meta?.title || "").slice(0, 60) })}
       </div>`;
     }).join("");
     $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
@@ -1734,6 +1745,9 @@ const HighlighterPage = (() => {
       }
       box.innerHTML = done.result.text.split(/\n+/).map(p =>
         `<p>${linkifyTimes(p.replace(/^#+\s*/, "").replace(/\*\*/g, ""))}</p>`).join("");
+      if (done.result.usage) box.insertAdjacentHTML("beforeend",
+        `<div class="hint" style="margin-top:6px">🪙 ${esc(done.result.usage)}
+         — the session total lives in Settings → AI audit</div>`);
       $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
       $("#hl-aibrief", el).style.display = "";
     } catch (e) {
@@ -1835,6 +1849,9 @@ const HighlighterPage = (() => {
         <span style="flex:1">${r.speaker ? `<b>${esc(r.speaker)}:</b> ` : ""}${esc((r.text || "").slice(0, 140))}</span>
         <button class="btn" data-play="${i}" title="play this moment">▶</button>
         <button class="btn" data-add="${i}" title="add to the reel">+</button>
+        ${czTray.btnHTML({ source: S.source, start: Math.max(0, r.t - 0.3),
+          end: (r.end || r.t + 12) + 0.3, label: (r.text || "").slice(0, 80),
+          title: (S.meta?.title || "").slice(0, 60) })}
       </div>`).join("") || `<div class="hint">nothing matched</div>`;
     $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
     $$("button[data-play]", box).forEach(b => b.onclick = () => {
@@ -2172,7 +2189,14 @@ const HighlighterPage = (() => {
     Viewer.active = null;
     ytdlpCheck();      // every open — that's the deal, and the chip shows it
     loadLibrary();
-    if (arg && arg.openPath) open(arg.openPath);
+    if (arg && arg.openPath) {
+      // already looking at it? just land on the second — no reload flash
+      const same = S.source === arg.openPath;
+      const p = same ? Promise.resolve() : open(arg.openPath);
+      if (arg.seek != null) {
+        p.then(() => setTimeout(() => seek(+arg.seek, true), same ? 0 : 400));
+      }
+    }
   }
 
   registerPage("highlighter", el, onshow);

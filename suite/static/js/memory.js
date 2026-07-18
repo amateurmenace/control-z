@@ -32,6 +32,8 @@ const MemoryPage = (() => {
           <input type="text" id="mem-q" placeholder="Search the record — a phrase, a topic, a street name…"
             style="flex:1;min-width:280px;padding:11px 13px;border:1px solid var(--line);
             border-radius:9px;background:var(--ink-2);font-size:14px;font-family:var(--ui)">
+          <button class="btn" id="mem-analyticsbtn"
+            title="the record as charts — topics, framing and names over time">📊 Analytics</button>
         </div>
         <div id="mem-statline" class="progmsg" style="margin-top:8px"></div>
       </div>
@@ -132,6 +134,24 @@ const MemoryPage = (() => {
         <div id="mem-timeline" style="overflow-x:auto;padding:10px 2px 4px"></div>
       </div>
       <div id="mem-iappearances"></div>
+    </div>
+
+    <!-- ==== ANALYTICS (lane A hook — the Library's charts, moved in;
+         drawn by the shared czAnalytics engine) ==== -->
+    <div id="mem-analytics" style="display:none">
+      <button class="btn" id="mem-anbackbtn" style="margin-bottom:10px">← the record</button>
+      <div class="hl-hero" style="border-color:var(--memory)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <h1 style="margin:0">The record, drawn</h1>
+          <span class="badge synth">beta</span>
+        </div>
+        <p class="why" style="margin-top:6px;max-width:70ch">
+          Every meeting on this machine as one picture — topics over time,
+          civic framing, the names that keep appearing. Every mark opens its
+          receipts, and every receipt can join the reel timeline.
+        </p>
+      </div>
+      <div id="mem-anbody" style="margin-top:16px"></div>
     </div>
   </div>`;
 
@@ -258,6 +278,10 @@ const MemoryPage = (() => {
                 ${h.speaker ? " · " + esc(h.speaker) : ""} ·
                 <span style="color:var(--cream-faint)">${h.why}</span></div>
             </div>
+            ${window.czTray ? czTray.btnHTML({ source: "vid:" + h.meeting_id,
+              start: Math.max(0, h.t - 2), end: h.t + 12,
+              label: (h.text || "").slice(0, 80),
+              title: (h.title || "").slice(0, 60) }) : ""}
           </div>`).join("")}
       </div>`;
       $$("[data-open]", box).forEach(r => r.onclick = () =>
@@ -803,6 +827,10 @@ const MemoryPage = (() => {
             ${b.speaker ? `<b style="font-size:11px;color:var(--cream-dim)">${esc(b.speaker)}:</b> ` : ""}
             <span style="font-size:12.5px">${esc(b.text)}</span>
             ${b.why === "related" ? ` <span class="lmeta" style="color:var(--cream-faint)">· related language</span>` : ""}
+            ${window.czTray ? czTray.btnHTML({ source: "vid:" + n.meeting_id,
+              start: Math.max(0, b.t - 2), end: b.t + 12,
+              label: (b.text || "").slice(0, 80),
+              title: (n.title || n.meeting_id || "").slice(0, 60) }) : ""}
           </div>`).join("")}
       </div>`).join("");
     $$("[data-open]", box).forEach(r => r.onclick = () =>
@@ -816,6 +844,14 @@ const MemoryPage = (() => {
     $("#mem-record", el).style.display = "none";
     $("#mem-meeting", el).style.display = "none";
     $("#mem-issue", el).style.display = "none";
+    $("#mem-analytics", el).style.display = "none";
+  }
+  function openAnalytics() {
+    stop();
+    S.view = "analytics";
+    hideAllViews();
+    $("#mem-analytics", el).style.display = "";
+    czAnalytics.renderInto($("#mem-anbody", el), {});
   }
   function backToRecord() {
     stop();
@@ -837,6 +873,8 @@ const MemoryPage = (() => {
     $("#mem-addbtn", el).onclick = addToRecord;
     $("#mem-back", el).onclick = backToRecord;
     $("#mem-ibackbtn", el).onclick = backToRecord;
+    $("#mem-analyticsbtn", el).onclick = openAnalytics;
+    $("#mem-anbackbtn", el).onclick = backToRecord;
     $("#mem-rebuild", el).onclick = rebuildIssues;
     $("#mem-bell", el).onclick = ackNotifications;
     $("#mem-digest", el).onclick = copyDigest;
