@@ -12,17 +12,25 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
+import re
+
 WPS = 2.6            # words per second a narrator can speak clearly
 EDGE_PAD = 0.25      # seconds shaved off each gap edge — never clip a word
+
+# [Music], [Applause], (laughter) — the transcript marking NON-speech is
+# exactly where narration can live; those segments are air, not words
+_NONSPEECH = re.compile(r"^\s*[\[(][^\])]*[\])]\s*$")
 
 
 def speech_spans(segments: List[dict],
                  merge_within: float = 0.4) -> List[Tuple[float, float]]:
     """Transcript segments -> merged [start, end) speech intervals.
-    Segments closer than merge_within fuse — a breath is not a gap."""
+    Segments closer than merge_within fuse — a breath is not a gap; a
+    bracket-only marker ([Music], [Applause]) is a gap, not speech."""
     spans = sorted((float(s.get("start", 0)), float(s.get("end", 0)))
                    for s in segments
                    if str(s.get("text", "")).strip()
+                   and not _NONSPEECH.match(str(s.get("text", "")))
                    and float(s.get("end", 0)) > float(s.get("start", 0)))
     out: List[Tuple[float, float]] = []
     for a, b in spans:
@@ -105,8 +113,15 @@ def shot_motion(diffs: List[float],
 
 
 def plan_cues(gaps: List[dict], graphics: List[dict],
-              max_cues: Optional[int] = None) -> List[dict]:
+              max_cues: Optional[int] = None,
+              shots_s: Optional[List[Tuple[float, float]]] = None,
+              max_shot_cues: int = 12) -> List[dict]:
     """Marry the two maps into the draft cue list the reviewer sees.
+
+    Wall-to-wall dialogue (specs/15's own edge case): when both maps come
+    back empty and shots_s is given, one transcript-only cue per shot
+    stands in — the program still gets its descriptions transcript and
+    the extended mode; the broadcast mix honestly gets none.
 
     Every usable gap becomes a cue slot. A graphic stretch becomes a cue
     even when no gap serves it — its description always reaches the
@@ -132,6 +147,13 @@ def plan_cues(gaps: List[dict], graphics: List[dict],
                          "dur": gr["dur"], "kind": "graphic",
                          "at": round(gr["start"] + min(1.0, gr["dur"] / 2), 3),
                          "words_budget": 0,   # no gap: transcript/extended only
+                         "text": "", "status": "empty"})
+    if not cues and shots_s:
+        for a, b in shots_s[:max_shot_cues]:
+            cues.append({"start": round(a, 3), "end": round(b, 3),
+                         "dur": round(b - a, 3), "kind": "scene",
+                         "at": round(a + min(1.0, (b - a) / 2), 3),
+                         "words_budget": 0,   # no air: transcript-only
                          "text": "", "status": "empty"})
     cues.sort(key=lambda c: c["start"])
     if max_cues is not None:

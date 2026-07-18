@@ -20,6 +20,15 @@ class TestSpeechSpans(unittest.TestCase):
         self.assertEqual(gaps.speech_spans(segs((0, 2, "  "), (3, 3, "x"))),
                          [])
 
+    def test_bracket_markers_are_air_not_speech(self):
+        spans = gaps.speech_spans(segs((0, 8, "[Music]"), (8, 10, "hello"),
+                                       (10, 12, "(applause)")))
+        self.assertEqual(spans, [(8.0, 10.0)])
+        g = gaps.gap_map(segs((0, 8, "[Music]"), (8, 10, "words words")),
+                         duration=10)
+        self.assertEqual(len(g), 1)     # the music IS the gap
+        self.assertEqual(g[0]["start"], 0.25)
+
 
 class TestGapMap(unittest.TestCase):
     def test_lead_mid_and_tail_gaps(self):
@@ -84,6 +93,17 @@ class TestPlanCues(unittest.TestCase):
         cues = gaps.plan_cues([], [{"start": 5, "end": 30, "dur": 25}])
         self.assertEqual(cues[0]["kind"], "graphic")
         self.assertEqual(cues[0]["words_budget"], 0)   # transcript-only
+
+    def test_wall_to_wall_falls_back_to_shot_cues(self):
+        cues = gaps.plan_cues([], [], shots_s=[(0.0, 9.0), (9.0, 19.0)])
+        self.assertEqual(len(cues), 2)
+        self.assertTrue(all(c["words_budget"] == 0 for c in cues))
+        # a real gap map means no fallback fires
+        cues2 = gaps.plan_cues(
+            [{"start": 1, "end": 5, "dur": 4, "words_budget": 10}], [],
+            shots_s=[(0.0, 19.0)])
+        self.assertEqual(len(cues2), 1)
+        self.assertEqual(cues2[0]["words_budget"], 10)
 
     def test_sorted_by_start(self):
         cues = gaps.plan_cues(

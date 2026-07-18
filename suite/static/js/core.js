@@ -54,7 +54,7 @@ const TOOLS = [
     ready: true, when: "1.7", group: "community", long: "Community Interpreter",
     verb: "carries it across", one: "captions in seven languages + simple english" },
   { id: "narrator", name: "Narrator", acc: "var(--narrator)",
-    ready: false, when: "1.7", group: "community", long: "Community Narrator",
+    ready: true, when: "1.7", group: "community", long: "Community Narrator",
     verb: "says what's on screen", one: "audio description for community TV" },
 ];
 const toolById = id => TOOLS.find(t => t.id === id);

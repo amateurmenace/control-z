@@ -1,8 +1,58 @@
-# Lane C handoff — Interpreter (+ Narrator next)
+# Lane C handoff — Interpreter + Narrator
 
 Kept current at every push, four sections, per PARALLEL.md.
 
 ## Landed
+
+**Community Narrator, wave 2 — the VOD AD pipeline, end to end.**
+
+- **Engines.** `narrator/gaps.py`: speech intervals merged across
+  breaths, bracket-only markers ([Music], (applause)) counted as air —
+  they are exactly where narration lives; gaps padded 0.25s each edge,
+  2.6-words/sec fit budgets; the graphics wedge found by stillness
+  (shots ≥12s with near-zero internal motion = slides). `plan_cues`
+  marries gaps and graphics; wall-to-wall programs (specs/15's own edge
+  case) fall back to shot-anchored transcript-only cues — never a dead
+  end, never a mix that talks over the meeting. `narrator/describe.py`:
+  vision on the guarded key (config read from czcore.llm, never edited
+  — both providers take base64 JPEG), DCMP enforced in the prompt AND
+  checked in a pure lint (camera-talk / interprets / past-tense /
+  over-budget). `czcore/tts.py` (lane C's second czcore addition, per
+  the law): sherpa-onnx VITS voices discovered by shape under the
+  shared models dir; honest install sentence until the store carries a
+  TTS entry. `narrator/mix.py`: the ducked mix as one tested
+  filtergraph — narration keys a sidechain compressor; three outputs
+  in one ffmpeg pass through czcore.ffrun.
+- **Page + routes** (`suite/tools/narrator.py`, `static/js/narrator.js`):
+  three moves on one queue — ① map (shots + pauses + wedge), ② draft
+  (per-cue vision, czProgress, drafts survive cancel), ③ render (TTS
+  per accepted cue, cached by text hash → ducked mix). The review
+  timeline is the product: graphics ride the top lane, pauses the
+  bottom; every cue is a card with its budget, lint chips, accept /
+  edit / regenerate; "Accept all clean" takes lint-free drafts only —
+  flagged ones wait for human eyes. "Write transcript" lands the
+  descriptions VTT with no voice at all (the extended-mode contract).
+  Outputs: mixed program (.mp4, video stream untouched), mixed audio
+  (.m4a), narration track (.wav, program-length), descriptions VTT
+  with provenance in the file. Nothing unaccepted ever reaches a track.
+- **Proven on real footage** (the 19s zoo clip — the only local video
+  with a transcript this side of a full-meeting fetch): the transcript's
+  own "(baaaaaaaaaaahhh!!)" elephant trumpet counted as air and made a
+  real 2.0s gap; gpt-4o-mini drafted "Two elephants behind a barrier."
+  (5 words, budget 5, lint-clean); accepted via accept-all-clean;
+  vits-ljs spoke it; the mix landed all three outputs — measured: the
+  narration wav is digital silence (−91 dB) until 14.5s and carries the
+  line exactly in the cue window; the .mp4 muxes h264 untouched + AAC
+  mix. Slots wired (server.py modelstore↔ofx, tag after interpreter.js,
+  narrator ready flip) — the "seen and heard" wire reads 3 of 3.
+- **Tests: 25** narrator tests (gap math incl. bracket-air and the
+  wall-to-wall fallback, budgets, stillness, plan, lint, VTT gate, mix
+  graph, voice discovery) — suite total 353, green in the lane venv.
+
+**Community Interpreter, wave 1 — end to end** (previous push). Any
+meeting Highlighter has read becomes timed caption tracks in the seven
+panel languages (Español, Simple English, 中文, Português, Kreyòl,
+Tiếng Việt, Русский).
 
 **Community Interpreter, wave 1 — end to end.** Any meeting Highlighter
 has read becomes timed caption tracks in the seven panel languages
@@ -71,12 +121,17 @@ has read becomes timed caption tracks in the seven panel languages
 
 ## Next (after A merges)
 
-- **Narrator wave 2**: shots (czcore/shots.py) + dialogue-gap map from
-  Scribe word timings → gap-fitted DCMP-style descriptions through the
-  guarded key (vision) → `czcore/tts.py` on sherpa-onnx → ducked mix →
-  review timeline. Meeting-graphics wedge is P0 of the wave.
+- **A full-meeting AD proof.** The pipeline is proven on the zoo clip;
+  the library holds no full meeting video yet. First fetched full
+  recording (Grabber → Highlighter "Download full video") becomes the
+  real target: openings, votes and slide stretches are where the gap
+  map and the graphics wedge earn their keep. The ≤15-min-per-hour
+  review target gets measured there, honestly.
 - Interpreter follow-ons, small: corrections flowing into glossary
   suggestions; per-body language defaults; VOD re-pass button copy.
+- Narrator P1s when the wave comes: extended-mode web playback (pause
+  video during long descriptions), backfill nominations, per-station
+  voice choice.
 - **Known beta wart, named on purpose:** the N| protocol occasionally
   drifts one line inside a chunk (a cue carries its neighbor's
   translation) — visible mostly in zh and Simple English, whose higher
@@ -87,19 +142,54 @@ has read becomes timed caption tracks in the seven panel languages
 
 ## Asks (A-owned files; exact and minimal)
 
-1. **pyproject.toml** — add `"interpreter"` to `[tool.setuptools]
-   packages` and `interpreter = ["glossaries/*.json"]` under
+1. **pyproject.toml** — add `"interpreter"` AND `"narrator"` to
+   `[tool.setuptools] packages`, plus
+   `interpreter = ["glossaries/*.json"]` under
    `[tool.setuptools.package-data]`. Dev checkouts run fine without it
    (`python -m suite` puts the repo root on sys.path), but an installed
-   or frozen suite won't import the package until this lands — please
-   pair it with the merge that takes server.py's import.
-   (`narrator` + `interpreter-cli`/`narrator-cli` scripts can wait for
-   wave 2; I'll ask again with the files in hand.)
-2. **Nothing else.** czcore/models.py wasn't needed this wave (no model
-   downloads — the engine is the guarded key). If wave 2's TTS voice
-   wants a store entry, that ask comes with wave 2.
+   or frozen suite won't import either package until this lands —
+   please pair it with the merge that takes server.py's imports.
+   (CLI entries can wait; neither tool ships one yet.)
+2. **czcore/models.py — a TTS voice entry, when you're ready.** The
+   store's REGISTRY is a closed dict, so Narrator ships the honest
+   manual sentence: download `vits-ljs` (public-domain LJSpeech corpus)
+   from k2-fsa/sherpa-onnx releases, tag `tts-models`, untar into the
+   models folder — czcore/tts.py finds any VITS voice by shape. A
+   registry entry would make it one click; note the archive is a
+   tarball (the `archive_member` mechanism fits) and note for the
+   license card: piper-family voices that need `espeak-ng-data` pull in
+   GPL-licensed data files — `vits-ljs` was chosen partly because its
+   lexicon needs none. Your call on which voice earns the card.
+3. **czcore/llm.py — vision, someday.** Narrator builds its own
+   image-bearing request from `llm.get_config()` (read-only) because
+   `complete()` is text-only. If A ever wants one door for multimodal,
+   narrator/describe.py's request shape is ready to move in; until
+   then it stays lane-C-local and guarded the same way.
 
 ## Changelog fragments (house voice, for A to fold)
+
+- **Community Narrator ships (beta) — the picture, spoken.** Audio
+  description for community TV, a thing public access has essentially
+  never had: open a read meeting with its recording and the pass runs
+  in three moves — the pauses and the slides mapped (a [Music] or an
+  applause marker counts as air, because it is; a shot that holds
+  still is a slide, and slides read aloud are the point), each moment
+  drafted by vision on your own key in DCMP style with a lint that
+  names camera-talk, interpretation and past tense instead of trusting
+  the prompt, and every draft waiting on a human accept — nothing
+  unaccepted reaches a track. The render speaks each approved line in
+  a local voice (sherpa-onnx; the page names the exact voice to
+  download and finds it by itself), ducks the program under the
+  narration with a sidechain compressor, and lands four outputs:
+  the mixed program, the mixed audio, a program-length narration
+  track, and a descriptions transcript that always carries every
+  approved description — wall-to-wall programs get the transcript and
+  the extended mode instead of a mix that talks over the meeting,
+  never a silent failure. Provenance rides the page and the files
+  alike: vision model, voice, review status.
+- **The wing speaks with one engine each.** `czcore/tts.py` joins
+  `czcore/mt.py` in the middle of the table — translation and speech
+  for whatever the wing carries across next.
 
 - **Community Interpreter ships (beta) — the meeting, carried across.**
   Open anything Highlighter has read and pick from the seven panel

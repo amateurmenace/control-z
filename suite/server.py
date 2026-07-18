@@ -242,6 +242,7 @@ def create_suite_app():
     from .tools.interpreter import register_interpreter
     from .tools.kb import register_kb
     from .tools.modelstore import register_modelstore
+    from .tools.narrator import register_narrator
     from .tools.ofx import register_ofx
     from .tools.pivot import register_pivot
     from .tools.publisher import register_publisher
@@ -260,6 +261,7 @@ def create_suite_app():
     register_interpreter(app, jobs, frames)
     register_kb(app, jobs, frames)
     register_modelstore(app, jobs, frames)
+    register_narrator(app, jobs, frames)
     register_ofx(app, jobs, frames)
     register_pivot(app, jobs, frames)
     register_publisher(app, jobs, frames)
