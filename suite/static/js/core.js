@@ -39,9 +39,10 @@ const TOOLS = [
   { id: "grabber", name: "Grabber", acc: "var(--grabber)",
     ready: true, group: "community", long: "Video Grabber",
     verb: "brings the meeting home", one: "search, fetch, conform civic recordings" },
-  { id: "kb", name: "Library", acc: "var(--kb)",
-    ready: true, group: "community", long: "Meeting Library",
-    verb: "reads them together", one: "framing, names, and topics across every meeting" },
+  /* the Library page (id "kb") retired in 1.7.1 — its cross-meeting
+     analytics live inside Highlighter's analyzer and Memory's Analytics
+     view now (analytics.js), and its montage tray became czTray. The
+     /api/kb/* engine still serves them all. */
   /* the community wing grows (specs/12): four more BIG apps moving in.
      Lane ownership + who flips `ready` is law in specs/PARALLEL.md. */
   { id: "publisher", name: "Publisher", acc: "var(--publisher)",
@@ -289,6 +290,127 @@ async function sendToRecord(payload, btn) {
     return false;
   } finally { if (btn) btn.disabled = false; }
 }
+
+/* ---------- czTray: one reel timeline for the whole suite ----------
+   Moments picked ANYWHERE — the analyzer's grids, the record's search,
+   an issue's beads — land on one persistent timeline that rides the
+   bottom of every page. Pin it open with 📌 and it stays across pages
+   and relaunches (localStorage). Render cuts one montage across every
+   source on it via /api/kb/montage (span-smart: URL sessions fetch only
+   the picked seconds). Any page adds a pick button with
+   czTray.btnHTML({source,start,end,label,title}) — a delegated handler
+   does the rest, no per-page wiring. */
+const czTray = (() => {
+  const KEY = "cz-tray-v1";
+  let S = { items: [], pinned: false };
+  try { S = { ...S, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; }
+  catch (e) { /* a torn write never breaks boot */ }
+  const save = () => localStorage.setItem(KEY, JSON.stringify(S));
+
+  let bar = null, pill = null;
+  const build = () => {
+    if (bar) return;
+    bar = document.createElement("div");
+    bar.id = "cztray";
+    pill = document.createElement("button");
+    pill.id = "cztray-pill";
+    pill.title = "the reel timeline — every moment you've picked, suite-wide";
+    pill.onclick = () => { S.pinned = true; save(); render(); };
+    document.body.append(bar, pill);
+  };
+  const total = () =>
+    S.items.reduce((a, c) => a + (c.end - c.start), 0);
+  const chip = (c, i) => `
+    <div class="tray-chip" data-i="${i}" title="${esc(c.label || c.title)}">
+      <button class="tray-go" data-go="${i}"
+        title="open this moment on the tape">${fmtTime(c.start)}</button>
+      <span class="tray-name">${esc(c.title || "moment")}</span>
+      <span class="tray-span">${(c.end - c.start).toFixed(0)}s</span>
+      <span class="tray-acts">
+        <button data-mv="${i}:-1" title="earlier">‹</button>
+        <button data-mv="${i}:1" title="later">›</button>
+        <button data-rm="${i}" title="drop it">✕</button>
+      </span>
+    </div>`;
+  function render() {
+    build();
+    const n = S.items.length;
+    document.body.classList.toggle("tray-open", S.pinned);
+    pill.style.display = (n && !S.pinned) ? "" : "none";
+    pill.textContent = `🎞 ${n}`;
+    bar.style.display = S.pinned ? "" : "none";
+    if (!S.pinned) return;
+    bar.innerHTML = `
+      <button class="tray-pin on" id="tray-unpin"
+        title="unpin — the timeline folds to a count until you need it">📌</button>
+      <span class="tray-count">${n ? `${n} moment${n > 1 ? "s" : ""} ·
+        ${fmtTime(total())} · ${new Set(S.items.map(c => c.source)).size}
+        meeting${new Set(S.items.map(c => c.source)).size > 1 ? "s" : ""}`
+        : "the reel timeline — pick moments from any page and they land here"}</span>
+      <div class="tray-strip">${S.items.map(chip).join("")}</div>
+      ${n ? `<button class="btn" id="tray-clear">clear</button>
+      <button class="btn primary" id="tray-render"
+        style="--acc:var(--hl-cta)"
+        title="one montage across every meeting here — URL sessions fetch only these seconds">▶ Render reel</button>` : ""}`;
+    $("#tray-unpin", bar).onclick = () => { S.pinned = false; save(); render(); };
+    const clr = $("#tray-clear", bar);
+    if (clr) clr.onclick = () => { S.items = []; save(); render(); };
+    const rd = $("#tray-render", bar);
+    if (rd) rd.onclick = renderReel;
+    $$("[data-rm]", bar).forEach(b => b.onclick = () => {
+      S.items.splice(+b.dataset.rm, 1); save(); render(); });
+    $$("[data-mv]", bar).forEach(b => b.onclick = () => {
+      const [i, d] = b.dataset.mv.split(":").map(Number);
+      const j = i + d;
+      if (j < 0 || j >= S.items.length) return;
+      [S.items[i], S.items[j]] = [S.items[j], S.items[i]]; save(); render();
+    });
+    $$("[data-go]", bar).forEach(b => b.onclick = () => {
+      const c = S.items[+b.dataset.go];
+      if (c) go("highlighter", { openPath: c.source, seek: c.start });
+    });
+  }
+  async function renderReel() {
+    const btn = $("#tray-render", bar);
+    btn.disabled = true; btn.textContent = "rendering…";
+    try {
+      const job = await api("/api/kb/montage", { picks: S.items });
+      toast(`cutting the reel — ${S.items.length} moments`);
+      const done = await jobDone(job.id);
+      if (done.status === "error") toast(done.error, true);
+      else toast(`the reel is in: ${done.result?.out || "your library"}`);
+    } catch (e) { toast(e.message, true); }
+    btn.disabled = false; btn.textContent = "▶ Render reel";
+  }
+  function add(item) {
+    const c = { source: String(item.source || ""),
+      start: Math.max(0, +item.start || 0),
+      end: +item.end || (+item.start || 0) + 12,
+      label: String(item.label || "").slice(0, 80),
+      title: String(item.title || "").slice(0, 60) };
+    if (!c.source) { toast("this moment doesn't name its meeting", true); return; }
+    if (S.items.some(x => x.source === c.source
+        && Math.abs(x.start - c.start) < 0.5)) {
+      toast("already on the timeline"); return;
+    }
+    S.items.push(c); save(); render();
+    toast(`on the timeline — ${fmtTime(c.start)} · ${esc(c.title || "moment")}`);
+  }
+  const btnHTML = item => `<button class="tray-add" title="add to the reel
+    timeline (rides every page)" data-tray='${esc(JSON.stringify(item))}'>⊕ reel</button>`;
+  document.addEventListener("click", e => {
+    const b = e.target.closest && e.target.closest(".tray-add");
+    if (!b) return;
+    e.stopPropagation();
+    try { add(JSON.parse(b.dataset.tray)); }
+    catch (err) { toast("that moment didn't parse", true); }
+  }, true);
+  document.addEventListener("DOMContentLoaded", render);
+  return { add, btnHTML, items: () => S.items.slice(),
+           pinned: () => S.pinned, render };
+})();
+// a deliberate global: pages test `window.czTray` before emitting ⊕ buttons
+window.czTray = czTray;
 
 /* ---------- czProgress: the house progress card ----------
    One look for every download, conversion, render and export: an accent

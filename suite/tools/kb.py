@@ -236,10 +236,15 @@ def register_kb(app, jobs, frames):
                        "no bullet spam.",
                 max_tokens=900)
             st = llm.status()
+            u = llm.last_usage()
             job.message = "the read is in"
             return {"text": text, "meetings": len(rows),
                     "origin": f"generative ({st.get('model')}, your key) — "
-                              "counted inputs only, no transcripts sent"}
+                              "counted inputs only, no transcripts sent",
+                    "usage": (f"{u['tokens_in']:,} in / "
+                              f"{u['tokens_out']:,} out · "
+                              f"{u['window_pct']}% of the context window"
+                              if u else "")}
 
         return jobs.start("ai-compare", work, tool="kb",
                           label=f"AI read across {len(rows)} meetings").to_dict()
@@ -270,6 +275,19 @@ def register_kb(app, jobs, frames):
         except (KeyError, TypeError, ValueError):
             return JSONResponse({"error": "each pick needs a source and a "
                                           "start (seconds)"}, status_code=422)
+        # a pick may name a meeting by video id alone ("vid:<id>" — Memory's
+        # search hits travel light); it resolves to the Highlighter session
+        # that holds the tape, or says honestly what to do
+        for p in picks:
+            if p["source"].startswith("vid:"):
+                sess = _meetings_dir() / p["source"][4:]
+                if not sess.is_dir():
+                    return JSONResponse(
+                        {"error": f"{p['title'] or p['source']} isn't in the "
+                                  "Highlighter library yet — open it there "
+                                  "once and the reel can cut it"},
+                        status_code=409)
+                p["source"] = str(sess)
         for p in picks:
             if p["end"] <= p["start"]:
                 p["end"] = p["start"] + 12.0
@@ -366,6 +384,29 @@ def register_kb(app, jobs, frames):
             "montage", work, tool="kb",
             label=f"montage — {len(picks)} moments from {srcs} "
                   f"meeting{'s' if srcs > 1 else ''}").to_dict()
+
+    @app.post("/api/kb/context")
+    def api_context(body: dict = Body(...)):
+        """The transcript around one second of one meeting — the pull-up
+        behind every mark in the analytics. ±window seconds, capped."""
+        source = str(body.get("source", ""))
+        t = float(body.get("t", 0) or 0)
+        window = min(120.0, float(body.get("window", 40) or 40))
+        sc, _, _ = _sidecars(source)
+        if not sc.exists():
+            return JSONResponse({"error": "that meeting has no transcript "
+                                          "on this machine"}, status_code=404)
+        try:
+            segs = json.loads(sc.read_text()).get("segments") or []
+        except (ValueError, OSError):
+            return JSONResponse({"error": "the transcript wouldn't parse"},
+                                status_code=500)
+        keep = [{"start": round(float(s.get("start", 0)), 1),
+                 "text": str(s.get("text", ""))[:300],
+                 "speaker": s.get("speaker")}
+                for s in segs
+                if abs(float(s.get("start", 0)) - t) <= window]
+        return {"t": t, "segments": keep[:80]}
 
     @app.post("/api/kb/discourse")
     def api_discourse(body: dict = Body(...)):

@@ -1111,3 +1111,138 @@ a { color: var(--cream-dim); }
 .hl-click { cursor: pointer; }
 .hl-click:hover { background: rgba(0,0,0,.04); border-radius: 6px; }
 .hl-disrow { border-left: 3px solid #B0542D; padding-left: 8px; cursor: pointer; }
+
+/* ================= czTray — the reel timeline, suite-wide =================
+   One strip along the bottom of every page. Pinned open it holds the picked
+   moments as chips; unpinned it folds to a count pill. Pages never style it —
+   they only emit ⊕ buttons (czTray.btnHTML). */
+#cztray {
+  position: fixed; left: var(--rail-w); right: 0; bottom: 0; z-index: 40;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--ink-2); border-top: 1.5px solid var(--cream);
+  box-shadow: 0 -4px 14px rgba(35,38,29,.10);
+  padding: 9px 16px; min-height: 58px;
+}
+body.tray-open #main .page { padding-bottom: 76px; }
+#cztray .btn { width: auto; flex: 0 0 auto; }
+#cztray .tray-count { font-family: var(--mono); font-size: 11.5px;
+  color: var(--cream-dim); flex: 0 0 auto; max-width: 220px; line-height: 1.45; }
+#cztray .tray-strip { display: flex; gap: 8px; overflow-x: auto; flex: 1;
+  padding: 2px 0; scrollbar-width: thin; }
+.tray-chip {
+  display: flex; align-items: center; gap: 7px; flex: 0 0 auto;
+  background: #fff; border: 1.5px solid var(--line); border-radius: 8px;
+  padding: 5px 8px; font-size: 12.5px; max-width: 300px;
+}
+.tray-chip .tray-go { font-family: var(--mono); font-size: 11px; border: 0;
+  background: var(--forest); color: var(--cream); border-radius: 5px;
+  padding: 2px 7px; cursor: pointer; }
+.tray-chip .tray-go:hover { background: var(--forest-2); }
+.tray-chip .tray-name { overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; max-width: 150px; }
+.tray-chip .tray-span { font-family: var(--mono); font-size: 10.5px;
+  color: var(--cream-faint); }
+.tray-chip .tray-acts button { border: 0; background: none; cursor: pointer;
+  color: var(--cream-dim); font-size: 13px; padding: 1px 3px; }
+.tray-chip .tray-acts button:hover { color: var(--cream); }
+.tray-pin { border: 0; background: none; font-size: 16px; cursor: pointer;
+  opacity: .55; flex: 0 0 auto; }
+.tray-pin.on, .tray-pin:hover { opacity: 1; }
+#cztray-pill {
+  position: fixed; right: 18px; bottom: 16px; z-index: 40;
+  background: var(--ink-2); border: 1.5px solid var(--cream);
+  border-radius: 999px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+  box-shadow: 4px 4px 0 rgba(35,38,29,.22);
+}
+#cztray-pill:hover { transform: translateY(-1px); }
+.tray-add { border: 1px solid var(--line); background: #fff; cursor: pointer;
+  border-radius: 6px; font-size: 11px; padding: 2px 8px; color: var(--cream-dim);
+  flex: 0 0 auto; }
+.tray-add:hover { border-color: var(--hl-cta); color: var(--hl-cta); }
+
+/* ================= czAnalytics — the record, drawn readable =================
+   The dataviz rules this follows: thin marks, 2px gaps between fills, one
+   hue per job (violet ramp = magnitude; the validated 8-hue family =
+   identity), recessive grid, 12.5px floor on labels, tooltips everywhere,
+   and every moment is pickable. */
+.viz { display: flex; flex-direction: column; gap: 18px; }
+.viz-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.viz-head .stat { background: var(--ink-2); border: 1.5px solid var(--line);
+  border-radius: 10px; padding: 10px 16px; }
+.viz-head .stat b { display: block; font-family: var(--head); font-size: 22px;
+  line-height: 1.1; }
+.viz-head .stat span { font-size: 12px; color: var(--cream-dim); }
+.viz-card { background: var(--ink-2); border: 1.5px solid var(--line);
+  border-radius: var(--r); padding: 16px 18px; }
+.viz-card > .tag { display: block; margin-bottom: 4px; }
+.viz-note { font-size: 12.5px; color: var(--cream-dim); margin: 2px 0 10px; }
+.viz-empty { font-size: 13px; color: var(--cream-faint); padding: 14px 0; }
+
+/* the meetings axis — shared by every grid; one column per meeting */
+.viz-axis { font-family: var(--mono); font-size: 10.5px; color: var(--cream-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transform: none; text-align: center; padding-top: 4px; }
+.viz-col-focus { outline: 2px solid var(--amber); outline-offset: 1px;
+  border-radius: 5px; }
+
+/* heatmap (framing / lenses) */
+.viz-grid { display: grid; gap: 2px; align-items: center; }
+.viz-rowlabel { font-size: 12.5px; color: var(--cream); display: flex;
+  align-items: center; gap: 8px; padding-right: 10px; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; min-height: 30px; }
+.viz-rowlabel i { width: 10px; height: 10px; border-radius: 3px;
+  flex: 0 0 auto; }
+.viz-cell { height: 30px; border-radius: 4px; border: 1px solid var(--line-soft);
+  cursor: pointer; position: relative; }
+.viz-cell:hover { outline: 2px solid var(--cream); outline-offset: 1px; z-index: 2; }
+.viz-cell[data-n="0"] { cursor: default; }
+.viz-cell[data-n="0"]:hover { outline: none; }
+
+/* entity dot-strip */
+.viz-dot { width: 100%; height: 30px; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; border-radius: 4px; }
+.viz-dot i { border-radius: 50%; background: var(--kb); display: block; }
+.viz-dot:hover { outline: 2px solid var(--cream); outline-offset: -2px; }
+
+/* line chart (topics over time) */
+.viz-svgwrap { position: relative; }
+.viz-svgwrap svg { width: 100%; height: auto; display: block; }
+.viz-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.viz-legend span { display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--cream-dim); }
+.viz-legend i { width: 10px; height: 10px; border-radius: 3px; }
+
+/* discourse trace bars */
+.viz-barrow { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.viz-barrow .blabel { flex: 0 0 190px; font-size: 12.5px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.viz-barrow .btrack { flex: 1; height: 18px; border-radius: 4px;
+  background: var(--ink-3); position: relative; cursor: pointer; }
+.viz-barrow .bfill { position: absolute; inset: 0 auto 0 0; border-radius: 4px;
+  background: var(--kb); min-width: 2px; }
+.viz-barrow .bval { flex: 0 0 110px; font-family: var(--mono); font-size: 11px;
+  color: var(--cream-dim); text-align: right; }
+.viz-barrow:hover .btrack { outline: 2px solid var(--cream); outline-offset: 1px; }
+
+/* the shared tooltip — one per document, follows the hovered mark */
+#viz-tip { position: fixed; z-index: 60; pointer-events: none; display: none;
+  background: var(--ink); color: var(--cream); border: 1.5px solid var(--cream);
+  border-radius: 8px; box-shadow: 4px 4px 0 rgba(35,38,29,.22);
+  padding: 8px 11px; font-size: 12.5px; max-width: 320px; line-height: 1.5; }
+#viz-tip .tt { font-weight: 600; }
+#viz-tip .td { color: var(--cream-dim); font-size: 11.5px; }
+
+/* the context modal — moments with receipts, every one pickable */
+#viz-overlay { position: fixed; inset: 0; z-index: 55;
+  background: rgba(35,38,29,.38); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; }
+.viz-moment { display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 2px; border-bottom: 1px solid var(--line-soft); }
+.viz-moment:last-child { border-bottom: 0; }
+.viz-moment .vm-t { font-family: var(--mono); font-size: 11px; flex: 0 0 auto;
+  background: var(--forest); border-radius: 5px; padding: 2px 7px;
+  cursor: pointer; }
+.viz-moment .vm-t:hover { background: var(--forest-2); }
+.viz-moment .vm-text { flex: 1; font-size: 13px; line-height: 1.55; }
+.viz-moment .vm-text .vm-meta { font-size: 11.5px; color: var(--cream-faint);
+  font-family: var(--mono); margin-top: 2px; }
