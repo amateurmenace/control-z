@@ -48,6 +48,15 @@ const IndexPage = (() => {
             timeline of your selects — File → Import → Timeline</div>
         </div>
 
+        <div class="insp-sec">
+          <span class="tag">the road — ticked clips, clip by clip</span>
+          <div id="ix-roadstages" class="hint">…</div>
+          <button class="btn primary" id="ix-road" disabled>▶ Send down the road</button>
+          <div class="hint" style="margin-top:6px">each clip runs your picked stages in
+            order before the next clip starts; what a clip already has is skipped,
+            and every skip says why</div>
+        </div>
+
         <div class="report" id="ix-report"></div>
       </div>
     </div>
@@ -149,6 +158,60 @@ const IndexPage = (() => {
     $("#ix-fcpxml", el).disabled = !S.picked.size;
     $("#ix-csv", el).disabled = !S.picked.size;
     $("#ix-selwords", el).disabled = !S.picked.size;
+    roadMeta();
+  }
+
+  /* -- the road: picked stages over ticked clips ------------------------- */
+
+  function roadPicks() {
+    return $$("#ix-roadstages input:checked", el).map(c => c.dataset.stage);
+  }
+
+  function roadMeta() {
+    $("#ix-road", el).disabled = !S.picked.size || !roadPicks().length;
+  }
+
+  async function loadRoadStages() {
+    try {
+      const r = await api("/api/index/road-stages");
+      $("#ix-roadstages", el).innerHTML = r.stages.map(s => `
+        <label class="ix-stage${s.ok ? "" : " off"}" title="${s.ok
+          ? `runs ${s.tool}'s engine at its defaults`
+          : esc(s.why)}">
+          <input type="checkbox" data-stage="${s.id}" ${s.ok ? "" : "disabled"}>
+          <i style="background:${(toolById(s.tool) || {}).acc || "var(--cream-dim)"}"></i>
+          ${esc(s.label)}${s.ok ? "" : ` <span class="hint">· ${esc(s.why)}</span>`}
+        </label>`).join("");
+      $$("#ix-roadstages input", el).forEach(c => c.onchange = roadMeta);
+    } catch (e) {
+      $("#ix-roadstages", el).textContent = e.message;
+    }
+  }
+
+  async function runRoad() {
+    const stages = roadPicks();
+    if (!stages.length || !S.picked.size) return;
+    const btn = $("#ix-road", el);
+    btn.disabled = true;
+    try {
+      const job = await api("/api/index/road",
+                            { paths: [...S.picked], stages });
+      const p = czProgress($("#ix-scanhost", el), {
+        label: "the road", acc: "var(--index)" });
+      watchJob(job.id, j => p.update(j));
+      const done = await jobDone(job.id);
+      p.finish(done);
+      if (done.status === "error") toast(done.error, true);
+      else {
+        const r = done.result || {};
+        toast(`${(r.done || []).length} clips down the road` +
+              ((r.failed || []).length ? ` · ${r.failed.length} notes` : ""));
+        (r.failed || []).slice(0, 5).forEach(f => toast(f, true));
+      }
+      await loadStatus();
+      $("#ix-q", el).value.trim() ? search() : browse();
+    } catch (e) { toast(e.message, true); }
+    roadMeta();
   }
 
   function rowHTML(row) {
@@ -316,6 +379,8 @@ const IndexPage = (() => {
     $("#ix-fcpxml", el).onclick = () => exportSel("fcpxml");
     $("#ix-csv", el).onclick = () => exportSel("csv");
     $("#ix-selwords", el).onclick = () => batchWords([...S.picked]);
+    $("#ix-road", el).onclick = runRoad;
+    loadRoadStages();
   }
 
   function onshow() {

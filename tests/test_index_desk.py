@@ -183,3 +183,58 @@ class TestFootageRecord(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRoadPlan(unittest.TestCase):
+    """The road's bookkeeping: who runs what, every skip a sentence."""
+
+    def rows(self):
+        return [
+            {"path": "/f/a.mp4", "name": "a.mp4", "audio": 1, "width": 1920,
+             "missing": 0, "carries": ["words"]},
+            {"path": "/f/b.mp4", "name": "b.mp4", "audio": 1, "width": 1920,
+             "missing": 0, "carries": []},
+            {"path": "/f/c-silent.mp4", "name": "c-silent.mp4", "audio": 0,
+             "width": 1920, "missing": 0, "carries": []},
+            {"path": "/f/d.wav", "name": "d.wav", "audio": 1, "width": None,
+             "missing": 0, "carries": []},
+            {"path": "/f/e.mp4", "name": "e.mp4", "audio": 1, "width": 1920,
+             "missing": 1, "carries": []},
+        ]
+
+    def plan(self, stages):
+        from suite.tools.indexer import _road_plan
+        return _road_plan(self.rows(), stages)
+
+    def test_stages_run_in_road_order_regardless_of_ask(self):
+        p = self.plan(["pivot", "words", "clear"])
+        self.assertEqual(p["stages"], ["words", "clear", "pivot"])
+
+    def test_done_work_is_skipped_with_the_reason_said(self):
+        p = self.plan(["words"])
+        names = [i["name"] for i in p["plan"]]
+        self.assertEqual(names, ["b.mp4", "d.wav"])
+        self.assertIn("a.mp4 · words: already done", p["skips"])
+
+    def test_a_clip_offers_only_what_it_can_carry(self):
+        p = self.plan(["words", "clear", "pivot"])
+        by = {i["name"]: i["stages"] for i in p["plan"]}
+        self.assertEqual(by["b.mp4"], ["words", "clear", "pivot"])
+        self.assertEqual(by["c-silent.mp4"], ["pivot"])  # picture, no sound
+        self.assertEqual(by["d.wav"], ["words", "clear"])  # sound, no picture
+        self.assertNotIn("e.mp4", by)  # unplugged drives never join the road
+        self.assertIn("e.mp4 · words: drive unplugged?", p["skips"])
+        self.assertIn("c-silent.mp4 · words: no audio track", p["skips"])
+        self.assertIn("d.wav · reframe 9:16: no picture", p["skips"])
+
+    def test_existing_pivot_render_is_respected(self):
+        from suite.tools import indexer as ix
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "b.mp4"
+            src.write_bytes(b"x")
+            ix._pivot_out(str(src)).write_bytes(b"done")
+            rows = [{"path": str(src), "name": "b.mp4", "audio": 1,
+                     "width": 1920, "missing": 0, "carries": []}]
+            p = ix._road_plan(rows, ["pivot"])
+            self.assertEqual(p["plan"], [])
+            self.assertIn("b.mp4 · reframe: already rendered", p["skips"])
