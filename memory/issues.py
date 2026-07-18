@@ -377,12 +377,11 @@ def _matchers(keywords: List[str]):
     return [re.compile(r"\b" + re.escape(k) + r"\b") for k in keywords if k]
 
 
-def _assign(corpus, segs: List[dict], issues: List[dict],
-            emit=None) -> Dict[str, int]:
+def _assign(corpus, segs: List[dict], issues: List[dict]) -> Dict[str, int]:
     """Attach each segment to every issue whose vocabulary it uses (word-boundary
     match), plus its single nearest issue by cosine when that clears COS_ASSIGN.
-    Returns {issue_id: n_segments_linked}. `emit(issue_id, meeting_id)` fires the
-    first time an issue is seen in a meeting (the resurfacing hook)."""
+    Returns {issue_id: n_segments_linked}. Resurfacing detection lives in the
+    caller, run *after* these links land so a delta can see the new beads."""
     if not issues:
         return {}
     pats = {iss["id"]: _matchers(iss.get("keywords") or []) for iss in issues}
@@ -397,7 +396,6 @@ def _assign(corpus, segs: List[dict], issues: List[dict],
             iss["centroid"] for iss in issues if iss.get("centroid") is not None])
 
     links: Dict[str, List[tuple]] = collections.defaultdict(list)
-    seen_pair: set = set()          # (issue_id, meeting_id) already linked
     counts: Dict[str, int] = collections.Counter()
 
     for s in segs:
@@ -421,13 +419,7 @@ def _assign(corpus, segs: List[dict], issues: List[dict],
                 if float(sims[b]) >= COS_ASSIGN:
                     iid = cen_ids[b]
                     links[iid].append((s["id"], mid, float(sims[b]), "related"))
-                    hit_here.add(iid)
                     counts[iid] += 1
-        if emit:
-            for iid in hit_here:
-                if (iid, mid) not in seen_pair:
-                    seen_pair.add((iid, mid))
-                    emit(iid, mid)
 
     for iid, ls in links.items():
         corpus.link_segments(iid, ls)
@@ -525,29 +517,32 @@ def assign_meeting(corpus, meeting_id: str, emit_events: bool = True) -> dict:
     issues = [i for i in corpus.issue_keywords(active_only=True)
               if not i["town"] or not town or i["town"] == town]
 
-    resurfaced: List[dict] = []
-
-    def emit(iid, mid):
-        full = corpus.get_issue(iid)
-        if not full or not full.get("following"):
-            return
-        th = corpus.get_thread(iid)
-        seen = (th or {}).get("last_seen_date", "") or ""
-        mdate = m.get("date", "") or ""
-        if mdate and seen and mdate <= seen:
-            return                       # nothing newer than the follower has seen
-        d = delta(corpus, full, meeting_id)
-        corpus.add_event("resurfacing", issue_id=iid, meeting_id=meeting_id,
-                         thread_id=(th or {}).get("id", ""),
-                         payload={"delta": d, "title": m.get("title", ""),
-                                  "date": mdate, "body": m.get("body", "")})
-        if mdate:
-            corpus.advance_thread(iid, mdate)
-        resurfaced.append({"issue_id": iid, "name": full["name"], "delta": d})
-
-    counts = _assign(corpus, segs, issues, emit=emit if emit_events else None)
+    counts = _assign(corpus, segs, issues)
     for iid in counts:
         corpus.recompute_centroid(iid)
+
+    # resurfacings — computed *after* the links land, so each delta can quote the
+    # new meeting's own beads. A followed issue this meeting reopened, newer than
+    # the follower has seen, wakes a thread with a "what changed" paragraph.
+    resurfaced: List[dict] = []
+    mdate = m.get("date", "") or ""
+    if emit_events:
+        for iid in counts:
+            full = corpus.get_issue(iid)
+            if not full or not full.get("following"):
+                continue
+            th = corpus.get_thread(iid)
+            seen = (th or {}).get("last_seen_date", "") or ""
+            if mdate and seen and mdate <= seen:
+                continue                 # nothing newer than the follower has seen
+            d = delta(corpus, full, meeting_id)
+            corpus.add_event("resurfacing", issue_id=iid, meeting_id=meeting_id,
+                             thread_id=(th or {}).get("id", ""),
+                             payload={"delta": d, "title": m.get("title", ""),
+                                      "date": mdate, "body": m.get("body", "")})
+            if mdate:
+                corpus.advance_thread(iid, mdate)
+            resurfaced.append({"issue_id": iid, "name": full["name"], "delta": d})
 
     # candidate queue: substantive segments this meeting that matched no issue,
     # grouped by any phrase they repeat — the steward's "is this a new issue?" list
@@ -704,11 +699,11 @@ def digest(corpus) -> dict:
     for the spec's resurfacing email (no accounts, no network, nothing sent). New
     activity first, then the quiet threads so a follower knows they're still held."""
     threads = corpus.list_threads()
+    all_events = corpus.list_events(limit=200)   # newest first — fetch once
     active, quiet = [], []
     for t in threads:
-        events = [e for e in corpus.list_events(limit=200)
-                  if e["issue_id"] == t["issue_id"]]
-        latest = events[0] if events else None
+        latest = next((e for e in all_events
+                       if e["issue_id"] == t["issue_id"]), None)
         row = {"issue_id": t["issue_id"], "name": t["name"],
                "n_meetings": t["n_meetings"], "unseen": t["unseen"],
                "last_seen": t["last_seen"],

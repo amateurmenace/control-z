@@ -170,7 +170,11 @@ class AssignTest(unittest.TestCase):
         _meeting(self.c, "m2", VZ, 6, "2026-06-02")
         res = issues.assign_meeting(self.c, "m2", emit_events=True)
         self.assertEqual(len(res["resurfaced"]), 1)
-        self.assertIn("vision zero", res["resurfaced"][0]["delta"].lower())
+        d = res["resurfaced"][0]["delta"]
+        self.assertIn("vision zero", d.lower())
+        # the delta must quote the NEW meeting's beads — proving links land before
+        # the delta is computed (a [MM:SS] the reader can check)
+        self.assertRegex(d, r"\d\d:\d\d")
         self.assertEqual(self.c.unseen_count(), 1)
         self.assertEqual(self.c.get_thread("iss:vz")["last_seen_date"], "2026-06-02")
 
