@@ -75,7 +75,7 @@ the exact runbook for the day that changes.
   operators to install `google-auth` when they already had it: the package
   imports fine and then fails on its *transport*, so the extra names
   `google-auth[requests]` and the message carries the real error.
-  **635 tests green.**
+  **648 tests green.**
 
 ### 1.9.0: the record, drawn — the desk's analytical eye, in public — 2026-07-18
 

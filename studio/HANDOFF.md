@@ -46,6 +46,15 @@ fixture-tested; the fetch is not. **Brookline's channel id is still unknown** �
 the corpus records only the uploader name — so `towns.sources` needs a `UC…`
 from Stephen before the nightly poll can run.
 
+## The audit
+
+Twenty-two agents reviewed the wave adversarially; fourteen findings reproduced
+against a live store and are fixed (see the commit *"What the audit found"*).
+The two that mattered most were covenant breaks: public search served meetings
+the pressed edition withholds, and `mint_from_query` pulled another town's
+segments onto a minted issue. Both now have parity regressions. Four claims did
+not survive an attempt to refute them and were not acted on.
+
 ## Asks
 
 1. **The DNS answer** (specs/17 §14, blocking): `communityai.studio` as the

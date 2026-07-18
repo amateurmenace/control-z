@@ -158,7 +158,7 @@ section below, updated on main.
 ## State of main (lane A updates this)
 
 - 2026-07-18 (latest) — **the Studio, wave 1: the record moves in.
-  `studio/` joins the tree; `memory/` grows a store seam. 635 tests green
+  `studio/` joins the tree; `memory/` grows a store seam. 648 tests green
   (39 skip without a Postgres).** On branch `lane/studio`, not yet merged.
   Nothing is provisioned on GCP and no bill has started — the whole wave was
   built and proven against a local Postgres, and `studio/INFRA.md` is the
