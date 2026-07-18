@@ -230,8 +230,12 @@ def page_meeting(m, manifest, base):
         head_spk = (f'<span class="spk">{esc(spk)}</span>'
                     if spk and spk != last_spk else "")
         last_spk = spk or last_spk
+        # anchor id and data-t must floor to the SAME whole second, or a
+        # deep-link's #t<sec> won't match its row. data-t carries the exact
+        # start (for precise seek + Math.floor()==int(t)); NEVER the rounded
+        # form — round(t,1) can cross an integer and break ~5% of deep-links.
         rows.append(
-            f'<p class="seg" id="t{int(t)}" data-t="{t:.1f}" data-i="{i}">'
+            f'<p class="seg" id="t{int(t)}" data-t="{t}" data-i="{i}">'
             f'<a class="ts" href="#t{int(t)}">{hms(t)}</a> '
             f'{head_spk}<span class="sx">{esc(s.get("text"))}</span></p>')
     transcript = "\n".join(rows)

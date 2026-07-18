@@ -40,7 +40,7 @@
   });
 
   /* ================= MEETING ================= */
-  let YT = { win: null, loaded: false, time: 0, pending: null };
+  let YT = { win: null, loaded: false, ready: false, time: 0, pending: null };
   function meeting() {
     const art = $(".meeting"); if (!art) return;
     const pid = art.dataset.pid;
@@ -85,13 +85,19 @@
     // frame src is fixed at youtube-nocookie.com, so this never drops a message
     YT.win.postMessage(JSON.stringify(msg), "https://www.youtube-nocookie.com");
   }
-  function ytSeek(t) { YT.win ? (ytSend("cmd", "seekTo", [t, true]), ytSend("cmd", "playVideo", [])) : null; YT.time = t; strip(t); }
+  function ytSeek(t) {
+    YT.time = t; strip(t);
+    // command-ready only after onReady; a click during the load gap stashes
+    // into pending instead of posting into the void (and being lost)
+    if (YT.win && YT.ready) { ytSend("cmd", "seekTo", [t, true]); ytSend("cmd", "playVideo", []); }
+    else YT.pending = t;
+  }
   function onYT(e) {
     if (!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(e.origin)) return;
     let d; try { d = JSON.parse(e.data); } catch { return; }
     if (d.event === "onReady" || d.event === "initialDelivery") {
-      ytSend("listening");
-      if (YT.pending != null) { ytSeek(YT.pending); YT.pending = null; }
+      YT.ready = true; ytSend("listening");
+      if (YT.pending != null) { const p = YT.pending; YT.pending = null; ytSeek(p); }
     }
     if (d.info && typeof d.info.currentTime === "number") {
       YT.time = d.info.currentTime; followAlong(YT.time); strip(YT.time);

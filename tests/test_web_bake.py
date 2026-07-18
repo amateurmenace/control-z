@@ -99,7 +99,10 @@ class TestBakeEdition(unittest.TestCase):
         c = Corpus(str(db))
         for mid, title, date in [("vid1", "Select Board — March", "2026-03-10"),
                                  ("vid2", "School Committee — June", "2026-06-18")]:
-            segs = [{"start": i * 10.0, "end": i * 10 + 9, "speaker": "Chair",
+            # .97 fractional starts exercise the anchor/deep-link rounding
+            # invariant: int(12.97)=12 but round(12.97,1)=13.0 — a producer
+            # that rounded up would mint a #t13 link with no t13 anchor.
+            segs = [{"start": i * 10.0 + 0.97, "end": i * 10 + 9, "speaker": "Chair",
                      "text": f"we discuss the budget override item {i} at length"}
                     for i in range(6)]
             c.replace_segments(mid, segs)
@@ -166,6 +169,26 @@ class TestBakeEdition(unittest.TestCase):
         self.assertIn("budget", sh)
         sid = sh["budget"][0]
         self.assertIn("budget", segs[sid][3].lower())
+
+    def test_deeplink_anchors_resolve(self):
+        """The HIGH bug: a search/cite deep-link is #t<floor(segTime)>, and the
+        transcript anchor is id=t<int(start)>. If the two used different
+        rounding, ~5% of deep-links would land on no element. Assert every
+        search segment's floored time matches a real anchor in its stub."""
+        segs = self._read("search/segs.json")
+        meta = self._read("search/meta.json")
+        # anchor ids present in each meeting stub
+        anchors = {}
+        for mi, mrec in enumerate(meta):
+            html = (self.out / "m" / mrec["pid"] / "index.html").read_text()
+            anchors[mi] = set(re.findall(r'id="t(\d+)"', html))
+            # data-t must floor to its own anchor id (never round up past it)
+            for aid, dt in re.findall(r'id="t(\d+)" data-t="([^"]+)"', html):
+                self.assertEqual(int(float(dt)), int(aid),
+                                 f"data-t {dt} floors past anchor t{aid}")
+        for mi, t, spk, text in segs:
+            self.assertIn(str(int(t)), anchors[mi],
+                          f"search deep-link #t{int(t)} has no anchor in meeting {mi}")
 
     def test_covenant_and_doors_present(self):
         self.assertTrue((self.out / "covenant" / "index.html").exists())

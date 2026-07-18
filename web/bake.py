@@ -67,14 +67,24 @@ def _write(path: Path, text: str) -> int:
     return len(data.encode("utf-8"))
 
 
+def _dumps(obj) -> str:
+    # sort_keys + compact separators + non-ASCII: the exact bytes an edition
+    # ships (deterministic for idempotence; the budget report measures these,
+    # not json's spaced ensure_ascii=True default).
+    return json.dumps(obj, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"))
+
+
 def _json(path: Path, obj) -> int:
-    # sort_keys + compact separators: deterministic bytes for idempotence
-    return _write(path, json.dumps(obj, ensure_ascii=False, sort_keys=True,
-                                   separators=(",", ":")))
+    return _write(path, _dumps(obj))
 
 
 def _gz_size(text: str) -> int:
     return len(gzip.compress(text.encode("utf-8"), mtime=0))
+
+
+def _gz_of(obj) -> int:
+    return _gz_size(_dumps(obj))
 
 
 # --------------------------------------------------------------------------
@@ -105,7 +115,11 @@ def _find_tracks(m: dict, media) -> dict:
     found = {}
     ad = None
     for stem, d in _sidecar_dirs(m, media):
-        for f in sorted(d.glob(f"{stem}.translated.*.vtt")):
+        # glob broadly then filter with the re.escape(stem) regex — a local
+        # media stem carries yt-dlp/Grabber "[id]" names, and Path.glob would
+        # read the brackets as a character class and never match (the same
+        # "[id] poison to glob" hazard highlighter._captions_for documents).
+        for f in sorted(d.glob("*.translated.*.vtt")):
             mm = re.match(rf"{re.escape(stem)}\.translated\.([^.]+)\.vtt$", f.name)
             if mm and mm.group(1) not in found:
                 found[mm.group(1)] = f
@@ -197,7 +211,7 @@ class Bake:
             }
             n = _json(self.out / "meetings" / f"{p}.json",
                       {k: v for k, v in doc.items()})
-            self.note(f"meetings/{p}.json", _gz_size(json.dumps(doc)))
+            self.note(f"meetings/{p}.json", _gz_of(doc))
             # copy caption + AD tracks
             for code, f in tr["tracks"].items():
                 self._copy(f, self.out / "tracks" / p / f"{code}.vtt")
@@ -250,7 +264,7 @@ class Bake:
                 "timeline": timeline,
             }
             _json(self.out / "issues" / f"{islug(issue['id'])}.json", doc)
-            self.note(f"issues/{islug(issue['id'])}.json", _gz_size(json.dumps(doc)))
+            self.note(f"issues/{islug(issue['id'])}.json", _gz_of(doc))
             full.append(doc)
         full.sort(key=lambda d: (-d["n_meetings"], -d["n_segments"], d["name"]))
         return full
@@ -301,13 +315,19 @@ class Bake:
                     "delta": pl.get("delta", ""),
                     "date": pl.get("date", ""), "title": pl.get("title", ""),
                     "pid": pid(e.get("meeting_id") or "")})
+        # counts derive from the LIVE meetings the edition actually ships —
+        # corpus.stats() sums every status (error/no_transcript included), so
+        # its seconds/segments/towns/bodies would disagree with the meeting
+        # count and the coverage strip. issues/threads are corpus-wide by design.
         stats = {
             "counts": {
-                "meetings": n_live, "hours": round((s["seconds"] or 0) / 3600, 1),
-                "segments": s["segments"], "issues": s["issues"],
-                "threads": s["threads"], "towns": s["towns"],
-                "bodies": s["bodies"], "languages": len(languages),
-                "described": described,
+                "meetings": n_live,
+                "hours": round(sum(m["duration"] or 0 for m in meetings) / 3600, 1),
+                "segments": sum(m["n_segments"] or 0 for m in meetings),
+                "issues": s["issues"], "threads": s["threads"],
+                "towns": len({m["town"] for m in meetings if m["town"]}),
+                "bodies": len({m["body"] for m in meetings if m["body"]}),
+                "languages": len(languages), "described": described,
             },
             "access": {
                 "captioned_pct": 100 if n_live else 0,   # every live meeting has words
@@ -318,7 +338,7 @@ class Bake:
             "new": new, "loud": loud, "resurfacings": resurf,
         }
         _json(self.out / "stats.json", stats)
-        self.note("stats.json", _gz_size(json.dumps(stats)))
+        self.note("stats.json", _gz_of(stats))
         return stats
 
     # -- urls.json (Add-a-meeting dedup) ---------------------------------
@@ -338,7 +358,7 @@ class Bake:
                 if k:
                     urls[k] = m["pid"]
         _json(self.out / "urls.json", urls)
-        self.note("urls.json", _gz_size(json.dumps(urls)))
+        self.note("urls.json", _gz_of(urls))
         return urls
 
     # -- search index (prefix-sharded inverted index) --------------------
@@ -354,7 +374,10 @@ class Bake:
                 if not text.strip():
                     continue
                 sid = len(segs)
-                segs.append([mi, round(float(seg.get("start") or 0), 1),
+                # store the TRUNCATED whole second, matching the transcript
+                # anchor id (t{int(start)}) the search deep-link jumps to —
+                # round(,1) would cross an integer and miss the anchor
+                segs.append([mi, int(float(seg.get("start") or 0)),
                              seg.get("speaker") or "", text])
                 for term in set(_TOKEN.findall(text.lower())):
                     index.setdefault(term, []).append(sid)
