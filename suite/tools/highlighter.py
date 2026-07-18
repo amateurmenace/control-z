@@ -128,6 +128,56 @@ def _load_transcript(source: str):
     return None, None
 
 
+def insight_payload(source: str, fresh: bool = False) -> dict:
+    """The meeting's full local reading, cached beside the transcript.
+    One door for the analyzer AND the Library page — the cache gate is the
+    newest key, so caches from before the analyzer grew rebuild once.
+    Raises LookupError (a sentence) when the meeting has no words yet."""
+    from highlighter import insight
+
+    t, origin = _load_transcript(source)
+    if not t or not t.get("segments"):
+        raise LookupError("no transcript yet — the meeting needs words "
+                          "before it can be read")
+    _, _, cache = _sidecars(source)
+    if cache.exists() and not fresh:
+        try:
+            data = json.loads(cache.read_text())
+            if data.get("n_segments") == len(t["segments"]) \
+                    and "framing" in data:
+                return data
+        except ValueError:
+            pass
+    segs = t["segments"]
+    meta = _session_meta(Path(source)) if _is_session(source) else None
+    data = {
+        "origin": origin, "n_segments": len(segs),
+        "brief": insight.brief(segs),
+        "entities": insight.entities(segs),
+        "wordfreq": insight.word_freq(segs),
+        "questions": insight.questions(segs),
+        "participation": insight.participation(segs),
+        "topics": insight.topics(segs),
+        "decisions": insight.decisions(segs),
+        # names for Whisper's decoder — harvested here so the Scribe
+        # upgrade can teach it the people/places before it listens
+        "hotwords": insight.hotwords(segs, meta),
+        # the shape of the meeting — counted, not modeled
+        "pace": insight.pace(segs),
+        "dynamics": insight.dynamics(segs),
+        # the upload's own agenda: chapters, else description timestamps
+        "agenda": insight.agenda(_info_for(source)),
+        # the analyzer's map and its friction points
+        "topic_map": insight.topic_map(segs),
+        "disagreements": insight.disagreements(segs),
+        # how the meeting talks, and who appears beside whom
+        "framing": insight.framing(segs),
+        "crossref": insight.crossref(segs),
+    }
+    cache.write_text(json.dumps(data))
+    return data
+
+
 def register_highlighter(app, jobs, frames):
     from fastapi import Body
     from fastapi.responses import JSONResponse
@@ -393,53 +443,11 @@ def register_highlighter(app, jobs, frames):
 
     @app.post("/api/highlighter/insight")
     def api_insight(body: dict = Body(...)):
-        from highlighter import insight
-
         source = str(Path(body["path"]).expanduser())
-        t, origin = _load_transcript(source)
-        if not t or not t.get("segments"):
-            return JSONResponse({"error": "no transcript yet — the meeting "
-                                          "needs words before it can be read"},
-                                status_code=409)
-        _, _, cache = _sidecars(source)
-        if cache.exists() and not body.get("fresh"):
-            try:
-                data = json.loads(cache.read_text())
-                # "framing" gates the cache: caches from before the
-                # analyzer grew rebuild once instead of shipping half
-                if data.get("n_segments") == len(t["segments"]) \
-                        and "framing" in data:
-                    return data
-            except ValueError:
-                pass
-        segs = t["segments"]
-        meta = _session_meta(Path(source)) if _is_session(source) else None
-        data = {
-            "origin": origin, "n_segments": len(segs),
-            "brief": insight.brief(segs),
-            "entities": insight.entities(segs),
-            "wordfreq": insight.word_freq(segs),
-            "questions": insight.questions(segs),
-            "participation": insight.participation(segs),
-            "topics": insight.topics(segs),
-            "decisions": insight.decisions(segs),
-            # names for Whisper's decoder — harvested here so the Scribe
-            # upgrade can teach it the people/places before it listens
-            "hotwords": insight.hotwords(segs, meta),
-            # the shape of the meeting — counted, not modeled
-            "pace": insight.pace(segs),
-            "dynamics": insight.dynamics(segs),
-            # the upload's own agenda: chapters, else description timestamps
-            "agenda": insight.agenda(_info_for(source)),
-            # the analyzer's map and its friction points
-            "topic_map": insight.topic_map(segs),
-            "disagreements": insight.disagreements(segs),
-            # how the meeting talks, and who appears beside whom
-            "framing": insight.framing(segs),
-            "crossref": insight.crossref(segs),
-        }
-        cache.write_text(json.dumps(data))
-        return data
+        try:
+            return insight_payload(source, fresh=bool(body.get("fresh")))
+        except LookupError as e:
+            return JSONResponse({"error": str(e)}, status_code=409)
 
     @app.post("/api/highlighter/ask")
     def api_ask(body: dict = Body(...)):
@@ -705,27 +713,9 @@ def register_highlighter(app, jobs, frames):
                      else p.stem)
         if source and not raw_date:
             raw_date = str(_info_for(source).get("upload_date") or "")
-        day = None
-        # the title's own date is the meeting's day ("… - March 10, 2026");
-        # upload_date only says when the video landed, so it goes second
-        months = ("january february march april may june july august "
-                  "september october november december").split()
-        m = re.search(r"(" + "|".join(months) + r")\s+(\d{1,2}),?\s+(\d{4})",
-                      title.lower())
-        if m:
-            try:
-                day = dt.date(int(m.group(3)), months.index(m.group(1)) + 1,
-                              int(m.group(2)))
-            except ValueError:
-                pass
-        if day is None:
-            m = re.search(r"(\d{4})-?(\d{2})-?(\d{2})", raw_date)
-            if m:
-                try:
-                    day = dt.date(int(m.group(1)), int(m.group(2)),
-                                  int(m.group(3)))
-                except ValueError:
-                    pass
+        from highlighter import insight as _ins
+        iso = _ins.meeting_day(title, raw_date)
+        day = dt.date.fromisoformat(iso) if iso else None
         if day is None:
             # no date on record — read the recent window and let the
             # name match do the work

@@ -98,6 +98,32 @@
 - The word cloud, recurring topics, and the network stopped counting
   contractions ("we're", "that's") as vocabulary — stopword stems
   wearing an apostrophe.
+- **The Meeting Library** — a new room in the community rail: every
+  meeting this machine has read, read together. The web app calls this
+  its Knowledge Base and asks a cloud model; here every number is the
+  same counted per-meeting reading the analyzer shows, aggregated in
+  plain code from the sidecars already on disk. Four cards, each a door:
+  - **Framing across meetings** — the eight lenses as a meetings × lens
+    grid (each column a meeting, oldest first; each cell shaded in its
+    lens's color by share), trend chips comparing the library's older
+    half to its newer ("financial framing is rising across meetings ↑"),
+    every cell opening that meeting's moments.
+  - **Entity tracking** — who appears across which meetings and how
+    often; a dot per meeting sized by count, one click traces the name.
+  - **Meeting comparison** — two meetings side by side: duration, pace,
+    decisions with outcomes, questions, tense moments, framing bars, and
+    the topics and names they share (outlined) vs carry alone.
+  - **Discourse analysis** — one term traced through every meeting
+    oldest-first, bars by per-1k-word rate so a seven-hour meeting can't
+    out-shout a one-hour one, with the first moments as receipts and
+    every row opening the meeting in the Highlighter.
+  Sessions that only have captions get read (and cached) on the
+  library's first look; a meeting without words is listed as unread, not
+  invented. Span downloads and rendered reels are outputs, not meetings
+  — filtered by name shape. Verified live on this machine's seven
+  meetings: "override" traced ×49 across 3 of 6 — surging in the March
+  10 Select Board (×45, 0.85/1k words), echoing in the June School
+  Committee.
 
 ### 1.4.0: the web app's three rooms, the two doors out — 2026-07-17
 - **Highlighter wears the web app's exact shape now**: the three sections

@@ -46,6 +46,46 @@ def _sentences(text: str) -> List[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
 
 
+_MONTHS = ("january february march april may june july august september "
+           "october november december").split()
+
+
+def meeting_day(title: str = "", upload_date: str = "") -> Optional[str]:
+    """The meeting's own day as YYYY-MM-DD. The title's date wins — "… -
+    March 10, 2026" or "3.10.26" names the meeting itself; upload_date
+    only says when the video landed, so it goes last. US month-day order,
+    like the stations that write these titles. None when nothing speaks."""
+    import datetime as dt
+
+    t = str(title).lower()
+    m = re.search(r"(" + "|".join(_MONTHS) + r")\s+(\d{1,2}),?\s+(\d{4})", t)
+    if m:
+        try:
+            return dt.date(int(m.group(3)), _MONTHS.index(m.group(1)) + 1,
+                           int(m.group(2))).isoformat()
+        except ValueError:
+            pass
+    m = re.search(r"\b(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\b", t)
+    if m:
+        mo, da, yr = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if yr < 100:
+            yr += 2000
+        if mo > 12 >= da:
+            mo, da = da, mo
+        try:
+            return dt.date(yr, mo, da).isoformat()
+        except ValueError:
+            pass
+    m = re.search(r"(\d{4})-?(\d{2})-?(\d{2})", str(upload_date))
+    if m:
+        try:
+            return dt.date(int(m.group(1)), int(m.group(2)),
+                           int(m.group(3))).isoformat()
+        except ValueError:
+            pass
+    return None
+
+
 def _stopish(lw: str) -> bool:
     """Stopwords, and contractions wearing an apostrophe over one —
     "we're", "don't", "that's" are stopword stems, not vocabulary."""

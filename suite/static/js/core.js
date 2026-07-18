@@ -39,6 +39,9 @@ const TOOLS = [
   { id: "grabber", name: "Grabber", acc: "var(--grabber)",
     ready: true, group: "community", long: "BIG Video Grabber",
     verb: "brings the meeting home", one: "find, fetch, conform civic recordings" },
+  { id: "kb", name: "Library", acc: "var(--kb)",
+    ready: true, group: "community", long: "Meeting Library",
+    verb: "reads them together", one: "framing, names, and topics across every meeting" },
 ];
 const toolById = id => TOOLS.find(t => t.id === id);
 
