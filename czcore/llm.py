@@ -126,7 +126,8 @@ CONTEXT_WINDOWS = {
     "gpt-4o-mini": 128_000, "gpt-4o": 128_000,
     "gpt-4.1-mini": 1_000_000, "gpt-4.1": 1_000_000,
     "claude-haiku-4-5": 200_000, "claude-sonnet-4-5": 200_000,
-    "claude-opus-4-8": 200_000,
+    "claude-sonnet-4-6": 1_000_000, "claude-sonnet-5": 1_000_000,
+    "claude-opus-4-8": 1_000_000,
 }
 _WINDOW_DEFAULT = 128_000
 

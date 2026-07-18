@@ -299,7 +299,8 @@ const SettingsPage = (() => {
     "gpt-4o-mini": [0.15, 0.60], "gpt-4o": [2.50, 10.00],
     "gpt-4.1-mini": [0.40, 1.60], "gpt-4.1": [2.00, 8.00],
     "claude-haiku-4-5": [1.00, 5.00], "claude-sonnet-4-5": [3.00, 15.00],
-    "claude-opus-4-8": [10.00, 40.00],
+    "claude-sonnet-4-6": [3.00, 15.00], "claude-sonnet-5": [3.00, 15.00],
+    "claude-opus-4-8": [5.00, 25.00],
   };
   const llmPrice = model => {
     const k = Object.keys(LLM_PRICES).find(p => (model || "").startsWith(p));
