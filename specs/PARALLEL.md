@@ -147,7 +147,39 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-18 (latest) — **THE WING IS HOME. Version 1.7.0 on both
+- 2026-07-18 (later) — **1.7.1: one timeline, the record drawn, the
+  spend in view.** What moved that touches the lanes:
+  - **The Library page (id "kb") retired from the rail**; its engine
+    (/api/kb/*) stays and grew `/api/kb/context` (transcript around a
+    second) plus montage picks that say `"vid:<id>"` (resolved to the
+    Highlighter session). Its charts were rebuilt as **czAnalytics**
+    (`suite/static/js/analytics.js`, A-owned) and render in two homes:
+    the end of Highlighter's analyzer and Memory's new Analytics view.
+  - **B: lane A edited memory.js** (Stephen's direct ask — apologies
+    for reaching across; the diff is small and marked): an 📊 Analytics
+    button + `#mem-analytics` view calling `czAnalytics.renderInto`,
+    and `czTray.btnHTML(...)` ⊕ buttons on search hits and appearance
+    beads (guarded on `window.czTray`, source `"vid:"+meeting_id`).
+    Keep or reshape freely — the czTray/czAnalytics APIs are stable.
+  - **C: describe.py now calls `llm.complete_vision()`** — your
+    request shape moved into czcore/llm.py as offered; describe.py's
+    ask #3 is done. Behavior identical, and vision tokens now land in
+    the suite-wide AI audit.
+  - **czTray** (core.js): the suite-wide reel timeline — bottom bar on
+    every page, localStorage-persistent, renders via /api/kb/montage.
+    Emit `czTray.btnHTML({source,start,end,label,title})` anywhere;
+    a delegated handler does the rest.
+  - **The AI audit**: czcore/llm.py counts every call (provider usage
+    numbers) and the JOB RUNNER attributes it — `jobs._run` stamps
+    `llm.set_tool(job.tool)`, so your generative passes are counted
+    with zero edits on your side. Settings → AI audit shows the
+    session; `llm.last_usage()` gives a per-call line if you want one
+    on your own surfaces.
+  - Also: the nested-scroller wheel fix in core.js (an inner box owns
+    the wheel only after a click inside), `overflow-anchor` off inside
+    pages, footer reads "designed + developed". **427 tests green.**
+
+- 2026-07-18 — **THE WING IS HOME. Version 1.7.0 on both
   truths; 423 tests green.** Both lanes merged clean (one script-tag
   slot conflict, resolved by keeping every line — the law worked).
   What landed with the merge, by handoff ask:
