@@ -2,6 +2,50 @@
 
 ## unreleased
 
+### 2.0.0: Civic Media Studio — the suite takes its own name — 2026-07-18
+
+A major number because macOS agrees it is one: the bundle identifier moved from
+`org.control-z.suite` to `org.civicmedia.studio`, so this installs beside the
+old app rather than replacing it. The tools are the same tools and the record is
+the same record — what changed is that the work finally has names that say what
+it is to the people it is for.
+
+- **The suite is Civic Media Studio** (civicmedia.studio). Control-Z keeps its
+  own identity inside it — free pro production tools for Resolve, its own site
+  at control-z.org, its own audience who may never touch the rest of the stack.
+  One `brand/` package holds all of it: four brands, their marks, their tokens,
+  and the rules about clearspace and minimum sizes, vendored rather than
+  redrawn per surface.
+
+- **The public record is publicrecord.studio.** The reader's mark, every page
+  title, the RSS feeds and the web manifest carry it now. The edition is
+  branding-only against 1.9.0 — same corpus hash, all 216 issue pages and every
+  deep link untouched, because a resident who cited a timestamp in June should
+  not find a 404 in July.
+
+- **`record/` — the record gets a home of its own** (specs/17 wave 1). A
+  Postgres corpus with pgvector behind the same seam the desk uses, a small
+  service in front of it, nightly connectors, and a steward console behind one
+  Google sign-in. `memory/` is imported, never forked: one interface, two
+  stores, and 83 parity cases that run the hand-audited issue engine against
+  both and prove they agree. Nothing is provisioned; `record/INFRA.md` is the
+  runbook and `docker compose up` is the proof.
+
+- **The drain, and the desk's fifth wave.** A desk can now lend itself to the
+  record (specs/17 §6.4, gated): the meetings without captions queue for any
+  station Mac to transcribe on its own hardware, which is how ASR stays at
+  marginal zero instead of becoming a GPU bill. Plus Rise on the road, the
+  coherence pass across all eight desk pages, and the local Models-page cards
+  for MT and vision.
+
+- **Quiet fixes.** `forget()` and `replace_segments` now take a meeting's issue
+  links with its segments — they never did, so `list_issues` counted ghosts
+  that `issue_appearances` hid, and one issue had two sizes. Public search no
+  longer serves meetings the edition withholds. `mint_from_query` stays inside
+  its own town. And a three-lane merge that git called conflict-free produced a
+  `pyproject.toml` naming a package that no longer exists — valid TOML, broken
+  build, caught before it shipped. **685 tests green.**
+
 ### Publicrecord — wave 1: the record moves in (specs/17) — 2026-07-18
 
 The public record has been breathing through one Mac: a steward presses a

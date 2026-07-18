@@ -1,6 +1,6 @@
 [project]
 name = "control-z-apps"
-version = "1.9.0"
+version = "2.0.0"
 description = "Civic Media Studio (civicmedia.studio) — free media cleaning, prepping, analysis, and finishing tools (standalone apps monorepo)"
 license = { text = "MIT" }
 requires-python = ">=3.10"
