@@ -75,7 +75,10 @@ def head(title, desc, canonical, og_image="", version="0"):
 <meta property="og:title" content="{esc(title)}">
 <meta property="og:description" content="{esc(desc)}">
 <meta property="og:url" content="{esc(canonical)}">{og}
+<meta name="theme-color" content="#F3F0E7">
 <link rel="icon" href="/app/favicon.svg">
+<link rel="manifest" href="/app/manifest.webmanifest">
+<link rel="alternate" type="application/rss+xml" title="The record — new meetings and resurfacings" href="/app/feeds/firehose.xml">
 <link rel="stylesheet" href="/app/app.css?v={esc(version)}">
 </head><body>"""
 
@@ -116,6 +119,10 @@ def rail(current=""):
     <span class="glyph">⌂</span><span class="rlabel">Home</span></a>
   <a class="rail-item{' active' if current=='search' else ''}" href="/app/s">
     <span class="glyph">⌕</span><span class="rlabel">Search</span></a>
+  <a class="rail-item{' active' if current=='watching' else ''}" href="/app/watching">
+    <span class="glyph">☆</span><span class="rlabel">Still watching</span></a>
+  <a class="rail-item{' active' if current=='officials' else ''}" href="/app/officials">
+    <span class="glyph">⬡</span><span class="rlabel">The votes</span></a>
   <div class="rail-sect">civic media suite</div>{civic}
   <div class="rail-sect">control-z</div>{bench}
 </nav>"""
@@ -264,6 +271,40 @@ def page_meeting(m, manifest, base):
         summ = (f'<section class="card summary"><span class="tag">{origin} — '
                 'supplements the official record</span>'
                 f'<p>{esc(m["summary"])}</p></section>')
+    # the roll calls — who voted how, read from the record (officials only)
+    votes_html = ""
+    if m.get("votes"):
+        vrows = []
+        for v in m["votes"]:
+            roll = "".join(
+                f'<span class="rollent"><a href="#t{int(r.get("t", v["t"]))}">'
+                f'{esc(r.get("name",""))}</a> {_rollcell(r.get("vote",""))}</span>'
+                for r in (v.get("roll") or []))
+            vrows.append(
+                f'<div class="vrow"><a class="vhead" href="#t{int(v["t"])}">'
+                f'<span class="ts">{hms(v["t"])}</span> {esc((v["motion"] or "")[:110])} '
+                f'<span class="tally">{esc(v.get("tally",""))}</span> '
+                f'<span class="outcome">{esc(v.get("outcome",""))}</span></a>'
+                f'<div class="roll">{roll}</div></div>')
+        votes_html = (
+            '<section class="card ledger"><span class="tag">the vote ledger — '
+            'roll calls read from this meeting</span>'
+            f'<div class="vledger">{"".join(vrows)}</div>'
+            '<p class="hint">Read from the transcript; a name may be misheard — '
+            'verify against the official minutes.</p></section>')
+    # the town's paper for this meeting
+    docs_html = ""
+    if m.get("documents"):
+        drows = "".join(
+            (f'<a class="docrow" href="{esc(d["url"])}" target="_blank" rel="noopener">'
+             if d.get("url") else '<div class="docrow">')
+            + f'📄 <b>{esc(d.get("kind","document"))}</b> {esc((d.get("title") or "")[:70])}'
+            + f' <span class="lmeta">{d.get("pages",0)} pp</span>'
+            + ("</a>" if d.get("url") else "</div>")
+            for d in m["documents"])
+        docs_html = ('<section class="card"><span class="tag">the town’s paper — '
+                     'agendas, minutes, and packets for this meeting</span>'
+                     f'<div class="docrows">{drows}</div></section>')
     meta = " · ".join([x for x in (m["body"], m["town"], m["date"] or "undated",
                                    f'{m["n_speakers"]} speakers' if m["n_speakers"] else "")
                        if x])
@@ -285,6 +326,8 @@ def page_meeting(m, manifest, base):
     </div>
     {player}
     {summ}
+    {votes_html}
+    {docs_html}
     <div class="tbar">
       <span class="tag">transcript — select any line to Cite it, click a time to jump</span>
       <span class="dls">{tdl}{addl}
@@ -309,6 +352,69 @@ def page_meeting_txt(m):
     return "\n".join(lines)
 
 
+def _milestone_html(pid, mm):
+    """One milestone row — a roll-call vote (with its tally) or a decision."""
+    if mm.get("kind") == "vote":
+        tally = f' <span class="tally">{esc(mm.get("tally",""))}</span>' if mm.get("tally") else ""
+        out = (f' <span class="outcome">{esc(mm["outcome"])}</span>'
+               if mm.get("outcome") else "")
+        return (f'<a class="milestone vote" href="/app/m/{pid}#t{int(mm["t"])}">'
+                f'⬡ <span class="ts">{hms(mm["t"])}</span> {esc(mm["text"][:70])}'
+                f'{tally}{out}</a>')
+    return (f'<a class="milestone" href="/app/m/{pid}#t{int(mm["t"])}">'
+            f'◆ <span class="ts">{hms(mm["t"])}</span> {esc(mm["text"][:70])}'
+            + (f' <span class="outcome">{esc(mm["outcome"])}</span>' if mm.get("outcome") else "")
+            + '</a>')
+
+
+def _docs_html(pid, docs):
+    """The document lane on a timeline node — the town's paper for this meeting,
+    each cite page-numbered and linking to the portal PDF."""
+    if not docs:
+        return ""
+    rows = []
+    for d in docs:
+        cites = "".join(
+            f'<span class="cite">p.{c.get("page",0)} · {esc(c.get("text","")[:80])}</span>'
+            for c in (d.get("cites") or [])[:2])
+        link = (f'<a class="docn" href="{esc(d["url"])}" target="_blank" rel="noopener">'
+                if d.get("url") else '<span class="docn">')
+        end = "</a>" if d.get("url") else "</span>"
+        rows.append(f'{link}📄 {esc(d.get("kind","document"))} — '
+                    f'{esc((d.get("title") or "")[:60])}{end}{cites}')
+    return f'<div class="docs">{"".join(rows)}</div>'
+
+
+def _rollcell(v):
+    cls = {"yes": "y", "no": "n", "abstain": "a"}.get(v, "")
+    label = {"yes": "aye", "no": "no", "abstain": "abs"}.get(v, esc(v))
+    return f'<span class="rc {cls}">{label}</span>'
+
+
+def _ledger_html(ledger):
+    """The roll-call ledger for an issue — who voted how, each a receipt into
+    the tape. Officials only (a roll call is the board voting)."""
+    if not ledger:
+        return ""
+    rows = []
+    for v in ledger:
+        roll = "".join(
+            f'<span class="rollent"><a href="/app/m/{v["pid"]}#t{int(r.get("t",v["t"]))}">'
+            f'{esc(r.get("name",""))}</a> {_rollcell(r.get("vote",""))}</span>'
+            for r in v.get("roll", []))
+        rows.append(
+            f'<div class="vrow"><a class="vhead" href="/app/m/{v["pid"]}#t{int(v["t"])}">'
+            f'<span class="ts">{esc(v["date"] or "")}</span> {esc((v["motion"] or "")[:100])} '
+            f'<span class="tally">{esc(v.get("tally",""))}</span> '
+            f'<span class="outcome">{esc(v.get("outcome",""))}</span></a>'
+            f'<div class="roll">{roll}</div></div>')
+    return (f'<section class="card ledger"><span class="tag">the vote ledger — '
+            f'roll calls on this issue, read from the record</span>'
+            f'<div class="vledger">{"".join(rows)}</div>'
+            f'<p class="hint">Roll calls are read from the transcript and may '
+            f'mishear a name — verify against the official minutes.</p></section>')
+
+
 def page_issue(i, manifest, base):
     nodes = []
     for n in i["timeline"]:
@@ -316,21 +422,20 @@ def page_issue(i, manifest, base):
             f'<a class="bead" href="/app/m/{n["pid"]}#t{int(b["t"])}">'
             f'<span class="ts">{hms(b["t"])}</span> {esc(b["text"][:90])}</a>'
             for b in n["beads"][:6])
-        miles = "".join(
-            f'<a class="milestone" href="/app/m/{n["pid"]}#t{int(mm["t"])}">'
-            f'◆ <span class="ts">{hms(mm["t"])}</span> {esc(mm["text"][:70])}'
-            + (f' <span class="outcome">{esc(mm["outcome"])}</span>' if mm.get("outcome") else "")
-            + '</a>' for mm in n.get("milestones", []))
+        miles = "".join(_milestone_html(n["pid"], mm)
+                        for mm in n.get("milestones", []))
+        docs = _docs_html(n["pid"], n.get("documents", []))
         nodes.append(
             f'<div class="tnode"><div class="tdot"></div>'
             f'<div class="thead"><span class="tdate">{esc(n["date"] or "undated")}</span>'
             f'<a class="ttitle" href="/app/m/{n["pid"]}">{esc(n["body"] or n["title"])}</a>'
             f'<span class="tn">{n["n"]} moment(s)</span></div>'
-            f'<div class="beads">{beads}{miles}</div></div>')
+            f'<div class="beads">{beads}{miles}</div>{docs}</div>')
     origin = ("Named by a model" if (i["name_origin"] or "").startswith("ai:")
               else "Named from the record's own words")
     aliases = "".join(f'<span class="alias">{esc(a)}</span>' for a in i["aliases"])
     related = "".join(f'<span class="rel">{esc(r)}</span>' for r in i["related"])
+    ledger = _ledger_html(i.get("ledger", []))
     body = f"""
   <article class="issue">
     <a class="back" href="/app/">← the record</a>
@@ -342,6 +447,7 @@ def page_issue(i, manifest, base):
     <section class="card"><span class="tag">the long view — every meeting this issue touched</span>
       <div class="timeline">{nodes and "".join(nodes) or '<p class="hint">no appearances</p>'}</div>
     </section>
+    {ledger}
   </article>
 """
     desc = (f'“{i["name"]}” — {i["n_meetings"]} meetings, {i["n_segments"]} moments '
@@ -439,6 +545,67 @@ def page_covenant(manifest, base):
                  version=manifest["version"])
 
 
+def page_officials(officials, manifest, base):
+    """The accountability page — every official's roll-call record, each cell a
+    receipt into the tape. Officials only, by construction (specs/14 §8)."""
+    cards = []
+    for o in officials:
+        # the 24 MOST-RECENT roll calls, newest first (member_records appends
+        # oldest-first, so slice the tail and reverse — not the head)
+        recent = "".join(
+            f'<a class="vcell" href="/app/m/{v["pid"]}#t{int(v.get("t") or 0)}" '
+            f'title="{esc((v.get("motion") or "")[:80])}">'
+            f'{_rollcell(v.get("vote",""))}<span class="vc-date">{esc((v.get("date") or "")[5:])}</span></a>'
+            for v in reversed(o.get("votes", [])[-24:]))
+        cards.append(
+            f'<div class="offcard"><div class="offhead"><b>{esc(o["name"])}</b>'
+            f'<span class="lmeta">{esc(o.get("town",""))}</span></div>'
+            f'<div class="offtally"><span class="rc y">{o["yes"]} aye</span>'
+            f'<span class="rc n">{o["no"]} no</span>'
+            f'<span class="rc a">{o["abstain"]} abs</span>'
+            f'<span class="offtot">{o["total"]} recorded votes</span></div>'
+            f'<div class="vcells">{recent}</div></div>')
+    body = f"""
+  <section class="officials">
+    <a class="back" href="/app/">← the record</a>
+    <h1>The people's votes</h1>
+    <p class="why">Every roll call the record has read, by member. These are the
+      votes officials cast in public session — officials only, by construction:
+      a roll call is the board voting. Each cell links to the moment on the tape.
+      Read from the transcript; verify against the official minutes.</p>
+    <div class="offgrid">{"".join(cards) or '<p class="hint">no roll calls on the record yet</p>'}</div>
+  </section>
+"""
+    return shell("The people's votes — the record",
+                 "Every official's roll-call record, each cell a receipt into the tape.",
+                 f"{base}/app/officials", body, "officials", manifest,
+                 version=manifest["version"])
+
+
+def page_still(manifest, base):
+    """Still watching — the follows view. Follows live only in localStorage, so
+    the body is a JS-rendered list with an honest noscript story."""
+    body = """
+  <section class="stillpage">
+    <a class="back" href="/app/">← the record</a>
+    <h1>Still watching</h1>
+    <p class="why">The issues you follow, and what has changed on each since you
+      last looked. Follows live in your browser — no account, nothing uploaded.</p>
+    <div class="stilltools">
+      <button class="btn" id="follow-export" type="button">Export follows (JSON)</button>
+      <label class="btn" for="follow-import">Import follows<input id="follow-import" type="file" accept="application/json" hidden></label>
+    </div>
+    <div id="stilllist"><noscript><p class="hint">The still-watching view needs
+      JavaScript to read your follows. <a href="/app/">Browse the record</a> —
+      every issue timeline is a readable document, and each offers RSS.</p></noscript></div>
+  </section>
+"""
+    return shell("Still watching — the record",
+                 "The issues you follow, and what changed since you last looked.",
+                 f"{base}/app/watching", body, "watching", manifest,
+                 version=manifest["version"])
+
+
 def page_door(t, manifest, base):
     beats = "".join(f'<div class="beat"><span>{i+1}</span>{esc(b)}</div>'
                     for i, b in enumerate(t["beats"]))
@@ -514,9 +681,72 @@ def emit_assets(out: Path, version, manifest):
             f = src / f"slide-{t['slide']}.jpg"
             if f.exists():
                 shutil.copyfile(f, out / "assets" / f"slide-{t['slide']}.jpg")
+    # PWA: the web-app manifest (a DIFFERENT file from the edition manifest.json)
+    # + a service worker. Both deterministic — the SW's cache name rides the
+    # corpus fingerprint so a new pressing supersedes the old cache cleanly.
+    _write_pwa(out, manifest)
 
 
-def emit_stubs(out, meetings, issues, stats, manifest, base):
+def _write_pwa(out: Path, manifest):
+    import json as _json
+    webmanifest = {
+        "name": "Community AI Project — the record",
+        "short_name": "the record",
+        "description": "A town's whole spoken life, cross-linked and searchable "
+                       "— open in any browser.",
+        "start_url": "/app/", "scope": "/app/", "display": "standalone",
+        "background_color": "#F3F0E7", "theme_color": "#F3F0E7",
+        "icons": [{"src": "/app/favicon.svg", "sizes": "any",
+                   "type": "image/svg+xml"}],
+    }
+    (out / "manifest.webmanifest").write_text(
+        _json.dumps(webmanifest, ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":")), encoding="utf-8")
+    # the service worker: precache the shell, cache-first for the edition, and
+    # tell the page when a fresher pressing has been fetched. Cache name = the
+    # corpus fingerprint, so a new edition's SW owns a new cache and sweeps the
+    # old one on activate. No wall-clock anywhere (idempotence).
+    cache = f"cz-record-{manifest.get('corpus_hash','0')}"
+    v = esc(manifest.get("version", "0"))
+    shell_urls = _json.dumps([
+        "/app/", f"/app/app.css?v={manifest.get('version','0')}",
+        f"/app/app.js?v={manifest.get('version','0')}", "/app/favicon.svg",
+        "/app/manifest.json", "/app/stats.json", "/app/s", "/app/watching",
+        "/app/officials"], separators=(",", ":"))
+    sw = f"""'use strict';
+// the record's service worker — precache the shell, keep last-read meetings,
+// and let the page announce a fresher pressing. Cache name is the corpus
+// fingerprint (deterministic; a new edition = a new cache).
+const CACHE = {cache!r};
+const SHELL = {shell_urls};
+self.addEventListener('install', e => {{
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+}});
+self.addEventListener('activate', e => {{
+  e.waitUntil(caches.keys().then(ks => Promise.all(
+    ks.filter(k => k !== CACHE && k.indexOf('cz-record-') === 0).map(k => caches.delete(k))
+  )).then(() => self.clients.claim()));
+}});
+self.addEventListener('fetch', e => {{
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin || url.pathname.indexOf('/app/') !== 0) return;
+  // cache-first: the edition is immutable within a pressing; the shell and any
+  // meeting you've read stay available offline.
+  e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {{
+    if (res && res.ok && res.type === 'basic') {{
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(req, copy));
+    }}
+    return res;
+  }}).catch(() => hit)));
+}});
+"""
+    (out / "sw.js").write_text(sw, encoding="utf-8")
+
+
+def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None):
     v = manifest["version"]
     (out / "index.html").write_text(page_home(meetings, issues, stats, manifest, base), encoding="utf-8")
     (out / "s" / "index.html").parent.mkdir(parents=True, exist_ok=True)
@@ -525,6 +755,11 @@ def emit_stubs(out, meetings, issues, stats, manifest, base):
     (out / "add" / "index.html").write_text(page_add(manifest, base), encoding="utf-8")
     (out / "covenant" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "covenant" / "index.html").write_text(page_covenant(manifest, base), encoding="utf-8")
+    (out / "watching" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "watching" / "index.html").write_text(page_still(manifest, base), encoding="utf-8")
+    (out / "officials" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "officials" / "index.html").write_text(
+        page_officials(officials or [], manifest, base), encoding="utf-8")
     for m in meetings:
         d = out / "m" / m["pid"]
         d.mkdir(parents=True, exist_ok=True)

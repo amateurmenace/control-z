@@ -123,6 +123,23 @@ class TestBakeEdition(unittest.TestCase):
             rows = c.segments_of(mid)
             c.link_segments("issue:testville:budget-override",
                             [(r["id"], mid, 1.0, "alias") for r in rows[:3]])
+        # a document on vid1, linked to the issue by a keyword its chunk names
+        c.upsert_document({"id": "doc:budget", "meeting_id": "vid1",
+                           "town": "Testville", "kind": "Agenda",
+                           "title": "Agenda", "date": "2026-03-10",
+                           "url": "https://example.org/agenda.pdf", "pages": 2})
+        c.replace_doc_chunks("doc:budget", [
+            {"page": 1, "text": "the budget override public hearing"},
+            {"page": 2, "text": "unrelated permit boilerplate"}])
+        from memory import documents
+        documents.assign_document(c, "doc:budget")
+        # a roll-call vote on vid1, near the issue's first bead (t≈0.97)
+        c.replace_votes("vid1", [{
+            "t": 12.0, "motion": "to approve the budget override",
+            "outcome": "passes", "tally": "3–0", "origin": "extractive",
+            "roll": [{"name": "Chair Alpha", "vote": "yes", "t": 12.0, "quote": "aye"},
+                     {"name": "Member Beta", "vote": "yes", "t": 13.0, "quote": "aye"},
+                     {"name": "Member Gamma", "vote": "no", "t": 14.0, "quote": "no"}]}])
 
     def _read(self, rel):
         return json.loads((self.out / rel).read_text())
@@ -212,6 +229,65 @@ class TestBakeEdition(unittest.TestCase):
             html = stub.read_text()
             self.assertIn("Content-Security-Policy", html, f"{stub} lacks CSP")
             self.assertIn("script-src 'self'", html)
+
+    # -- documents, votes, officials, and the PWA (waves 2/3) --------------
+
+    def test_meeting_carries_votes_and_documents(self):
+        mj = self._read("meetings/vid1.json")
+        self.assertEqual(len(mj["votes"]), 1)
+        self.assertEqual(mj["votes"][0]["tally"], "3–0")
+        self.assertEqual(len(mj["documents"]), 1)
+        self.assertEqual(mj["documents"][0]["kind"], "Agenda")
+        # the roll call and the paper are readable JS-off in the stub
+        stub = (self.out / "m" / "vid1" / "index.html").read_text()
+        self.assertIn("the vote ledger", stub)
+        self.assertIn("the town", stub)   # "the town's paper"
+
+    def test_issue_carries_ledger_and_document_lane(self):
+        ij = json.loads((self.out / "issues" /
+                         "issue_testville_budget-override.json").read_text())
+        self.assertTrue(ij["ledger"], "the issue should carry a roll-call ledger")
+        self.assertEqual(ij["ledger"][0]["tally"], "3–0")
+        # a timeline node interleaves the document
+        withdocs = [n for n in ij["timeline"] if n.get("documents")]
+        self.assertTrue(withdocs, "a document should interleave on the timeline")
+        self.assertEqual(withdocs[0]["documents"][0]["kind"], "Agenda")
+        # the milestone is a real vote (not just a heuristic decision)
+        votes = [m for n in ij["timeline"] for m in n["milestones"]
+                 if m.get("kind") == "vote"]
+        self.assertTrue(votes)
+
+    def test_officials_plane_is_officials_only(self):
+        off = self._read("officials.json")
+        names = {o["name"] for o in off["officials"]}
+        self.assertEqual(names, {"Chair Alpha", "Member Beta", "Member Gamma"})
+        gamma = next(o for o in off["officials"] if o["name"] == "Member Gamma")
+        self.assertEqual(gamma["no"], 1)
+        # every cell is a receipt into the tape
+        self.assertTrue(all("pid" in v for v in gamma["votes"]))
+        # and the page renders JS-off
+        page = (self.out / "officials" / "index.html").read_text()
+        self.assertIn("The people", page)
+
+    def test_stats_count_documents_and_votes(self):
+        s = self._read("stats.json")
+        self.assertEqual(s["counts"]["documents"], 1)
+        self.assertEqual(s["counts"]["votes"], 1)
+
+    def test_pwa_manifest_and_service_worker(self):
+        wm = self._read("manifest.webmanifest")
+        self.assertEqual(wm["scope"], "/app/")
+        self.assertTrue((self.out / "sw.js").exists())
+        sw = (self.out / "sw.js").read_text()
+        self.assertIn("cz-record-", sw)          # cache keyed by corpus hash
+        self.assertNotIn("Date.now", sw)         # deterministic, no wall-clock
+        # the manifest + RSS autodiscovery ride in every page head
+        home = (self.out / "index.html").read_text()
+        self.assertIn('rel="manifest"', home)
+        self.assertIn('type="application/rss+xml"', home)
+
+    def test_still_watching_page_present(self):
+        self.assertTrue((self.out / "watching" / "index.html").exists())
 
 
 class TestIdempotence(unittest.TestCase):

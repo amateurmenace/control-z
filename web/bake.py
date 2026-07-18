@@ -146,15 +146,27 @@ def _decisions(m: dict) -> list:
     return out
 
 
-def _milestones_for(beads: list, decisions: list) -> list:
-    """A decision within ±90s of any bead is a milestone on that node."""
+def _milestones_for(beads: list, decisions: list, votes: list = None) -> list:
+    """A milestone on a timeline node: a roll-call vote — or, where none is near,
+    a heuristic decision — within ±90s of one of the issue's beads. Votes win
+    (who voted, verbatim); a decision only fills a gap no roll call covers. This
+    mirrors suite/tools/memory.py:_timeline exactly — change both together."""
+    votes = votes or []
+    bead_ts = [b["t"] for b in beads]
     out = []
+    for v in votes:
+        if any(abs(v["t"] - bt) <= 90 for bt in bead_ts):
+            out.append({"t": v["t"], "text": (v.get("motion") or "")[:200],
+                        "outcome": v.get("outcome", ""), "tally": v.get("tally", ""),
+                        "roll": v.get("roll") or [], "kind": "vote"})
     for d in decisions:
-        if any(abs(d["t"] - b["t"]) <= 90 for b in beads):
-            out.append(d)
-        if len(out) >= 8:
-            break
-    return out
+        near_bead = any(abs(d["t"] - bt) <= 90 for bt in bead_ts)
+        near_vote = any(abs(d["t"] - v["t"]) <= 90 for v in votes)
+        if near_bead and not near_vote:
+            out.append({"t": d["t"], "text": d["text"], "outcome": d["outcome"],
+                        "kind": "decision"})
+    out.sort(key=lambda m: m["t"])
+    return out[:8]
 
 
 # --------------------------------------------------------------------------
@@ -186,6 +198,13 @@ class Bake:
             langs = [{"code": c, "name": LANG_NAMES.get(c, c)}
                      for c in sorted(tr["tracks"])]
             an = m.get("analysis") or {}
+            mvotes = self.c.votes_of(m["id"])
+            mdocs = [{"doc_id": d["id"], "kind": d.get("kind", ""),
+                      "title": d.get("title", ""), "date": d.get("date", ""),
+                      "url": d.get("url", ""), "pages": d.get("pages", 0),
+                      "n_chunks": d.get("n_chunks", 0)}
+                     for d in self.c.list_documents(meeting_id=m["id"])
+                     if d.get("status") == "live"]
             doc = {
                 "id": m["id"], "pid": p, "title": m.get("title") or m["id"],
                 "body": m.get("body", ""), "town": m.get("town", ""),
@@ -200,6 +219,11 @@ class Bake:
                 "summary_origin": m.get("summary_origin", ""),
                 "thumb": _thumb(m),
                 "tracks": langs, "ad": bool(tr["ad"]),
+                "votes": [{"t": v["t"], "motion": v["motion"],
+                           "outcome": v["outcome"], "tally": v["tally"],
+                           "roll": v["roll"], "origin": v["origin"]}
+                          for v in mvotes],
+                "documents": mdocs,
                 "analysis": {
                     "decisions": (an.get("decisions") or [])[:20],
                     "topics": (an.get("topics") or [])[:16],
@@ -224,6 +248,23 @@ class Bake:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dst)
 
+    def _paper_by_meeting(self, issue_id):
+        """The issue's linked documents grouped by meeting, page-cited — the
+        written record interleaved onto the long view."""
+        out = {}
+        for d in self.c.issue_paper(issue_id):
+            mid = d.get("meeting_id") or ""
+            out.setdefault(mid, []).append({
+                "doc_id": d["doc_id"], "kind": d.get("kind", ""),
+                "title": d.get("title", ""), "date": d.get("date", ""),
+                "url": d.get("url", ""), "pages": d.get("pages", 0),
+                "n": d.get("n", 0),
+                "cites": [{"page": c.get("page", 0),
+                           "text": str(c.get("text", ""))[:200],
+                           "why": c.get("why", "")}
+                          for c in (d.get("cites") or [])[:3]]})
+        return out
+
     # -- issues (the long view) ------------------------------------------
     def bake_issues(self, meetings_by_id):
         issues = self.c.list_issues(status="active", limit=500)
@@ -231,14 +272,19 @@ class Bake:
         for it in issues:
             issue = self.c.get_issue(it["id"])
             nodes = self.c.issue_appearances(it["id"])
+            paper = self._paper_by_meeting(it["id"])
             timeline = []
+            ledger = []
             for n in nodes:
                 m = meetings_by_id.get(n["meeting_id"])
                 decisions = _decisions(m) if m else []
+                votes = self.c.votes_of(n["meeting_id"])
                 beads = [{"t": float(b["t"]), "text": str(b["text"])[:220],
                           "speaker": b.get("speaker") or "",
                           "why": b.get("why") or ""}
                          for b in (n.get("beads") or [])]
+                mis = _milestones_for(beads, decisions, votes)
+                docs = paper.get(n["meeting_id"], [])
                 timeline.append({
                     "meeting_id": n["meeting_id"],
                     "pid": pid(n["meeting_id"]),
@@ -248,8 +294,20 @@ class Bake:
                     "video_id": n.get("video_id", ""),
                     "source_kind": n.get("source_kind", ""),
                     "n": len(beads), "beads": beads,
-                    "milestones": _milestones_for(beads, decisions),
+                    "milestones": mis, "documents": docs,
                 })
+                for mi in mis:
+                    if mi.get("kind") == "vote" and mi.get("roll"):
+                        ledger.append({
+                            "meeting_id": n["meeting_id"],
+                            "pid": pid(n["meeting_id"]),
+                            "date": n.get("date", ""),
+                            "title": n.get("title") or n["meeting_id"],
+                            "video_id": n.get("video_id", ""),
+                            "t": mi["t"], "motion": mi.get("text", ""),
+                            "outcome": mi.get("outcome", ""),
+                            "tally": mi.get("tally", ""), "roll": mi["roll"]})
+            ledger.sort(key=lambda v: (v["date"], v["t"]))
             doc = {
                 "id": issue["id"], "slug": islug(issue["id"]),
                 "name": issue["name"], "name_origin": issue.get("name_origin", ""),
@@ -261,7 +319,7 @@ class Bake:
                 "n_segments": issue.get("n_segments", 0),
                 "first_seen": issue.get("first_seen", ""),
                 "last_seen": issue.get("last_seen", ""),
-                "timeline": timeline,
+                "timeline": timeline, "ledger": ledger,
             }
             _json(self.out / "issues" / f"{islug(issue['id'])}.json", doc)
             self.note(f"issues/{islug(issue['id'])}.json", _gz_of(doc))
@@ -319,6 +377,8 @@ class Bake:
         # corpus.stats() sums every status (error/no_transcript included), so
         # its seconds/segments/towns/bodies would disagree with the meeting
         # count and the coverage strip. issues/threads are corpus-wide by design.
+        n_docs = sum(len(m.get("documents") or []) for m in meetings)
+        n_votes = sum(len(m.get("votes") or []) for m in meetings)
         stats = {
             "counts": {
                 "meetings": n_live,
@@ -328,6 +388,7 @@ class Bake:
                 "towns": len({m["town"] for m in meetings if m["town"]}),
                 "bodies": len({m["body"] for m in meetings if m["body"]}),
                 "languages": len(languages), "described": described,
+                "documents": n_docs, "votes": n_votes,
             },
             "access": {
                 "captioned_pct": 100 if n_live else 0,   # every live meeting has words
@@ -340,6 +401,41 @@ class Bake:
         _json(self.out / "stats.json", stats)
         self.note("stats.json", _gz_of(stats))
         return stats
+
+    # -- officials (accountability, officials-only per specs/14 §8) --------
+    def bake_officials(self, meetings):
+        """Per-member voting records — every official's roll-call history, each
+        cell a receipt (meeting + timestamp). Officials only: the names come
+        only from roll calls, which are by construction the board voting."""
+        from collections import Counter
+
+        from memory import votes as _votes
+        towns = sorted({m["town"] for m in meetings if m["town"]})
+        # aggregate ACROSS the whole record in one pass (town="" is unfiltered),
+        # so a live meeting with no town still contributes its roll calls — a
+        # per-town loop drops the untowned bucket the moment any meeting has a
+        # town. Each official's town is the one their roll calls mostly sit in.
+        officials = []
+        for r in _votes.member_records(self.c, ""):
+            town_counts = Counter(v.get("town", "") for v in r.get("votes", []))
+            town = town_counts.most_common(1)[0][0] if town_counts else ""
+            officials.append({
+                    "name": r["name"], "town": town,
+                    "yes": r["yes"], "no": r["no"], "abstain": r["abstain"],
+                    "total": r["total"],
+                    "votes": [{"pid": pid(v.get("meeting_id") or ""),
+                               "date": v.get("date", ""),
+                               "title": v.get("title", ""),
+                               "motion": (v.get("motion") or "")[:160],
+                               "vote": v.get("vote", ""), "t": v.get("t"),
+                               "outcome": v.get("outcome", ""),
+                               "video_id": v.get("video_id", "")}
+                              for v in r.get("votes", [])]})
+        officials.sort(key=lambda o: (-o["total"], o["name"]))
+        doc = {"officials": officials, "towns": towns}
+        _json(self.out / "officials.json", doc)
+        self.note("officials.json", _gz_of(doc))
+        return officials
 
     # -- urls.json (Add-a-meeting dedup) ---------------------------------
     def bake_urls(self, meetings):
@@ -449,7 +545,9 @@ class Bake:
         h = hashlib.sha256()
         for m in sorted(meetings, key=lambda x: x["id"]):
             h.update(f"{m['id']}|{m['n_segments']}|{m['date']}|"
-                     f"{m.get('summary','')[:40]}".encode())
+                     f"{m.get('summary','')[:40]}|"
+                     f"d{len(m.get('documents') or [])}|"
+                     f"v{len(m.get('votes') or [])}".encode())
         for i in sorted(issues, key=lambda x: x["id"]):
             h.update(f"{i['id']}|{i['n_meetings']}|{i['n_segments']}".encode())
         manifest = {
@@ -498,6 +596,7 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str) -> dict:
     by_id = {m["id"]: m for m in meetings}
     issues = b.bake_issues(by_id)
     stats = b.bake_stats(meetings, issues)
+    officials = b.bake_officials(meetings)
     b.bake_urls(meetings)
     idx = b.bake_search(meetings)
     b.bake_feeds(meetings, issues, stats, site_base)
@@ -505,10 +604,13 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str) -> dict:
 
     # the reader (static assets) + the HTML stubs
     emit.emit_assets(out, version, manifest)
-    emit.emit_stubs(out, meetings, issues, stats, manifest, site_base)
+    emit.emit_stubs(out, meetings, issues, stats, manifest, site_base,
+                    officials=officials)
 
     print(f"  {len(meetings)} meetings · {len(issues)} issues · "
-          f"{idx['segments']} segments indexed ({idx['terms']} terms)")
+          f"{idx['segments']} segments indexed ({idx['terms']} terms) · "
+          f"{stats['counts']['documents']} documents · "
+          f"{stats['counts']['votes']} roll calls · {len(officials)} officials")
     rep = b.report()
     print(f"edition pressed → {out}  (corpus {manifest['corpus_hash']})")
     return {"meetings": len(meetings), "issues": len(issues),
