@@ -392,7 +392,7 @@ const ScribePage = (() => {
   }
 
   /* ---------- open / transcribe / export ---------- */
-  async function open(path) {
+  async function open(path, t) {
     try {
       const r = await api("/api/media/open", { path, tool: "scribe" });
       S.path = r.path;
@@ -421,6 +421,11 @@ const ScribePage = (() => {
       $("#sc-dzhint", el).textContent = st.diarize_available
         ? "sherpa-onnx pipeline, local like everything else"
         : `models missing — ${st.diarize_hint}`;
+      if (t > 0 && r.audio_streams) {
+        // arrived from a time-coded hit (Index) — land on the moment
+        audio.currentTime = t;
+        tick();
+      }
     } catch (e) { toast(e.message, true); }
   }
 
@@ -543,7 +548,7 @@ const ScribePage = (() => {
   function onshow(arg) {
     if (!inited) { init(); inited = true; }
     Viewer.active = null;  // the audio element is the clock here, not JKL
-    if (arg && arg.openPath) open(arg.openPath);
+    if (arg && arg.openPath) open(arg.openPath, arg.t || 0);
     if (viewer) viewer.resize();
   }
 

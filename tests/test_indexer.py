@@ -42,10 +42,10 @@ class TestCatalog(unittest.TestCase):
             {"start": 12.0, "end": 15.0, "text": "the crosswalk vote passes"}]}))
         with self.cat._con() as con:
             con.execute(
-                "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (str(clip), self.td.name, "meeting.mp4", 0, 0.0, 1.0, 30.0,
                  29.97, 1920, 1080, "h264", 1, "the crosswalk vote passes",
-                 0.0, 0))
+                 0.0, 0, '["words"]|words:1'))
             if self.cat.fts:
                 con.execute("INSERT INTO clips_fts VALUES (?,?,?,?)",
                             (str(clip), "meeting.mp4", self.td.name,

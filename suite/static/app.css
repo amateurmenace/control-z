@@ -1246,3 +1246,31 @@ body.tray-open #main .page { padding-bottom: 76px; }
 .viz-moment .vm-text { flex: 1; font-size: 13px; line-height: 1.55; }
 .viz-moment .vm-text .vm-meta { font-size: 11.5px; color: var(--cream-faint);
   font-family: var(--mono); margin-top: 2px; }
+
+/* ---------- index: the footage record (lane/desk) ----------
+   The coverage band counts the library the way Memory's dashboard counts
+   the record — numerals in the display face, amber only for measurement,
+   each gap one click of work. Row chips say what a clip already carries,
+   dotted in the owning tool's accent. */
+.ix-cover { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap;
+  background: var(--ink-2); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 10px 14px; margin-bottom: 10px; }
+.ix-stat { display: flex; flex-direction: column; gap: 0;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--cream-faint);
+  border: 0; background: none; text-align: left; padding: 0 2px; }
+.ix-stat b { font-family: var(--head); font-size: 21px; letter-spacing: -.3px;
+  color: var(--cream); line-height: 1.15; font-weight: 700; }
+button.ix-kind { cursor: pointer; border-left: 1px solid var(--line-soft);
+  padding-left: 12px; border-radius: 0; }
+button.ix-kind:hover:not(:disabled) b { text-decoration: underline; }
+button.ix-kind:disabled { opacity: .45; cursor: default; }
+.ix-gapbtn { margin-left: auto; align-self: center; width: auto;
+  border-color: var(--amber); color: var(--amber); }
+.ix-gapbtn:hover { background: color-mix(in srgb, var(--amber) 8%, transparent); }
+.sc-chip { display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--cream-dim);
+  border: 1px solid var(--line-soft); border-radius: 99px;
+  padding: 1px 7px 1px 5px; margin-left: 5px; vertical-align: 1px; }
+.sc-chip i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
