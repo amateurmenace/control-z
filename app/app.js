@@ -37,6 +37,8 @@
     else if (/\/app\/s$/.test(path)) search();
     else if (/\/app\/add$/.test(path)) addMeeting();
     else if (/\/app\/i\//.test(path)) issue();
+    else if (/\/app\/watching$/.test(path)) stillWatching();
+    registerSW();
   });
 
   /* ================= MEETING ================= */
@@ -322,6 +324,84 @@
     draw(); head.after(btn);
   }
   const follows = () => { try { return JSON.parse(localStorage.getItem("cz-follows") || "[]"); } catch { return []; } };
+  const setFollows = f => localStorage.setItem("cz-follows", JSON.stringify([...new Set(f)]));
+
+  /* ============ STILL WATCHING (§P1.8) ============ */
+  async function stillWatching() {
+    wireFollowIO();
+    const box = $("#stilllist"); if (!box) return;
+    const slugs = follows();
+    if (!slugs.length) {
+      box.innerHTML = `<p class="hint">You're not following any issues yet.
+        Open <a href="${BASE}/">the record</a>, walk into an issue, and tap
+        ☆ follow — the resurfacings will gather here.</p>`; return;
+    }
+    box.innerHTML = '<p class="hint">gathering your threads…</p>';
+    const issues = (await Promise.all(slugs.map(s =>
+      getJSON(`${BASE}/issues/${s}.json`)))).filter(Boolean);
+    if (!issues.length) { box.innerHTML = '<p class="hint">your followed issues aren\'t in this pressing.</p>'; return; }
+    // newest appearance first
+    issues.sort((a, b) => (b.last_seen || "").localeCompare(a.last_seen || ""));
+    box.innerHTML = issues.map(i => {
+      const last = i.timeline[i.timeline.length - 1] || {};
+      const beads = (last.beads || []).slice(0, 3).map(b =>
+        `<a class="bead" href="${BASE}/m/${last.pid}#t${Math.floor(b.t)}">
+          <span class="ts">${hms(b.t)}</span> ${esc((b.text||"").slice(0,90))}</a>`).join("");
+      return `<section class="card watchcard">
+        <div class="thead"><a class="ttitle" href="${BASE}/i/${i.slug}">${esc(i.name)}</a>
+          <span class="lmeta">${i.n_meetings} meetings · last ${esc(i.last_seen||"—")}</span></div>
+        <div class="wlast"><span class="tag">latest — ${esc(last.date||"undated")} · ${esc(last.body||last.title||"")}</span>
+          <div class="beads">${beads || '<p class="hint">no beads</p>'}</div></div>
+        <p class="feedlink"><a href="${BASE}/feeds/${i.slug}.xml">☉ follow by RSS</a>
+          · <a href="${BASE}/i/${i.slug}">the long view →</a></p>
+      </section>`;
+    }).join("");
+  }
+  function wireFollowIO() {
+    const ex = $("#follow-export");
+    if (ex) ex.onclick = () => {
+      const blob = new Blob([JSON.stringify(follows(), null, 2)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = "cz-follows.json"; a.click(); URL.revokeObjectURL(a.href);
+      toast("follows exported");
+    };
+    const im = $("#follow-import");
+    if (im) im.onchange = () => {
+      const f = im.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const arr = JSON.parse(r.result);
+          if (!Array.isArray(arr)) throw 0;
+          setFollows([...follows(), ...arr.map(String)]);
+          toast("follows imported"); stillWatching();
+        } catch { toast("that file didn't read as a follows list"); }
+      };
+      r.readAsText(f);
+    };
+  }
+
+  /* ============ service worker + update banner (§P1.10) ============ */
+  function registerSW() {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register(`${BASE}/sw.js`).then(reg => {
+      // a fresh pressing installs a new worker while the old one still controls
+      reg.addEventListener("updatefound", () => {
+        const w = reg.installing; if (!w) return;
+        w.addEventListener("statechange", () => {
+          if (w.state === "installed" && navigator.serviceWorker.controller)
+            updateBanner();
+        });
+      });
+    }).catch(() => {});
+  }
+  function updateBanner() {
+    if ($("#czupdate")) return;
+    const b = document.createElement("div"); b.id = "czupdate"; b.className = "updatebar";
+    b.innerHTML = 'the record refreshed — <button type="button">reload for the new pressing</button>';
+    b.querySelector("button").onclick = () => location.reload();
+    document.body.appendChild(b);
+  }
 
   /* ---- toast ---- */
   let toEl;
