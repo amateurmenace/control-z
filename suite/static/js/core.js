@@ -198,6 +198,60 @@ function go(name, arg) {
   if (page.onshow) page.onshow(arg);
 }
 
+/* ---------- one gesture, one road (nested-scroller taming) ----------
+   A long inner box (a 7-hour transcript is 280k px of scroll) parked deep
+   by follow-along used to eat every upward wheel that crossed it — the page
+   "couldn't scroll back to the top". Now an inner scroller owns the wheel
+   only after you step into it (any click/press inside); until then the
+   gesture stays with the page's own scroller. Leaving the box hands the
+   wheel back. Fixed overlays (modals, palette) keep native scrolling. */
+(() => {
+  let engaged = null, engagedId = "";
+  const isEngaged = el =>
+    el === engaged || (engagedId && el.id === engagedId);
+  const innerScrollables = (t, stopAtPage) => {
+    const out = [];
+    for (let el = t; el; el = el.parentElement) {
+      const isPage = el.classList && el.classList.contains("page");
+      if (el.nodeType === 1 && el.scrollHeight > el.clientHeight + 4) {
+        const oy = getComputedStyle(el).overflowY;
+        if (oy === "auto" || oy === "scroll") out.push(el);
+      }
+      if (isPage && stopAtPage) break;
+    }
+    return out;
+  };
+  document.addEventListener("pointerdown", e => {
+    const chain = innerScrollables(e.target, true);
+    const page = e.target.closest && e.target.closest(".page");
+    const next = chain.find(el => page && page.contains(el) && el !== page);
+    if (next) {
+      // a row click may re-render the box in place; remember its id so the
+      // fresh node with the same name keeps the engagement
+      engaged = next; engagedId = next.id || "";
+      next.addEventListener("mouseleave", () => {
+        engaged = null; engagedId = "";
+      }, { once: true });
+    }
+  }, true);
+  document.addEventListener("wheel", e => {
+    if (!e.deltaY) return;
+    const page = e.target.closest && e.target.closest(".page.active");
+    if (!page) return;
+    // anything fixed between here and the page is an overlay — native rules
+    for (let el = e.target; el && el !== page; el = el.parentElement) {
+      if (el.nodeType === 1 && getComputedStyle(el).position === "fixed") return;
+    }
+    const chain = innerScrollables(e.target, false)
+      .filter(el => page.contains(el) || el === page);
+    if (chain.length < 2) return;              // only the page scrolls: native
+    const inner = chain[0], road = chain[chain.length - 1];
+    if (inner === road || isEngaged(inner)) return;
+    e.preventDefault();
+    road.scrollTop += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+  }, { passive: false, capture: true });
+})();
+
 /* ---------- Send to the Record (Community Memory) ----------
    The suite's hub gesture (specs/12 §2): Highlighter and Publisher both
    offer it. Until Memory lands (lane B, specs/PARALLEL.md), the button

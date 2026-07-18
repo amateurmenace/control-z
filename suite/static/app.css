@@ -138,6 +138,9 @@ button:disabled { opacity: .4; cursor: default; }
 /* ---------- pages ---------- */
 #main { overflow: hidden; position: relative; }
 .page { display: none; height: 100%; overflow: auto; }
+/* canvases and healing thumbnails re-measure while you scroll; without this
+   Chrome's scroll anchoring pins the view mid-page and up feels stuck */
+.page, .page * { overflow-anchor: none; }
 .page.active { display: block; }
 .page-pad { padding: 26px 30px; max-width: 1200px; }
 
