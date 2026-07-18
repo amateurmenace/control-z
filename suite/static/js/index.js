@@ -42,6 +42,8 @@ const IndexPage = (() => {
           <div class="hint" id="ix-selmeta">nothing ticked yet</div>
           <button class="btn primary" id="ix-fcpxml" disabled>Export FCPXML stringout</button>
           <button class="btn" id="ix-csv" disabled>Export CSV</button>
+          <button class="btn" id="ix-selwords" disabled
+            title="Scribe's engine over the ticked clips that still lack a transcript — one queue job">✎ Words for ticked</button>
           <div class="hint" style="margin-top:6px">the stringout imports into Resolve as a
             timeline of your selects — File → Import → Timeline</div>
         </div>
@@ -106,18 +108,20 @@ const IndexPage = (() => {
     </div>`;
   }
 
-  async function batchWords() {
-    const n = (S.stats || {}).wordless || 0;
+  async function batchWords(paths) {
+    const n = paths ? paths.length : (S.stats || {}).wordless || 0;
     const hrs = ((S.stats || {}).seconds || 0) / 3600;
     // one click is one road, but 700 clips is a day of the machine's time —
     // say the scale out loud before the queue takes it
-    if (!confirm(`transcribe ${n} clip${n > 1 ? "s" : ""}? Scribe's engine, ` +
+    if (!paths &&
+        !confirm(`transcribe ${n} clip${n > 1 ? "s" : ""}? Scribe's engine, ` +
                  `one queue job, cancellable — but a big library ` +
                  `(yours is ${hrs.toFixed(1)}h) can take a long while.`)) return;
     const btn = $("#ix-batchwords", el);
     if (btn) btn.disabled = true;
     try {
-      const job = await api("/api/index/transcribe-missing", {});
+      const job = await api("/api/index/transcribe-missing",
+                            paths ? { paths } : {});
       const p = czProgress($("#ix-scanhost", el), {
         label: "the batch line — words", acc: "var(--index)" });
       watchJob(job.id, j => p.update(j));
@@ -144,6 +148,7 @@ const IndexPage = (() => {
       : "nothing ticked yet";
     $("#ix-fcpxml", el).disabled = !S.picked.size;
     $("#ix-csv", el).disabled = !S.picked.size;
+    $("#ix-selwords", el).disabled = !S.picked.size;
   }
 
   function rowHTML(row) {
@@ -310,6 +315,7 @@ const IndexPage = (() => {
     $("#ix-scan", el).onclick = scan;
     $("#ix-fcpxml", el).onclick = () => exportSel("fcpxml");
     $("#ix-csv", el).onclick = () => exportSel("csv");
+    $("#ix-selwords", el).onclick = () => batchWords([...S.picked]);
   }
 
   function onshow() {
