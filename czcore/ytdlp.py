@@ -249,16 +249,34 @@ def fetch_captions(url: str, outdir: Path) -> dict:
             "info": str(info) if info.exists() else None, "id": vid}
 
 
-def search(query: str, n: int = 12) -> list:
-    """YouTube search through yt-dlp itself — no API key, flat and fast."""
-    rows = _run_json(["-J", "--flat-playlist", *_proxy_args(),
-                     f"ytsearch{max(1, min(30, n))}:{query}"], timeout=45)
+def search(query: str, n: int = 12, newest: bool = False) -> list:
+    """YouTube search through yt-dlp itself — no API key, flat and fast.
+
+    newest=True asks YouTube's own date-sorted results page (sp=CAI=) —
+    the civic finder's default, where "brookline" should mean the town's
+    LATEST meetings, not a smattering of its year. (The ytsearchdate
+    prefix died in the 2026.07 nightlies; the results URL is the door
+    that stays open. YouTube's date sort is bucketed, not strict — the
+    newest leads, neighbors may swap.)"""
+    n = max(1, min(30, n))
+    if newest:
+        from urllib.parse import quote_plus
+        target = ("https://www.youtube.com/results?search_query="
+                  + quote_plus(query) + "&sp=CAI%3D")
+        args = ["-J", "--flat-playlist", "--playlist-end", str(n),
+                "--extractor-args", "youtubetab:approximate_date",
+                *_proxy_args(), target]
+    else:
+        args = ["-J", "--flat-playlist", *_proxy_args(),
+                f"ytsearch{n}:{query}"]
+    rows = _run_json(args, timeout=45)
     entries = (rows[0].get("entries") or []) if rows else []
     return [{"id": e.get("id"), "title": e.get("title"),
              "duration": e.get("duration"),
              "uploader": e.get("uploader") or e.get("channel"),
              "url": e.get("url") or f"https://www.youtube.com/watch?v={e.get('id')}",
-             "views": e.get("view_count")} for e in entries if e.get("id")]
+             "views": e.get("view_count"),
+             "date": e.get("upload_date")} for e in entries if e.get("id")]
 
 
 _PROG = re.compile(r"\[download\]\s+(\d+(?:\.\d+)?)%")

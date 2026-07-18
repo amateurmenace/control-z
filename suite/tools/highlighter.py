@@ -340,9 +340,20 @@ def register_highlighter(app, jobs, frames):
             return JSONResponse({"error": "type what you're looking for"},
                                 status_code=422)
         try:
-            rows = ytdlp.search(q + " meeting", n=int(body.get("n", 10)))
+            # the date-sorted index: a town's name should surface its
+            # LATEST meetings, newest first — not relevance's greatest hits
+            rows = ytdlp.search(q + " meeting", n=int(body.get("n", 12)),
+                                newest=True)
         except RuntimeError as e:
             return JSONResponse({"error": str(e)}, status_code=502)
+        # civic-looking rows keep the top; the sort is stable, so newest-
+        # first survives inside each class — vlogs sink, boards rise
+        civic = ("meeting", "council", "board", "committee", "select",
+                 "school", "town", "city", "hearing", "commission",
+                 "planning", "zoning", "municipal")
+        rows.sort(key=lambda r: not any(
+            w in f"{r.get('title') or ''} {r.get('uploader') or ''}".lower()
+            for w in civic))
         return {"q": q, "rows": rows}
 
     # -- downloads: the whole thing, or only the kept sections --------------

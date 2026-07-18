@@ -124,6 +124,23 @@
   meetings: "override" traced ×49 across 3 of 6 — surging in the March
   10 Select Board (×45, 0.85/1k words), echoing in the June School
   Committee.
+- **The civic finder means "latest" now.** Searching a municipality used
+  to ride YouTube's relevance index — a smattering of the town's year.
+  It now asks YouTube's own date-sorted results page ("brookline" leads
+  with the newest School Committee and Select Board meetings), with
+  civic-looking rows stably on top so vlogs sink and boards rise. (The
+  `ytsearchdate` prefix died in the 2026.07 yt-dlp nightlies; the
+  results URL with sp=CAI= is the door that stays open. YouTube's date
+  sort is bucketed — the newest leads, neighbors may swap.)
+- **Stencil stopped asking Metal for a 62 GB buffer.** SAM 2 preloads
+  every frame of a state at its own 1024² working size (~12.6 MB a
+  frame), so a static-camera meeting — one shot, thousands of frames —
+  was one giant refused allocation ("invalid buffer size: 62 GB",
+  measured). Long shots now propagate in 240-frame windows (~3 GB
+  each), chained by every object's last mask; short shots are untouched.
+  Verified on a 576-frame three-window run: seams continuous, masks
+  faithful to what the click selected, and the device cache released
+  between windows.
 - **And the Montage Maker** — a reel cut ACROSS meetings. Every ➕ on a
   traced moment or a framing cell's list lands in the montage tray;
   Render stages the work honestly: local meetings cut in place, URL

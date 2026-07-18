@@ -7,6 +7,7 @@ model's IoU prediction), upscaled to source res with an edge-aware filter.
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -18,6 +19,13 @@ from czcore import models
 CHECKPOINT = "sam2.1_hiera_small.pt"
 CONFIG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 ANALYSIS_HEIGHT = 720
+
+# SAM2 preloads EVERY frame of a state at its own 1024² working size —
+# ~12.6 MB a frame — so a static-camera meeting (one shot, thousands of
+# frames) asks Metal for a buffer it refuses ("invalid buffer size:
+# 62 GB", measured). Long shots therefore propagate in windows this many
+# frames wide (~3 GB each), chained by every object's last mask.
+WINDOW_FRAMES = 240
 
 # one cached image predictor for click-preview — the model loads once and
 # every later click answers in well under a second
@@ -140,31 +148,82 @@ class StencilEngine:
 
     def run_shot(self, frames_dir: Path, prompts: List[Prompt],
                  progress=None) -> ShotMattes:
+        frames = sorted(frames_dir.glob("*.jpg"))
+        n_frames = len(frames)
+        grouped = sorted(group_prompts(list(prompts)).items())
+        out = ShotMattes(0, n_frames)
+        if not grouped or not n_frames:
+            return out
+        if n_frames <= WINDOW_FRAMES:
+            self._run_window(frames, 0, grouped, {}, out, progress, n_frames)
+            return out
+        # the long-shot path: windows chained by their last masks, tracking
+        # forward from the first click's window (backward reach lives inside
+        # that window — the alternative was Metal refusing the buffer)
+        first = min(f for (f, _), _ in grouped)
+        pos = (first // WINDOW_FRAMES) * WINDOW_FRAMES
+        seeds: Dict[int, object] = {}
+        while pos < n_frames:
+            end = min(pos + WINDOW_FRAMES, n_frames)
+            local = [((f - pos, o), pts) for (f, o), pts in grouped
+                     if pos <= f < end]
+            seeds = self._run_window(frames[pos:end], pos, local, seeds,
+                                     out, progress, n_frames)
+            pos = end
+        return out
+
+    def _run_window(self, frame_files: List[Path], offset: int,
+                    local_prompts, seed_masks: Dict[int, object],
+                    out: ShotMattes, progress, n_total: int):
+        """One SAM2 state over one slice of the shot. Objects with no local
+        click are seeded at the slice's first frame with their last mask
+        from the previous window. Returns each object's final-frame mask."""
         import numpy as np
         import torch
 
-        n_frames = len(list(frames_dir.glob("*.jpg")))
-        state = self.predictor.init_state(video_path=str(frames_dir))
-        scale = np.array([[state["video_width"], state["video_height"]]],
-                         dtype=np.float32)
-        for (frame_idx, obj_id), pts in sorted(group_prompts(list(prompts)).items()):
-            self.predictor.add_new_points_or_box(
-                state, frame_idx=frame_idx, obj_id=obj_id,
-                points=np.array([[p.xy[0], p.xy[1]] for p in pts],
-                                dtype=np.float32) * scale,
-                labels=np.array([p.label for p in pts], dtype=np.int32),
-            )
-        out = ShotMattes(0, n_frames)
-        with torch.inference_mode():
-            for fidx, obj_ids, logits in self.predictor.propagate_in_video(state):
-                for oi, obj in enumerate(obj_ids):
-                    prob = torch.sigmoid(logits[oi]).squeeze()
-                    mask = (prob > 0.5).cpu().numpy()
-                    # confidence = how certain the model is INSIDE its own matte
-                    conf = float(prob[prob > 0.5].mean()) if mask.any() else 0.0
-                    out.masks.setdefault(obj, [None] * n_frames)[fidx] = \
-                        (mask * 255).astype("uint8")
-                    out.confidence.setdefault(obj, [0.0] * n_frames)[fidx] = conf
-                if progress and fidx % 25 == 0:
-                    progress(f"propagating {fidx}/{n_frames}")
-        return out
+        n_local = len(frame_files)
+        with tempfile.TemporaryDirectory(prefix="stencil-win-") as td:
+            # SAM2's loader reads a directory — hand it just this slice
+            for k, f in enumerate(frame_files):
+                os.symlink(f, Path(td) / f"{k:05d}.jpg")
+            state = self.predictor.init_state(video_path=td)
+            scale = np.array([[state["video_width"], state["video_height"]]],
+                             dtype=np.float32)
+            for (frame_idx, obj_id), pts in local_prompts:
+                self.predictor.add_new_points_or_box(
+                    state, frame_idx=frame_idx, obj_id=obj_id,
+                    points=np.array([[p.xy[0], p.xy[1]] for p in pts],
+                                    dtype=np.float32) * scale,
+                    labels=np.array([p.label for p in pts], dtype=np.int32),
+                )
+            prompted_here = {o for (_, o), _ in local_prompts}
+            for obj, mask in (seed_masks or {}).items():
+                if obj not in prompted_here:
+                    self.predictor.add_new_mask(state, frame_idx=0,
+                                                obj_id=obj, mask=mask)
+            last: Dict[int, object] = {}
+            with torch.inference_mode():
+                for fidx, obj_ids, logits in \
+                        self.predictor.propagate_in_video(state):
+                    for oi, obj in enumerate(obj_ids):
+                        prob = torch.sigmoid(logits[oi]).squeeze()
+                        mask = (prob > 0.5).cpu().numpy()
+                        # confidence = how certain the model is INSIDE its
+                        # own matte
+                        conf = (float(prob[prob > 0.5].mean())
+                                if mask.any() else 0.0)
+                        g = offset + fidx
+                        out.masks.setdefault(obj, [None] * n_total)[g] = \
+                            (mask * 255).astype("uint8")
+                        out.confidence.setdefault(obj, [0.0] * n_total)[g] = conf
+                        if fidx == n_local - 1:
+                            last[obj] = mask
+                    if progress and fidx % 25 == 0:
+                        progress(f"propagating {offset + fidx}/{n_total}")
+            self.predictor.reset_state(state)
+            del state
+            if self.device == "mps":
+                torch.mps.empty_cache()
+            elif self.device == "cuda":
+                torch.cuda.empty_cache()
+            return last

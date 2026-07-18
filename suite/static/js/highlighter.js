@@ -423,13 +423,16 @@ const HighlighterPage = (() => {
     try {
       const r = await api("/api/highlighter/finder", { q });
       clearInterval(tick2);
+      const fmtDay = d => d && /^\d{8}$/.test(d)
+        ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}` : "";
       box.innerHTML = r.rows.map(v => `
         <div class="hl-result" style="display:flex;gap:8px;align-items:baseline">
           <span style="flex:1">${esc(v.title || v.id)}
             <span style="color:var(--cream-faint);font-size:11px"> · ${esc(v.uploader || "")}
+            ${fmtDay(v.date) ? " · " + fmtDay(v.date) : ""}
             ${v.duration ? " · " + fmtTime(v.duration) : ""}</span></span>
           <button class="btn cta" style="padding:3px 12px;font-size:11.5px" data-url="${esc(v.url)}">Load</button>
-        </div>`).join("") || `<div class="hint">nothing found</div>`;
+        </div>`).join("") || `<div class="hint">nothing found — newest-first needs the town's own words (try the channel name)</div>`;
       $$("button[data-url]", box).forEach(b => b.onclick = () => ingest(b.dataset.url));
     } catch (e) {
       clearInterval(tick2);
