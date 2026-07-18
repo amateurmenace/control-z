@@ -40,9 +40,19 @@ const HighlighterPage = (() => {
           <h1 style="margin-top:6px">Turn long public meetings into
             <span class="mark">useful moments</span> in minutes.</h1>
           <p style="color:var(--cream-dim);margin-top:6px;font-size:13.5px">
-            Every resident deserves to know what was decided and why. Paste a link —
-            the meeting becomes readable before a single frame downloads.</p>
-          <div class="hl-urlrow">
+            Every resident deserves to know what was decided and why. Find the
+            meeting — or paste its link — and it becomes readable before a
+            single frame downloads.</p>
+          <div style="margin-top:14px">
+            <span class="tag">civic meeting finder</span>
+            <div class="hl-searchrow">
+              <input type="text" id="hl-findq" placeholder="town + board — “brookline select board”, “cambridge school committee”…" spellcheck="false">
+              <button class="btn cta" id="hl-findgo" style="padding:8px 16px">Search</button>
+            </div>
+            <div id="hl-findout" class="hl-results"></div>
+          </div>
+          <div class="tag" style="margin-top:12px">or the link, straight in</div>
+          <div class="hl-urlrow" style="margin-top:6px">
             <input type="text" id="hl-url" placeholder="Paste a YouTube / meeting URL here" spellcheck="false">
             <button class="btn cta" id="hl-load">Load Meeting</button>
           </div>
@@ -66,15 +76,6 @@ const HighlighterPage = (() => {
           <div class="hl-card"><h2><span class="nub" style="background:var(--grabber)"></span>Analyze &amp; Discover</h2>
             <p>Decisions with outcomes, who spoke, question flow, topics, money.
               Everything clickable, everything sourced to its moment.</p></div>
-        </div>
-
-        <div class="hl-panel" style="margin-top:18px">
-          <span class="tag">civic meeting finder</span>
-          <div class="hl-searchrow">
-            <input type="text" id="hl-findq" placeholder="town + board — “brookline select board”, “cambridge school committee”…" spellcheck="false">
-            <button class="btn cta" id="hl-findgo" style="padding:8px 16px">Search</button>
-          </div>
-          <div id="hl-findout" class="hl-results"></div>
         </div>
 
         <div class="hl-panel" style="margin-top:14px">
@@ -109,7 +110,9 @@ const HighlighterPage = (() => {
             </select>
             <button class="btn" id="hl-trsum" style="width:auto"
               title="translate this summary — your key; lands as a .txt too">Translate summary</button>
+            <span id="hl-recordslot"></span>
           </div>
+          <div class="hl-prior" id="hl-priorline"></div>
           <div id="hl-reportout" style="display:none;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px"></div>
         </div>
       </div>
@@ -118,6 +121,8 @@ const HighlighterPage = (() => {
         <button class="hl-pill on" data-sec="highlight">Meeting Highlighter</button>
         <button class="hl-pill" data-sec="edit">Highlight Video Editor</button>
         <button class="hl-pill" data-sec="analyze">Meeting Analyzer</button>
+        <button class="hl-pill" id="hl-topub" style="border-color:var(--publisher);color:var(--publisher)"
+          title="hand this meeting to Community Publisher — clips in three frames, copy, bundle">→ Publish kit</button>
         <span class="hl-meta-line" id="hl-metaline"></span>
       </div>
 
@@ -444,10 +449,13 @@ const HighlighterPage = (() => {
     const box = $("#hl-library", el);
     try {
       const r = await api("/api/highlighter/library");
+      const act = src => `<span class="lib-act" data-pub="${esc(src)}"
+        title="straight to Community Publisher — the kit builds from this meeting's read">publish</span>`;
       const meet = (r.meetings || []).map(m => `
         <button class="lib-row" data-src="${esc(m.source)}">
           <span class="lname">▸ ${esc(m.title)}</span>
           <span class="lmeta">${m.duration ? fmtTime(m.duration) : ""} ${m.transcript ? "· read" : ""} · URL session</span>
+          ${m.transcript ? act(m.source) : ""}
         </button>`).join("");
       const vids = (r.videos || []).map(v => `
         <button class="lib-row" data-src="${esc(v.path)}">
@@ -455,10 +463,15 @@ const HighlighterPage = (() => {
           <span class="lmeta">${v.duration ? fmtTime(v.duration) : ""}
             ${v.transcript ? "· words" : v.captions ? "· captions" : ""}
             ${v.highlights ? "· ★" : ""} · local file</span>
+          ${(v.transcript || v.highlights) ? act(v.path) : ""}
         </button>`).join("");
       box.innerHTML = (meet + vids) ||
         `<div class="hint">nothing yet — load a URL above, and it lands here readable</div>`;
       $$(".lib-row", box).forEach(b => b.onclick = () => open(b.dataset.src));
+      $$(".lib-act", box).forEach(a => a.onclick = e => {
+        e.stopPropagation();
+        go("publisher", { openPath: a.dataset.pub });
+      });
     } catch (e) { box.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
   }
 
@@ -767,6 +780,38 @@ const HighlighterPage = (() => {
       ? `Download full video (${fmtTime(S.meta.duration)})` : "Download full video";
   }
 
+  /* ---------------- the record (Community Memory, when it lands) -------- */
+  function renderPrior() {
+    const box = $("#hl-priorline", el);
+    if (!box) return;
+    const m = toolById("memory");
+    $("#hl-recordslot", el).innerHTML = recordBtnHTML("hl-record");
+    $("#hl-record", el).onclick = ev => sendToRecord(
+      S.meta && S.meta.webpage_url ? { url: S.meta.webpage_url }
+        : { path: S.source }, ev.currentTarget);
+    if (!m.ready) {
+      box.innerHTML = `<span class="hint">⬛ when Memory joins (${m.when}),
+        every meeting opens with its history — tonight's topics, traced
+        across the whole record</span>`;
+      return;
+    }
+    box.innerHTML = `<span class="hint">asking the record…</span>`;
+    const texts = [S.meta && S.meta.title,
+      ...((S.insight && S.insight.topics) || []).slice(0, 5)
+        .map(t => (t && (t.name || t.label)) || t)]
+      .filter(x => typeof x === "string" && x);
+    api("/api/memory/context", { texts }).then(r => {
+      const prior = r.prior || [];
+      box.innerHTML = prior.length
+        ? `<b>${prior.length} prior appearance${prior.length > 1 ? "s" : ""}</b>
+           in the record · ` + prior.slice(0, 3).map(p =>
+            `<span class="tpill">${esc(String(p.text || "").slice(0, 56))}</span>`).join(" ")
+        : `first appearance of these topics in the record`;
+    }).catch(e => {
+      box.innerHTML = `<span class="hint">the record didn't answer — ${esc(e.message)}</span>`;
+    });
+  }
+
   /* ---------------- insight (brief, cloud, analyze) ---------------- */
   async function loadInsight() {
     $("#hl-brief", el).innerHTML = `<div class="hint">reading…</div>`;
@@ -780,6 +825,7 @@ const HighlighterPage = (() => {
       renderSuggestions([]);
       return;
     }
+    renderPrior();
     const b = S.insight.brief || [];
     $("#hl-brief", el).innerHTML = b.length
       ? b.map(x => `<p><span class="tpill" data-t="${x.t}">${fmtTime(x.t)}</span>${esc(x.text)}</p>`).join("")
@@ -1947,7 +1993,8 @@ const HighlighterPage = (() => {
   /* ---------------- sections nav ---------------- */
   function showSec(name) {
     // all three sections live on one page now — the pills are anchors
-    $$("#hl-pills .hl-pill", el).forEach(p =>
+    // ([data-sec] only: the → Publish kit pill is a door, not an anchor)
+    $$("#hl-pills .hl-pill[data-sec]", el).forEach(p =>
       p.classList.toggle("on", p.dataset.sec === name));
     if (name === "highlight") {
       $("#hl-loaded", el).scrollTo({ top: 0, behavior: "smooth" });
@@ -1972,6 +2019,9 @@ const HighlighterPage = (() => {
       else toast("paste a URL first", true);
     };
     $("#hl-url", el).addEventListener("keydown", e => { if (e.key === "Enter") $("#hl-load", el).click(); });
+    $("#hl-topub", el).onclick = () => {
+      if (S.source) go("publisher", { openPath: S.source });
+    };
     $("#hl-browse", el).onclick = e => { e.stopPropagation(); browseForPath(p => open(p)); };
     wireDropZone($("#hl-drop", el), p => open(p));
     wireDropZone($("#hl-landing", el), p => open(p));
@@ -1986,7 +2036,7 @@ const HighlighterPage = (() => {
     audio.addEventListener("play", () => { $("#hl-play", el).textContent = "⏸"; raf = requestAnimationFrame(tick); });
     audio.addEventListener("pause", () => { $("#hl-play", el).textContent = "▶"; if (raf) cancelAnimationFrame(raf); tick(); });
 
-    $$("#hl-pills .hl-pill", el).forEach(p => p.onclick = () => showSec(p.dataset.sec));
+    $$("#hl-pills .hl-pill[data-sec]", el).forEach(p => p.onclick = () => showSec(p.dataset.sec));
 
     const styleRow = $("#hl-stylerow", el);
     styleRow.innerHTML = REEL_STYLES.map(([id, label, kw], i) =>

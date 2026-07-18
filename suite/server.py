@@ -44,7 +44,7 @@ def create_suite_app():
         yield
         loop_box.clear()
 
-    app = FastAPI(title="control-z Suite", docs_url=None, redoc_url=None,
+    app = FastAPI(title="Community AI Project", docs_url=None, redoc_url=None,
                   lifespan=lifespan)
     jobs = JobManager(db_path=str(app_support() / "jobs.db"), queued=True)
     frames = FrameService()
@@ -273,11 +273,19 @@ def create_suite_app():
 
     @app.get("/")
     def index():
-        # {{v}} → app version on every static include: a new build busts the
-        # browser's cache by URL, so stale JS can't outlive a release (the
-        # "⌘R after relaunch" bug, retired). The HTML itself must revalidate.
+        # {{v}} → version + newest static mtime on every include: a new
+        # build OR an edited file busts the browser's cache by URL, so
+        # stale JS can't outlive a release or a dev edit (the "⌘R after
+        # relaunch" bug, retired twice). The HTML itself must revalidate.
         from fastapi.responses import HTMLResponse
-        html = (STATIC / "index.html").read_text().replace("{{v}}", __version__)
+        token = __version__
+        try:
+            mt = max(p.stat().st_mtime_ns for p in STATIC.rglob("*")
+                     if p.is_file())
+            token = f"{__version__}.{mt // 1_000_000_000 % 100000}"
+        except (OSError, ValueError):
+            pass
+        html = (STATIC / "index.html").read_text().replace("{{v}}", token)
         return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -297,11 +305,11 @@ def run(app, port: int = 8300, open_window: bool = True, host: str = "127.0.0.1"
                 uvicorn.run(app, host=host, port=port, log_level="warning")
 
             threading.Thread(target=serve, daemon=True).start()
-            webview.create_window("control-z Suite", f"http://{host}:{port}",
+            webview.create_window("Community AI Project", f"http://{host}:{port}",
                                   width=1480, height=940, min_size=(1100, 700))
             webview.start()
             return
         except ImportError:
             pass
-    print(f"control-z Suite — open http://{host}:{port} (Ctrl-C to quit)")
+    print(f"Community AI Project — open http://{host}:{port} (Ctrl-C to quit)")
     uvicorn.run(app, host=host, port=port, log_level="warning")

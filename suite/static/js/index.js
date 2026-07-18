@@ -19,8 +19,9 @@ const IndexPage = (() => {
     <div class="ws-body">
       <div class="ws-center" style="overflow-y:auto;padding:14px 20px" id="ix-results">
         <div class="empty-grain" style="padding:36px 8px;color:var(--cream-faint);text-align:center">
-          add your footage folders on the right, scan once, then just ask —
-          words come from filenames, folders, and Scribe transcripts</div>
+          add your footage folders on the right and scan once —
+          the whole catalog appears here, newest first, and plain words
+          narrow it (filenames, folders, Scribe transcripts)</div>
       </div>
       <div class="inspector" id="ix-insp">
         <div class="insp-head"><h2>Index</h2></div>
@@ -33,8 +34,7 @@ const IndexPage = (() => {
           </div>
           <button class="btn" id="ix-add">Add folder</button>
           <button class="btn primary" id="ix-scan" style="margin-top:8px">Rescan library</button>
-          <div class="prog"><i id="ix-scanbar"></i></div>
-          <div class="progmsg" id="ix-scanmsg"></div>
+          <div id="ix-scanhost"></div>
         </div>
 
         <div class="insp-sec">
@@ -51,7 +51,7 @@ const IndexPage = (() => {
     </div>
   </div>`;
 
-  const S = { rows: [], picked: new Set() };
+  const S = { rows: [], picked: new Set(), filter: "all", hasClips: false };
 
   async function loadStatus() {
     try {
@@ -84,11 +84,95 @@ const IndexPage = (() => {
     $("#ix-csv", el).disabled = !S.picked.size;
   }
 
+  function rowHTML(row) {
+    const picked = S.picked.has(row.path);
+    const res = row.width ? `${row.width}×${row.height}` : (row.codec || "");
+    return `<div class="ix-row${row.missing ? " missing" : ""}" data-path="${esc(row.path)}">
+      <input type="checkbox" class="ix-tick" data-path="${esc(row.path)}" ${picked ? "checked" : ""}>
+      <img class="ix-thumb" loading="lazy" src="${row.missing ? "" : frameURL(row.path, 24, 90)}"
+        onerror="this.style.visibility='hidden'">
+      <div class="ix-body">
+        <div class="ix-name">${esc(row.name)}
+          ${row.missing ? `<span class="badge warn">missing — drive unplugged?</span>` : ""}
+          ${row.sidecar_mtime ? `<span class="badge">words</span>` : ""}</div>
+        <div class="ix-meta">${fmtTime(row.duration)} · ${res}${row.fps ? " @ " + (+row.fps).toFixed(2) : ""} ·
+          ${esc(row.folder.split("/").pop())}
+          ${row.missing ? "" : `<button class="ix-hit" data-hl="${esc(row.path)}"
+            title="open this clip in Community Highlighter — find the moments">→ Highlighter</button>`}</div>
+        ${(row.matches || []).map(m => `<button class="ix-hit" data-path="${esc(row.path)}" data-t="${m.t}"
+            title="open in Scribe at this moment">${fmtTime(m.t)} “${esc(m.text)}”</button>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  function wireRows(box) {
+    $$(".ix-tick", box).forEach(c => c.onchange = () => {
+      c.checked ? S.picked.add(c.dataset.path) : S.picked.delete(c.dataset.path);
+      selMeta();
+    });
+    $$(".ix-hit", box).forEach(b => b.onclick = () => b.dataset.hl
+      ? go("highlighter", { openPath: b.dataset.hl })
+      : go("scribe", { openPath: b.dataset.path }));
+    $$(".ix-row .ix-thumb", box).forEach(img => img.onclick = () => {
+      const p = img.closest(".ix-row").dataset.path;
+      go("scribe", { openPath: p });
+    });
+  }
+
+  const FILTERS = [
+    ["all", "all", () => true],
+    ["words", "with words", r => !!r.sidecar_mtime],
+    ["missing", "missing", r => !!r.missing],
+  ];
+
+  /* the catalog itself, newest first, grouped by folder — the browse the
+     center always deserved: scan once and everything is HERE, no query
+     needed. Plain words narrow it; clearing them brings the shelf back. */
+  async function browse() {
+    const box = $("#ix-results", el);
+    box.innerHTML = `<div class="hint" style="padding:12px 2px">opening the catalog…</div>`;
+    try {
+      const r = await api(`/api/index/search?q=&limit=300`);
+      S.rows = r.rows;
+      S.hasClips = !!r.rows.length;
+      if (!r.rows.length) {
+        box.innerHTML = `<div class="empty-grain" style="padding:36px 8px;color:var(--cream-faint);text-align:center">
+          the catalog is empty — add a footage folder on the right and Rescan;
+          every clip lands here, newest first</div>`;
+        return;
+      }
+      const fit = FILTERS.find(f => f[0] === S.filter) || FILTERS[0];
+      const rows = r.rows.filter(fit[2]);
+      const counts = Object.fromEntries(FILTERS.map(f =>
+        [f[0], r.rows.filter(f[2]).length]));
+      const chips = `<div class="ix-chips">${FILTERS.map(([id, lab]) =>
+        `<button class="pb-pill${S.filter === id ? " on" : ""}" data-f="${id}"
+          ${counts[id] ? "" : "disabled"}>${lab} · ${counts[id]}</button>`).join("")}
+        <span class="hint" style="margin-left:auto">newest first · type to narrow</span></div>`;
+      const groups = [];
+      for (const row of rows) {
+        const g = groups.find(x => x.folder === row.folder);
+        g ? g.rows.push(row) : groups.push({ folder: row.folder, rows: [row] });
+      }
+      box.innerHTML = chips + groups.map(g => `
+        <div class="tag ix-folderhead" title="${esc(g.folder)}">${esc(g.folder.split("/").slice(-2).join("/"))}
+          <span style="letter-spacing:0;text-transform:none"> · ${g.rows.length} clip${g.rows.length > 1 ? "s" : ""}</span></div>
+        ${g.rows.map(rowHTML).join("")}`).join("");
+      wireRows(box);
+      $$("button[data-f]", box).forEach(b => b.onclick = () => {
+        S.filter = b.dataset.f; browse(); });
+    } catch (e) {
+      box.innerHTML = `<div class="progmsg err" style="padding:12px 2px">${esc(e.message)}</div>`;
+    }
+  }
+
   async function search() {
+    const q = $("#ix-q", el).value.trim();
+    if (!q) return browse();
     const box = $("#ix-results", el);
     box.innerHTML = `<div class="hint" style="padding:12px 2px">looking…</div>`;
     try {
-      const r = await api(`/api/index/search?q=${encodeURIComponent($("#ix-q", el).value)}&limit=80`);
+      const r = await api(`/api/index/search?q=${encodeURIComponent(q)}&limit=80`);
       S.rows = r.rows;
       if (!r.rows.length) {
         box.innerHTML = `<div class="empty-grain" style="padding:30px 8px;color:var(--cream-faint);text-align:center">
@@ -96,37 +180,11 @@ const IndexPage = (() => {
           Scribe the clips that matter, rescan, ask again.</div>`;
         return;
       }
-      box.innerHTML = r.rows.map(row => {
-        const picked = S.picked.has(row.path);
-        const res = row.width ? `${row.width}×${row.height}` : (row.codec || "");
-        return `<div class="ix-row${row.missing ? " missing" : ""}" data-path="${esc(row.path)}">
-          <input type="checkbox" class="ix-tick" data-path="${esc(row.path)}" ${picked ? "checked" : ""}>
-          <img class="ix-thumb" loading="lazy" src="${row.missing ? "" : frameURL(row.path, 24, 90)}"
-            onerror="this.style.visibility='hidden'">
-          <div class="ix-body">
-            <div class="ix-name">${esc(row.name)}
-              ${row.missing ? `<span class="badge warn">missing — drive unplugged?</span>` : ""}
-              ${row.sidecar_mtime ? `<span class="badge">words</span>` : ""}</div>
-            <div class="ix-meta">${fmtTime(row.duration)} · ${res}${row.fps ? " @ " + (+row.fps).toFixed(2) : ""} ·
-              ${esc(row.folder.split("/").pop())}
-              ${row.missing ? "" : `<button class="ix-hit" data-hl="${esc(row.path)}"
-                title="open this clip in Community Highlighter — find the moments">→ Highlighter</button>`}</div>
-            ${(row.matches || []).map(m => `<button class="ix-hit" data-path="${esc(row.path)}" data-t="${m.t}"
-                title="open in Scribe at this moment">${fmtTime(m.t)} “${esc(m.text)}”</button>`).join("")}
-          </div>
-        </div>`;
-      }).join("");
-      $$(".ix-tick", box).forEach(c => c.onchange = () => {
-        c.checked ? S.picked.add(c.dataset.path) : S.picked.delete(c.dataset.path);
-        selMeta();
-      });
-      $$(".ix-hit", box).forEach(b => b.onclick = () => b.dataset.hl
-        ? go("highlighter", { openPath: b.dataset.hl })
-        : go("scribe", { openPath: b.dataset.path }));
-      $$(".ix-row .ix-thumb", box).forEach(img => img.onclick = () => {
-        const p = img.closest(".ix-row").dataset.path;
-        go("scribe", { openPath: p });
-      });
+      box.innerHTML = `<div class="ix-chips"><button class="pb-pill" id="ix-back">← the whole catalog</button>
+        <span class="hint">${r.rows.length} match${r.rows.length > 1 ? "es" : ""} for “${esc(q)}”</span></div>`
+        + r.rows.map(rowHTML).join("");
+      wireRows(box);
+      $("#ix-back", box).onclick = () => { $("#ix-q", el).value = ""; browse(); };
     } catch (e) {
       box.innerHTML = `<div class="progmsg err" style="padding:12px 2px">${esc(e.message)}</div>`;
     }
@@ -135,20 +193,17 @@ const IndexPage = (() => {
   async function scan() {
     const btn = $("#ix-scan", el);
     btn.disabled = true;
-    $("#ix-scanbar", el).style.width = "10%";
     try {
       const job = await api("/api/index/scan", {});
-      watchJob(job.id, j => {
-        $("#ix-scanmsg", el).textContent = j.message || j.status;
-        $("#ix-scanbar", el).style.width = j.status === "running" ? "55%" : "10%";
-      });
+      const p = czProgress($("#ix-scanhost", el), {
+        label: "scanning the library", acc: "var(--index)" });
+      watchJob(job.id, j => p.update(j));
       const done = await jobDone(job.id);
+      p.finish(done);
       btn.disabled = false;
-      $("#ix-scanbar", el).style.width = done.status === "done" ? "100%" : "0";
       if (done.status === "error") { toast(done.error, true); return; }
-      $("#ix-scanmsg", el).textContent = done.message || "scanned";
       loadStatus();
-      if ($("#ix-q", el).value) search();
+      $("#ix-q", el).value ? search() : browse();
     } catch (e) { btn.disabled = false; toast(e.message, true); }
   }
 
@@ -165,6 +220,9 @@ const IndexPage = (() => {
   function init() {
     $("#ix-go", el).onclick = search;
     $("#ix-q", el).addEventListener("keydown", e => { if (e.key === "Enter") search(); });
+    $("#ix-q", el).addEventListener("input", e => {
+      if (!e.target.value.trim() && S.hasClips) browse();
+    });
     $("#ix-add", el).onclick = async () => {
       const p = $("#ix-addpath", el).value.trim();
       if (!p) return;
@@ -183,6 +241,7 @@ const IndexPage = (() => {
   function onshow() {
     if (!inited) { init(); inited = true; }
     loadStatus();
+    if (!$("#ix-q", el).value.trim()) browse();
   }
 
   registerPage("index", el, onshow);

@@ -65,6 +65,13 @@ const PublisherPage = (() => {
     try {
       const r = await api("/api/publisher/open", { path });
       S.source = r.source; S.meta = r.meta; S.video = r.video; S.kit = r.kit;
+      S.fps = 0;
+      if (S.video) {
+        try {
+          const info = await api("/api/media/open", { path: S.video, tool: "publisher" });
+          S.fps = (info.video && info.video.fps) || 30;
+        } catch (e) { S.fps = 30; }
+      }
       if (!S.kit) {
         box.innerHTML = `<div class="empty-grain" style="padding:34px 6px;color:var(--cream-dim);max-width:520px">
           no transcript or highlights beside this yet — the kit builds from the record.<br><br>
@@ -90,8 +97,14 @@ const PublisherPage = (() => {
     const box = $("#pb-center", el);
     const clips = k.clips.map((cl, i) => {
       const tall = cl.ratios.some(r => r !== "16x9");
+      const mid = (cl.start + cl.end) / 2;
+      const thumb = (S.video && S.fps)
+        ? `<img class="pb-cthumb" loading="lazy" alt=""
+            src="${frameURL(S.video, Math.round(mid * S.fps), 120)}"
+            onerror="if(!this.dataset.r){this.dataset.r=1;this.src+='&r='+Date.now()}else{this.style.visibility='hidden'}">` : "";
       return `<div class="pb-clip${cl.keep ? "" : " off"}" data-i="${i}">
         <label class="pb-keep"><input type="checkbox" data-keep="${i}" ${cl.keep ? "checked" : ""}></label>
+        ${thumb}
         <div style="flex:1;min-width:0">
           <div class="pb-cliplabel">${esc(cl.label || "clip " + (i + 1))}</div>
           <div class="pb-cliptime">
@@ -124,12 +137,25 @@ const PublisherPage = (() => {
       ${clips}
       <div class="tag" style="margin-top:20px">the words — <span id="pb-origin" style="text-transform:none;letter-spacing:0">${esc(c.origin || "")}</span></div>
       <div class="pb-copy">
-        ${(c.titles || []).map((t, i) => `<div class="field"><label>title ${i + 1}</label><input type="text" data-c="titles:${i}" value="${esc(t)}"></div>`).join("")}
-        <div class="field"><label>description</label><textarea data-c="description" rows="7">${esc(c.description || "")}</textarea></div>
-        <div class="field"><label>newsletter</label><textarea data-c="newsletter" rows="3">${esc(c.newsletter || "")}</textarea></div>
-        <div class="field"><label>social · vertical</label><input type="text" data-c="social.vertical" value="${esc((c.social || {}).vertical || "")}"></div>
-        <div class="field"><label>social · feed</label><input type="text" data-c="social.feed" value="${esc((c.social || {}).feed || "")}"></div>
-        <div class="field"><label>alt text<br><span class="hint">one per clip</span></label><textarea data-c="alt" rows="${Math.max(2, (c.alt_text || []).length)}">${esc((c.alt_text || []).join("\n"))}</textarea></div>
+        ${(c.titles || []).map((t, i) => `<div class="field"><label>title ${i + 1}
+          <button class="pb-cp" data-cp="titles:${i}" title="copy to clipboard">⧉</button></label>
+          <input type="text" data-c="titles:${i}" value="${esc(t)}"></div>`).join("")}
+        <div class="field"><label>description
+          <button class="pb-cp" data-cp="description" title="copy to clipboard">⧉</button></label>
+          <textarea data-c="description" rows="7">${esc(c.description || "")}</textarea></div>
+        <div class="field"><label>newsletter
+          <button class="pb-cp" data-cp="newsletter" title="copy to clipboard">⧉</button></label>
+          <textarea data-c="newsletter" rows="3">${esc(c.newsletter || "")}</textarea></div>
+        <div class="field"><label>social · vertical
+          <button class="pb-cp" data-cp="social.vertical" title="copy to clipboard">⧉</button></label>
+          <input type="text" data-c="social.vertical" value="${esc((c.social || {}).vertical || "")}"></div>
+        <div class="field"><label>social · feed
+          <button class="pb-cp" data-cp="social.feed" title="copy to clipboard">⧉</button></label>
+          <input type="text" data-c="social.feed" value="${esc((c.social || {}).feed || "")}"></div>
+        <div class="field"><label>alt text
+          <button class="pb-cp" data-cp="alt" title="copy all to clipboard">⧉</button><br>
+          <span class="hint">one per clip</span></label>
+          <textarea data-c="alt" rows="${Math.max(2, (c.alt_text || []).length)}">${esc((c.alt_text || []).join("\n"))}</textarea></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
           <button class="btn" id="pb-ai" style="width:auto">✨ Redraft with AI</button>
           <input type="text" id="pb-instr" placeholder="optional instruction — “shorter, warmer”"
@@ -138,11 +164,20 @@ const PublisherPage = (() => {
         </div>
       </div>
       <div class="tag" style="margin-top:20px">render & export</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <div class="field" style="flex:1;min-width:200px;margin-top:0"><label>lower-third · line 1</label>
+          <input type="text" id="pb-lt1" value="${esc((k.lt || {}).line1 || "")}"
+            placeholder="${esc(S.brand && S.brand.station ? S.brand.station : (S.meta.title || "").slice(0, 40))}"></div>
+        <div class="field" style="flex:1;min-width:200px;margin-top:0"><label>lower-third · line 2</label>
+          <input type="text" id="pb-lt2" value="${esc((k.lt || {}).line2 || "")}"
+            placeholder="${esc(S.brand && S.brand.station ? (S.meta.title || "").slice(0, 40) : (S.meta.date || ""))}"></div>
+      </div>
       ${S.video ? "" : `<div class="progmsg err" style="margin:6px 0">no local recording yet — fetch the full video in Highlighter, then render.
         <button class="btn" id="pb-tohl2" style="width:auto;margin-left:8px">Open in Highlighter</button></div>`}
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
         <button class="btn primary" id="pb-render" style="width:auto" ${S.video ? "" : "disabled"}>Render kit</button>
         <button class="btn" id="pb-bundle" style="width:auto" ${(k.files || []).some(f => f.kind === "clip") ? "" : "disabled"}>Export bundle (zip)</button>
+        ${recordBtnHTML("pb-record")}
         <span class="hint" id="pb-jobstat"></span>
       </div>
       ${files}`;
@@ -175,6 +210,27 @@ const PublisherPage = (() => {
       save(); });
     $$("button[data-rev]", box).forEach(b => b.onclick = () =>
       api("/api/media/reveal", { path: b.dataset.rev }).catch(e => toast(e.message, true)));
+    $$(".pb-cp", box).forEach(b => b.onclick = e => {
+      e.preventDefault();
+      const p = b.dataset.cp;
+      const c2 = k.copy || {};
+      let v = "";
+      if (p === "alt") v = (c2.alt_text || []).join("\n");
+      else if (p.startsWith("titles:")) v = (c2.titles || [])[+p.split(":")[1]] || "";
+      else if (p.startsWith("social.")) v = ((c2.social || {})[p.split(".")[1]]) || "";
+      else v = c2[p] || "";
+      navigator.clipboard.writeText(v).then(
+        () => toast("copied — paste it where it publishes"),
+        () => toast("the browser blocked the clipboard — select and copy by hand", true));
+    });
+    const lt1 = $("#pb-lt1", box), lt2 = $("#pb-lt2", box);
+    [lt1, lt2].forEach(x => x.onchange = () => {
+      k.lt = { line1: lt1.value.trim(), line2: lt2.value.trim() };
+      if (!k.lt.line1 && !k.lt.line2) delete k.lt;
+      save();
+    });
+    $("#pb-record", box).onclick = ev =>
+      sendToRecord({ path: S.source }, ev.currentTarget);
     $("#pb-rebuild", box).onclick = rebuild;
     $("#pb-ai", box).onclick = redraft;
     const r2 = $("#pb-restore", box);
@@ -211,11 +267,11 @@ const PublisherPage = (() => {
   async function renderJob() {
     try {
       const job = await api("/api/publisher/render", { source: S.source });
-      const stat = $("#pb-jobstat", el);
-      watchJob(job.id, j => { if (stat) stat.textContent = j.status === "running"
-        ? `${Math.round(Math.max(0, j.progress) * 100)}% — ${j.message || ""}` : j.status; });
-      toast("rendering the kit — watch the queue");
+      const p = czProgress($(".inspector", el), {
+        label: "rendering the kit", acc: "var(--publisher)" });
+      watchJob(job.id, j => p.update(j));
       const done = await jobDone(job.id);
+      p.finish(done);
       if (done.status === "done") { toast("kit rendered"); open(S.source); }
       else if (done.status === "error") toast(done.error, true);
     } catch (e) { toast(e.message, true); }
@@ -224,7 +280,11 @@ const PublisherPage = (() => {
   async function bundleJob() {
     try {
       const job = await api("/api/publisher/bundle", { source: S.source });
+      const p = czProgress($(".inspector", el), {
+        label: "exporting the bundle", acc: "var(--publisher)" });
+      watchJob(job.id, j => p.update(j));
       const done = await jobDone(job.id);
+      p.finish(done);
       if (done.status === "done") {
         const rep = $("#pb-report", el);
         rep.classList.add("show");
@@ -240,6 +300,7 @@ const PublisherPage = (() => {
     try {
       const st = await api("/api/publisher/status");
       const b = st.brand;
+      S.brand = b;
       $("#pb-station", el).value = b.station; $("#pb-line2", el).value = b.line2;
       $("#pb-accent", el).value = b.accent; $("#pb-style", el).value = b.style;
       $("#pb-ltsec", el).value = b.lt_seconds; $("#pb-caps", el).checked = b.captions;

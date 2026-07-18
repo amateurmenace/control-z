@@ -29,14 +29,26 @@ NIGHTLY_API = ("https://api.github.com/repos/yt-dlp/"
                "yt-dlp-nightly-builds/releases/latest")
 
 # quality presets the UIs offer — every one merges to mp4 for edit-friendliness
+# h264+m4a preferred at every rung — the codecs that decode EVERYWHERE
+# (QuickTime, playout servers, and the suite's own PyAV frame service,
+# which has no AV1 decoder). ext=mp4 alone is not enough: YouTube ships
+# AV1 in mp4 too. Fall through to any mp4, then anything; the remux flag
+# in download() keeps the container promise on the fallbacks, losslessly.
+def _rung(h: str = "") -> str:
+    lim = f"[height<={h}]" if h else ""
+    return (f"bv*{lim}[vcodec^=avc1]+ba[ext=m4a]/"
+            f"bv*{lim}[ext=mp4]+ba[ext=m4a]/"
+            f"bv*{lim}+ba/b{lim}")
+
+
 FORMATS = {
-    "best": "bv*+ba/b",
-    "2160": "bv*[height<=2160]+ba/b[height<=2160]",
-    "1440": "bv*[height<=1440]+ba/b[height<=1440]",
-    "1080": "bv*[height<=1080]+ba/b[height<=1080]",
-    "720": "bv*[height<=720]+ba/b[height<=720]",
-    "480": "bv*[height<=480]+ba/b[height<=480]",
-    "audio": "ba/b",
+    "best": _rung(),
+    "2160": _rung("2160"),
+    "1440": _rung("1440"),
+    "1080": _rung("1080"),
+    "720": _rung("720"),
+    "480": _rung("480"),
+    "audio": "ba[ext=m4a]/ba/b",
 }
 
 _lock = threading.Lock()
@@ -307,6 +319,9 @@ def download(url: str, outdir: Path, quality: str = "best",
            "-f", FORMATS.get(quality, quality),
            "--newline", "--no-playlist",
            "--merge-output-format", "mp4",
+           # a single-file download never merges, so the merge flag alone
+           # can't keep the container promise — remux catches it, lossless
+           "--remux-video", "m4a" if quality == "audio" else "mp4",
            "--write-info-json",
            "--write-subs", "--write-auto-subs",
            "--sub-langs", "en,en-orig", "--sub-format", "vtt/srt",

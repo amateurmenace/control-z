@@ -37,8 +37,8 @@ const TOOLS = [
     ready: true, group: "community", long: "Community Highlighter",
     verb: "finds the moments", one: "meeting video → highlight reel, in text" },
   { id: "grabber", name: "Grabber", acc: "var(--grabber)",
-    ready: true, group: "community", long: "BIG Video Grabber",
-    verb: "brings the meeting home", one: "find, fetch, conform civic recordings" },
+    ready: true, group: "community", long: "Video Grabber",
+    verb: "brings the meeting home", one: "search, fetch, conform civic recordings" },
   { id: "kb", name: "Library", acc: "var(--kb)",
     ready: true, group: "community", long: "Meeting Library",
     verb: "reads them together", one: "framing, names, and topics across every meeting" },
@@ -196,6 +196,101 @@ function go(name, arg) {
   CZ.current = name;
   $$(".rail-item").forEach(b => b.classList.toggle("active", b.dataset.page === name));
   if (page.onshow) page.onshow(arg);
+}
+
+/* ---------- Send to the Record (Community Memory) ----------
+   The suite's hub gesture (specs/12 §2): Highlighter and Publisher both
+   offer it. Until Memory lands (lane B, specs/PARALLEL.md), the button
+   renders dashed and answers honestly; the moment memory's `ready` flips
+   in TOOLS, the same button goes live against the contract route. */
+function recordBtnHTML(id) {
+  const m = toolById("memory");
+  return `<button class="btn record-btn${m.ready ? "" : " soon"}" id="${id}"
+    style="--acc:var(--memory);width:auto"
+    title="${m.ready ? "file this program in the town's record"
+    : `Community Memory is being built now — this button lights up in ${m.when}`}">
+    ⬛ Send to the Record${m.ready ? "" : ` <span class="soon">${m.when}</span>`}</button>`;
+}
+async function sendToRecord(payload, btn) {
+  if (!toolById("memory").ready) {
+    toast(`Community Memory joins in ${toolById("memory").when} — the record ` +
+          `opens the day it lands`, true);
+    return false;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api("/api/memory/submissions", payload);
+    toast(r.status === "exists"
+      ? "already in the record — linked, not duplicated"
+      : "sent to the record — Memory is processing it");
+    return true;
+  } catch (e) {
+    toast(`the record didn't take it — ${e.message}`, true);
+    return false;
+  } finally { if (btn) btn.disabled = false; }
+}
+
+/* ---------- czProgress: the house progress card ----------
+   One look for every download, conversion, render and export: an accent
+   bar that shimmers while indeterminate and fills when the job knows its
+   fraction, the stage message in mono, a live elapsed clock, green on
+   done, the error sentence on error. Attach to a job id; it cleans up
+   after itself.
+
+     const p = czProgress(container, { label: "fetching…", acc: "var(--grabber)" });
+     watchJob(job.id, j => p.update(j));
+     const done = await jobDone(job.id);  p.finish(done);
+*/
+function czProgress(container, opts = {}) {
+  const box = document.createElement("div");
+  box.className = "czprog";
+  if (opts.acc) box.style.setProperty("--acc", opts.acc);
+  box.innerHTML = `
+    <div class="czprog-top">
+      <span class="czprog-label">${esc(opts.label || "working…")}</span>
+      <span class="czprog-pct"></span>
+      <span class="czprog-clock">0s</span>
+    </div>
+    <div class="czprog-bar"><i class="indet"></i></div>
+    <div class="czprog-msg">queued…</div>`;
+  container.appendChild(box);
+  const bar = $(".czprog-bar i", box);
+  const pct = $(".czprog-pct", box);
+  const msg = $(".czprog-msg", box);
+  const clock = $(".czprog-clock", box);
+  const t0 = Date.now();
+  const tick = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    clock.textContent = s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+  }, 1000);
+  return {
+    el: box,
+    update(j) {
+      if (j.message) msg.textContent = j.message;
+      const has = j.progress != null && j.progress > 0;
+      bar.classList.toggle("indet", !has);
+      if (has) {
+        bar.style.width = `${Math.round(Math.min(1, j.progress) * 100)}%`;
+        pct.textContent = `${Math.round(Math.min(1, j.progress) * 100)}%`;
+      }
+    },
+    finish(done) {
+      clearInterval(tick);
+      bar.classList.remove("indet");
+      if (done.status === "done") {
+        box.classList.add("ok");
+        bar.style.width = "100%";
+        pct.textContent = "";
+        msg.textContent = done.message || "done";
+      } else {
+        box.classList.add("err");
+        msg.textContent = done.error || done.message || "stopped";
+      }
+      setTimeout(() => { box.classList.add("fade"); }, 4000);
+      setTimeout(() => { box.remove(); }, 5000);
+    },
+    remove() { clearInterval(tick); box.remove(); },
+  };
 }
 
 /* ---------- open-a-clip helpers: drop zones + the Browse dialog ----------
