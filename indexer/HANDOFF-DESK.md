@@ -37,10 +37,25 @@ Run `.venv/bin/python -m suite --serve` → `/#index`.
   (11 new in `tests/test_index_desk.py`; the old 15-column INSERT fixture in
   `test_indexer.py` gained the 16th column).
 
+## landed (wave 2 — the road)
+
+- **The road** (`POST /api/index/road` `{paths, stages}`;
+  `GET /api/index/road-stages` says what can run today and why not).
+  Tick clips, pick stages — words/rescue/reframe-9:16 — one queue job,
+  clip-major order. `_road_plan` (pure, tested) rules before engines run:
+  no sound → no words, no picture → no reframe, unplugged → never joins,
+  done → skipped with the reason said; a fully-done road refuses at submit
+  with every skip named. Engines are the tools' own: Clear at road
+  defaults (de-hum if found + de-click only — the road preps, the craft
+  stays in the tool; no remux), Pivot analyze→render h264 reusing a 9:16
+  sidecar when present. Scoped rescan after, so chips/band count the new
+  work immediately. Verified live end-to-end; re-run refused. **457 green**
+  (4 new road-plan tests).
+
 ## next
 
-- The batch line, further roads: Clear→Pivot/Rise chains from a selection
-  (per-tool params need a design pass; engines exist).
+- Rise as a fourth stage (its `/batch` exists; decide upscale-target
+  defaults honestly).
 - The coherence pass (thrust 3): czProgress/empty-state/keyboard grammar on
   the eight production pages.
 
@@ -58,3 +73,7 @@ Run `.venv/bin/python -m suite --serve` → `/#index`.
   honestly excluded, failures named. Ticked clips take the same road.
 - A time-coded search hit now lands Scribe on the moment instead of
   dropping the timestamp on the floor.
+- **The road.** Tick clips, pick stages — words, rescue, reframe 9:16 —
+  and one queue job walks each clip through the tools in order, skipping
+  what's already made with the reason said; run it twice and the second
+  run is a sentence, not a queue entry.
