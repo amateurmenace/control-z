@@ -120,9 +120,16 @@ def merge_plan(row: dict, now: float) -> Tuple[dict, List[str]]:
     caller's keys plus both timestamps), and which columns to set if it already
     exists (the caller's keys minus the primary key; `updated_at` is stamped by
     the store). Keys the caller omitted are never mentioned in either, which is
-    the whole point — an omitted column keeps its value."""
+    the whole point — an omitted column keeps its value.
+
+    `updated_at` is dropped from the update list even when the caller passed
+    one, because the store appends its own. SQLite accepts the same column
+    twice in a SET clause and quietly lets the last one win; Postgres calls it
+    a syntax error. The caller that exposed this was the import, carrying rows
+    across verbatim — and "when is this row current" is the store's answer to
+    give, not the copy's."""
     insert_row = {"added_at": now, "updated_at": now, **row}
-    update_cols = [k for k in row if k != "id"]
+    update_cols = [k for k in row if k not in ("id", "updated_at")]
     return insert_row, update_cols
 
 
