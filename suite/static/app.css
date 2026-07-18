@@ -31,6 +31,10 @@
   --hl-cta: #22C55E;        /* its bright CTA green */
   --grabber: #2E8FB5;       /* BIG's civic blue */
   --kb: #5E5A86;            /* the library at dusk — reads-together violet */
+  --publisher: #3A9E8E;     /* the publish kit — fresh mint, out the door */
+  --memory: #8E4A55;        /* the long record — oxblood ledger */
+  --interpreter: #7E8A3C;   /* seven languages on one wire — moss */
+  --narrator: #A9673A;      /* the voice that describes the room — clay */
 
   --head: "Space Grotesk", "Futura", -apple-system, sans-serif;
   --ui: "DM Sans", -apple-system, "Segoe UI", sans-serif;

@@ -42,6 +42,20 @@ const TOOLS = [
   { id: "kb", name: "Library", acc: "var(--kb)",
     ready: true, group: "community", long: "Meeting Library",
     verb: "reads them together", one: "framing, names, and topics across every meeting" },
+  /* the community wing grows (specs/12): four more BIG apps moving in.
+     Lane ownership + who flips `ready` is law in specs/PARALLEL.md. */
+  { id: "publisher", name: "Publisher", acc: "var(--publisher)",
+    ready: false, when: "1.6", group: "community", long: "Community Publisher",
+    verb: "gets it seen", one: "program in → clips, copy and posts out" },
+  { id: "memory", name: "Memory", acc: "var(--memory)",
+    ready: false, when: "1.6", group: "community", long: "Community Memory",
+    verb: "keeps the record", one: "issues tracked across meetings and years" },
+  { id: "interpreter", name: "Interpreter", acc: "var(--interpreter)",
+    ready: false, when: "1.7", group: "community", long: "Community Interpreter",
+    verb: "carries it across", one: "captions in seven languages + simple english" },
+  { id: "narrator", name: "Narrator", acc: "var(--narrator)",
+    ready: false, when: "1.7", group: "community", long: "Community Narrator",
+    verb: "says what's on screen", one: "audio description for community TV" },
 ];
 const toolById = id => TOOLS.find(t => t.id === id);
 
