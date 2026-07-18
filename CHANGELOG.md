@@ -2,6 +2,95 @@
 
 ## unreleased
 
+### 1.7.0: the wing lands — the record, the languages, the voice — 2026-07-18
+
+Three tools in one release — **Community Memory**, **Community
+Interpreter**, **Community Narrator** — built in parallel on their own
+lanes and merged home together: the biggest single entry since the
+suite began. Said as what a resident can now do: search everything
+your town has said across every read meeting and land the tape on the
+second it was said; follow an issue for years and be told what changed
+the day it comes back; read the meeting in your own language, or in
+plain English; and hear what's on screen described aloud when you
+can't see it. All of it local, labeled, on your own key or none —
+beside the official record, never in its place.
+
+- **Community Memory ships (beta) — the telescope opens.** A meeting's
+  captions come straight in the moment you paste the link (Scribe
+  listens only when a file has no words of its own), the whole corpus
+  is searchable, and every hit is a second to jump to — one search
+  across every meeting, and the video lands on the moment. Every
+  reading shows its receipts and says it's beta.
+- **And the telescope learns to see.** Memory finds the issues that
+  recur across meetings — vision zero, the golf course lighting,
+  short-term rentals — names each from the record's own words, and
+  tracks every appearance. Anchored in the words a meeting actually
+  says, never a guess about anyone's position. Follow a thread (star
+  an issue, or a search) and the record keeps watch: when it resurfaces
+  on a new agenda, Memory tells you what changed since last time — a
+  paragraph, generative with your key, extractive without one. The
+  long view is a line you can walk: an issue's timeline lays every
+  meeting along a time axis, its moments as beads and its votes as
+  milestones, and every one is a second to jump to. Steward-tended,
+  not machine-final: merge two issues, split one that was fused,
+  rename or promote a candidate — the record remembers its own edits.
+  And "still watching" is a plain digest of your threads you can copy
+  anywhere. No email, no account, nothing sent — the covenant, kept.
+- **Community Interpreter ships (beta) — the meeting, carried across.**
+  Open anything Highlighter has read and pick from the seven panel
+  languages — Español, Simple English (plain language, first-class),
+  中文, Português, Kreyòl, Tiếng Việt, Русский. One queue job coalesces
+  the rolling captions into sentence-shaped cues, translates them
+  chunked on your own key with the town's glossary riding every pass
+  (do-not-translate names, vetted civic terms — the Brookline seed
+  ships honestly marked *suggested*), and lands timed .srt + .vtt
+  beside the meeting. Provenance is UI: every track says its model,
+  glossary version and review status on the page and inside the .vtt
+  itself; lines the model dropped stay English and say so. Every line
+  takes one tap to flag into the review queue; a reviewer's correction
+  rewrites the track in place. With the full recording local, tracks
+  ride the player's own caption menu. No key? The page says so in a
+  sentence and still reads existing tracks.
+- **Community Narrator ships (beta) — the picture, spoken.** Audio
+  description for community TV, a thing public access has essentially
+  never had: open a read meeting with its recording and the pass runs
+  in three moves — the pauses and the slides mapped (a [Music] or an
+  applause marker counts as air, because it is; a shot that holds
+  still is a slide, and slides read aloud are the point), each moment
+  drafted by vision on your own key in DCMP style with a lint that
+  names camera-talk, interpretation and past tense instead of trusting
+  the prompt, and every draft waiting on a human accept — nothing
+  unaccepted reaches a track. The render speaks each approved line in
+  a local voice, ducks the program under the narration with a
+  sidechain compressor, and lands four outputs: the mixed program, the
+  mixed audio, a program-length narration track, and a descriptions
+  transcript that always carries every approved description —
+  wall-to-wall programs get the transcript and the extended mode
+  instead of a mix that talks over the meeting, never a silent
+  failure. Provenance rides the page and the files alike: vision
+  model, voice, review status.
+- **The wing speaks with one engine each.** `czcore/mt.py` (cue
+  coalescing, chunked N|-protocol translation, glossary constraints —
+  grown from Highlighter's translate feature) and `czcore/tts.py`
+  (sherpa-onnx VITS voices, found by shape) join the middle of the
+  table — translation and speech for whatever the wing carries across
+  next.
+- **The model store learns that a voice is a directory.** A new
+  `archive_dir` mechanism keeps a whole member folder from a release
+  tarball — manifest-hashed, one auditable line per file, the same
+  pinned-hash covenant as every single-file model — and **vits-ljs**
+  takes its card: Apache-2.0, the public-domain LJSpeech corpus,
+  CMU-lexicon based so no GPL espeak-ng data rides along. Narrator's
+  voice is one click now; any other VITS voice placed by hand still
+  works, found by shape.
+- **Highlighter's record line names the long view.** Beside prior
+  appearances, tonight's topics now show as tracked issues — each
+  pill a door straight into the issue's timeline on the Memory page.
+- **Both lanes' packages join pyproject's truth** (`memory`,
+  `interpreter`, `narrator`, the glossary seeds as package-data), so
+  a frozen or installed suite imports what a dev checkout already
+  found.
+
 ### 1.6.0: the wing doubles on paper, and the kit ships itself — 2026-07-17
 - **The wiring is ready for Memory before Memory exists.** Highlighter
   and Publisher both carry **⬛ Send to the Record** — dashed and honest

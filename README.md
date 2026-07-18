@@ -64,7 +64,7 @@ runs several times larger.
 
 | Package | Tool | Status |
 |---|---|---|
-| `suite/` | **the Suite** — one desktop app around the tools (viewer, queue, export panel) | working: shell + all ten tools |
+| `suite/` | **the Suite** — one desktop app around the tools (viewer, queue, export panel) | working: shell + all fifteen tools |
 | `czcore/` | shared core (media IO, encode presets, shots, exports, app shell + job queue, model store, yt-dlp nightly manager, Hush-core denoise) | working |
 | `pivot/` | **Pivot** — smart reframe (9:16/1:1 from your masters) | CLI + Suite UI working |
 | `stencil/` | **Stencil** — AI roto mattes (SAM 2.1) | CLI + Suite UI working (torch is an optional heavy) |
@@ -77,6 +77,9 @@ runs several times larger.
 | `highlighter/` | **Community Highlighter** — meeting video → transcript → scored moments → reel/EDL (community-highlighter reborn) | CLI + Suite UI working |
 | `grabber/` | **BIG Video Grabber** — CivicClerk search, Zoom/zoomgov + yt-dlp fetch, broadcast conform (BIG Video Grabber reborn) | CLI + Suite UI working |
 | `publisher/` | **Community Publisher** (beta) — program in → clips in three frames, copy, thumbnails, bundle out | CLI + Suite UI working |
+| `memory/` | **Community Memory** (beta) — the record across meetings and years: corpus, search, the issue engine, the long view | Suite UI working |
+| `interpreter/` | **Community Interpreter** (beta) — meetings as caption tracks in seven languages + Simple English, town glossaries, review queue | Suite UI working |
+| `narrator/` | **Community Narrator** (beta) — audio description for VOD: gap map, DCMP-linted drafts, local voice, ducked mix | Suite UI working |
 | `site/` | control-z.org (bake: `python3 site/build.py`) | built, undeployed |
 
 Working = verified end-to-end on real footage this side of packaging. Not yet:
@@ -102,17 +105,19 @@ is the cut on its way back *out* — Pivot (reframed to 9:16 or 1:1), Scribe
 (captions and subtitles), Rise (pushed up to delivery resolution), and
 Community Publisher (the publish kit: clips, copy and posts). Above the
 doors, **the wire** draws the hand-offs: the meeting fetched, cut to its
-moments, made into a kit, kept in the record — with the coming tools
-riding the chain honestly, dated. Tools
+moments, made into a kit, kept in the record — every station solid now that
+the wing has landed. Tools
 don't police the door you came through: Scribe will paper-edit raw interviews
 into a selects EDL, and Rise will take a tape master, both long before
-picture lock. The Queue runs one job at a time across all ten and survives
+picture lock. The Queue runs one job at a time across all fifteen and survives
 quitting; Install OpenFX puts Hush and Speak into Resolve.
 
-The two **community** tools (Highlighter, Grabber) grew up as separate apps
-at Brookline Interactive Group and keep their own corner of the rail — square
-glyphs, their own colors — rebuilt on the suite's local engine: no cloud, no
-API keys. Both check for the yt-dlp **nightly** on every page open (sites
+The **community wing** keeps its own corner of the rail — square glyphs,
+their own colors. Highlighter and Grabber grew up as separate apps at
+Brookline Interactive Group, rebuilt on the suite's local engine; Publisher,
+Memory, Interpreter and Narrator were born here beside them: no cloud, no
+required API keys, generative passes on your own key with an extractive
+fallback that stands alone. Highlighter and Grabber check for the yt-dlp **nightly** on every page open (sites
 drift weekly; a pinned fetcher rots) and say what they found. Grabber speaks
 CivicClerk portals for any town, and resolves Zoom *and zoomgov.com* share
 links with four plain HTTP requests — the flow the old app drove a headless
@@ -135,13 +140,15 @@ python3 -m unittest discover -s tests -t .   # core algorithm tests, no deps nee
 .venv/bin/python -m suite --serve            # drive the UI in a browser
 ```
 
-Each tool also has a CLI — every UI control mirrors a flag, so stations can
-script what the app does by hand. `pip install -e .` is what puts `pivot-cli`,
+Nearly every tool also has a CLI — every UI control mirrors a flag, so
+stations can script what the app does by hand. `pip install -e .` is what puts `pivot-cli`,
 `rise-cli`, `clear-cli`, `scribe-cli`, `depth-cli`, `stencil-cli`,
 `highlighter-cli`, `grabber-cli`, `index-cli`, `slate-cli`,
 `publisher-cli` and `suite` on
 your PATH; without it they don't exist, and every one of them also runs as
-`.venv/bin/python -m pivot.cli` (and so on) straight from a checkout.
+`.venv/bin/python -m pivot.cli` (and so on) straight from a checkout. The
+wing's three newest (Memory, Interpreter, Narrator) are suite pages only so
+far — their CLIs come with their next waves.
 
 ### Known gaps
 
