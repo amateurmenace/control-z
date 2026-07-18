@@ -29,6 +29,10 @@ pyloudnorm
 faster-whisper
 sherpa-onnx
 
+# --- Community Memory: the town's own paper (PDF ingestion) ---
+# pure-python, no native deps — extracts + chunks agendas, minutes and packets
+pypdf
+
 # Stencil's runtime is an OPTIONAL heavy (~1 GB) — the app runs fine without
 # it and its page says exactly this. It stays out of this file on purpose:
 # torch is a gigabyte the other nine tools never load, and the signed app

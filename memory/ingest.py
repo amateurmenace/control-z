@@ -185,6 +185,15 @@ def run(corpus, plan: dict, job) -> dict:
         except Exception:
             pass  # issue assignment is additive — a failure never loses the record
 
+        # the vote ledger: read this meeting's roll calls straight off the tape
+        # (officials-only by construction; a roster from the agenda, if one has
+        # already landed, cleans the names). Additive, never blocks the record.
+        try:
+            from . import votes
+            votes.assign_meeting_votes(corpus, mid)
+        except Exception:
+            pass
+
         job.progress = 1.0
         job.message = f"in the record — {len(segs)} segments · {tr['origin']}"
         return {"meeting_id": mid, "status": "live", "segments": len(segs),

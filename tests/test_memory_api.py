@@ -44,7 +44,8 @@ class ApiTest(unittest.TestCase):
         self.addCleanup(self.td.cleanup)
 
         app = FastAPI()
-        memtool.register_memory(app, JobManager(), None)
+        self.jm = JobManager()
+        memtool.register_memory(app, self.jm, None)
         self.cl = TestClient(app)
         self.seed = Corpus()  # same (patched) path as the route's own Corpus
 
@@ -220,6 +221,81 @@ class ApiTest(unittest.TestCase):
         nt = self.cl.get("/api/memory/notifications").json()
         self.assertIn("events", nt)
         self.assertIn("unseen", nt)
+
+    # -- documents, votes, officials, publish (the new desk surfaces) ------
+
+    def _seed_vote(self, mid):
+        self.seed.replace_votes(mid, [{
+            "t": 8.0, "motion": "to approve the overlay", "outcome": "passes",
+            "tally": "2–0", "origin": "extractive",
+            "roll": [{"name": "Chair A", "vote": "yes", "t": 8.0, "quote": "aye"},
+                     {"name": "Member B", "vote": "yes", "t": 9.0, "quote": "aye"}]}])
+
+    def test_issue_route_carries_paper_and_ledger(self):
+        self._seed("m1", SEGS, title="Select Board", date="2026-05-19",
+                   town="Brookline", body="Select Board")
+        iid = self._seed_issue("iss:rez", "Rezoning", ["rezoning"])
+        # a document linked to the issue
+        self.seed.upsert_document({"id": "doc:1", "meeting_id": "m1",
+                                   "town": "Brookline", "kind": "Agenda"})
+        self.seed.replace_doc_chunks("doc:1", [
+            {"page": 3, "text": "public hearing on the rezoning overlay"}])
+        from memory import documents
+        documents.assign_document(self.seed, "doc:1")
+        self._seed_vote("m1")
+        d = self.cl.post("/api/memory/issue", json={"id": iid}).json()
+        self.assertIn("paper", d)
+        self.assertIn("ledger", d)
+        self.assertTrue(d["paper"])                       # the town's paper
+        self.assertEqual(d["paper"][0]["cites"][0]["page"], 3)
+        self.assertTrue(d["ledger"])                      # the roll call
+        self.assertEqual(d["ledger"][0]["tally"], "2–0")
+
+    def test_officials_route(self):
+        self._seed("m1", SEGS, title="Select Board", town="Brookline",
+                   body="Select Board", date="2026-05-19")
+        self._seed_vote("m1")
+        r = self.cl.get("/api/memory/officials").json()
+        names = {o["name"] for o in r["officials"]}
+        self.assertEqual(names, {"Chair A", "Member B"})
+
+    def test_meeting_documents_route(self):
+        self._seed("m1", SEGS, title="Select Board")
+        self._seed_vote("m1")
+        r = self.cl.post("/api/memory/meeting/documents", json={"id": "m1"}).json()
+        self.assertEqual(len(r["votes"]), 1)
+        self.assertIn("documents", r)
+
+    def test_publish_starts_a_job_and_reports_a_diff(self):
+        # mock the bake so NO real edition is pressed — the route targets the
+        # repo's real site/docs/app, and the job runs on a background thread, so
+        # we hold the mock in place until the job is terminal (a race here once
+        # wiped the committed edition). We assert the diff shape the button reads.
+        import time as _time
+
+        from web import bake as webbake
+
+        def fake_bake(corpus_db, out_dir, version, base):
+            return {"meetings": 3, "issues": 5,
+                    "manifest": {"corpus_hash": "deadbeef", "edition_date": "2026-06-18",
+                                 "counts": {"meetings": 3, "issues": 5}},
+                    "total_gz": 1000, "busts": 0}
+        with mock.patch.object(webbake, "bake", fake_bake):
+            r = self.cl.post("/api/memory/publish", json={})
+            self.assertIn(r.status_code, (200, 422))
+            if r.status_code != 200:
+                self.assertIn("error", r.json())
+                return
+            jid = r.json()["job"]["id"]
+            for _ in range(200):        # wait for the (mocked) job under the mock
+                job = self.jm.get(jid)
+                if job and job.status in ("done", "error", "cancelled"):
+                    break
+                _time.sleep(0.02)
+        self.assertEqual(job.status, "done")
+        res = job.result or {}
+        self.assertEqual(res["meetings"], 3)
+        self.assertEqual(res["corpus_hash"], "deadbeef")
 
 
 if __name__ == "__main__":

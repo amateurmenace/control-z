@@ -34,8 +34,13 @@ const MemoryPage = (() => {
             border-radius:9px;background:var(--ink-2);font-size:14px;font-family:var(--ui)">
           <button class="btn" id="mem-analyticsbtn"
             title="the record as charts — topics, framing and names over time">📊 Analytics</button>
+          <button class="btn" id="mem-officialsbtn"
+            title="every official's roll-call record, read from the record">⬡ The votes</button>
+          <button class="btn" id="mem-publishbtn"
+            title="press the public edition and hand off the deploy">⬆ Publish the record</button>
         </div>
         <div id="mem-statline" class="progmsg" style="margin-top:8px"></div>
+        <div id="mem-publishwrap" style="margin-top:10px"></div>
       </div>
 
       <div id="mem-results" style="display:none;margin-top:16px"></div>
@@ -133,7 +138,26 @@ const MemoryPage = (() => {
         <span class="tag">the timeline — every meeting this issue touched</span>
         <div id="mem-timeline" style="overflow-x:auto;padding:10px 2px 4px"></div>
       </div>
+      <div id="mem-iledger"></div>
+      <div id="mem-ipaper"></div>
       <div id="mem-iappearances"></div>
+    </div>
+
+    <!-- ============ THE VOTES (per-official roll-call records) ============ -->
+    <div id="mem-officials" style="display:none">
+      <button class="btn" id="mem-offbackbtn" style="margin-bottom:10px">← the record</button>
+      <div class="hl-hero" style="border-color:var(--memory)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <h1 style="margin:0">The people's votes</h1>
+          <span class="badge synth">beta</span>
+        </div>
+        <p class="why" style="margin-top:6px;max-width:70ch">
+          Every roll call the record has read, by member — officials only, by
+          construction: a roll call is the board voting. Each cell lands the tape
+          on the moment. Read from the transcript; verify against the official
+          minutes.</p>
+      </div>
+      <div id="mem-offbody" style="margin-top:16px"></div>
     </div>
 
     <!-- ==== ANALYTICS (lane A hook — the Library's charts, moved in;
@@ -612,10 +636,48 @@ const MemoryPage = (() => {
           </div>`).join("")}</div>`);
     }
 
+    // the town's paper + the roll calls — the vote ledger and the documents,
+    // with a control to fetch the town's paper from its portal (a job).
+    panels.push(`<div class="hl-panel" id="mem-docsvotes">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <span class="tag">the town's paper &amp; the roll calls</span>
+        <button class="btn" id="mem-fetchdocs" style="margin-left:auto;font-size:11px;padding:3px 8px"
+          title="pull this meeting's agenda, minutes and packet from the town portal">⬇ fetch the paper</button>
+      </div>
+      <div id="mem-dvbody"><p class="hint">Fetch the town's agenda, minutes and packet —
+        they interleave on the record and give the roll call its roster.</p></div>
+    </div>`);
+
     $("#mem-reading", el).innerHTML = panels.join("") || `<div class="hl-panel">
       <span class="tag">reading</span><p class="hint">No reading yet.</p></div>`;
     $$("[data-t]", $("#mem-reading", el)).forEach(r =>
       r.onclick = () => seek(parseFloat(r.dataset.t), true));
+    const fb = $("#mem-fetchdocs", el);
+    if (fb) fb.onclick = () => fetchDocuments(m.id);
+    loadDocsVotes(m.id);
+  }
+
+  async function loadDocsVotes(mid) {
+    try {
+      const d = await api("/api/memory/meeting/documents", { id: mid });
+      const box = $("#mem-dvbody", el); if (!box) return;
+      const votes = d.votes || [], docs = d.documents || [];
+      if (!votes.length && !docs.length) return;   // keep the invite prompt
+      const vhtml = votes.length ? `<div style="margin-bottom:8px">
+        ${votes.map(v => `<div style="border:1px solid var(--line);border-radius:7px;margin-top:6px;overflow:hidden">
+          <div class="hl-seg hl-click" data-t="${v.t}" style="padding:6px 9px;background:var(--ink-3);font-size:12px">
+            <span class="tpill" style="margin-right:6px">${hms(v.t)}</span>${esc((v.motion || "").slice(0, 80))}
+            <span class="hl-kind hl-kind-money" style="margin-left:5px">${esc(v.tally || "")} ${esc(v.outcome || "")}</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px 10px;padding:6px 9px">
+            ${(v.roll || []).map(r => `<span style="font-size:11.5px">${esc(r.name)} ${RC(r.vote)}</span>`).join("")}</div>
+        </div>`).join("")}</div>` : "";
+      const dhtml = docs.length ? docs.map(dc => `<div style="padding:5px 4px;border-left:2px solid var(--amber);padding-left:9px;margin-top:5px">
+        ${dc.url ? `<a href="${esc(dc.url)}" target="_blank" rel="noopener" style="color:var(--memory);font-weight:600">📄 ${esc(dc.kind || "document")} — ${esc((dc.title || "").slice(0, 50))}</a>`
+          : `<b>📄 ${esc(dc.kind || "document")}</b>`}
+        <span class="lmeta" style="margin-left:6px">${dc.pages || 0} pp · ${dc.n_chunks || 0} chunks</span></div>`).join("") : "";
+      box.innerHTML = vhtml + dhtml;
+      $$("[data-t]", box).forEach(r => r.onclick = () => seek(parseFloat(r.dataset.t), true));
+    } catch (e) { /* the paper is optional — the reading stands without it */ }
   }
 
   /* ---------------- the long view: issues + threads ---------------- */
@@ -767,9 +829,56 @@ const MemoryPage = (() => {
             <p class="hint">The delta on a resurfacing — generative with your key, extractive otherwise. Verify against the official record.</p></div>`
         : "";
       renderTimeline(d.timeline || []);
+      renderLedger(d.ledger || []);
+      renderPaper(d.paper || []);
       renderAppearances(d.timeline || []);
       try { el.querySelector(".page-pad").scrollTop = 0; } catch (e) {}
     } catch (e) { toast(e.message, true); }
+  }
+
+  const RC = v => {
+    const c = { yes: "var(--forest)", no: "var(--memory)", abstain: "var(--cream-faint)" }[v] || "var(--cream-dim)";
+    const t = { yes: "aye", no: "no", abstain: "abs" }[v] || esc(v);
+    return `<span style="font:600 9.5px var(--mono);text-transform:uppercase;color:${c};border:1px solid var(--line);border-radius:4px;padding:0 4px">${t}</span>`;
+  };
+
+  function renderLedger(ledger) {
+    const box = $("#mem-iledger", el);
+    if (!ledger.length) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="hl-panel" style="margin-top:14px">
+      <span class="tag">the vote ledger — roll calls on this issue, read from the record</span>
+      ${ledger.map(v => `
+        <div style="border:1px solid var(--line);border-radius:8px;margin-top:8px;overflow:hidden">
+          <div class="hl-seg hl-click" data-open="${esc(v.meeting_id)}" data-t="${v.t}"
+            style="padding:7px 10px;background:var(--ink-3);font-size:12.5px">
+            <span class="tpill" style="margin-right:6px">${esc(v.date || "")}</span>
+            ${esc((v.motion || "").slice(0, 90))}
+            <span class="hl-kind hl-kind-money" style="margin-left:6px">${esc(v.tally || "")} ${esc(v.outcome || "")}</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px 12px;padding:8px 10px">
+            ${(v.roll || []).map(r => `<span class="hl-click" data-open="${esc(v.meeting_id)}" data-t="${r.t || v.t}"
+              style="font-size:12px;cursor:pointer">${esc(r.name)} ${RC(r.vote)}</span>`).join("")}
+          </div>
+        </div>`).join("")}
+      <p class="hint" style="margin-top:8px">Roll calls are read from the transcript and may mishear a name — verify against the official minutes.</p>
+    </div>`;
+    $$("[data-open]", box).forEach(r => r.onclick = () =>
+      openMeeting(r.dataset.open, parseFloat(r.dataset.t || 0)));
+  }
+
+  function renderPaper(paper) {
+    const box = $("#mem-ipaper", el);
+    if (!paper.length) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="hl-panel" style="margin-top:14px">
+      <span class="tag">the town's paper — documents linked to this issue</span>
+      ${paper.map(d => `
+        <div style="padding:7px 4px;border-left:2px solid var(--amber);padding-left:10px;margin-top:6px">
+          ${d.url ? `<a href="${esc(d.url)}" target="_blank" rel="noopener" style="font-weight:600;color:var(--memory)">📄 ${esc(d.kind || "document")} — ${esc((d.title || "").slice(0, 60))}</a>`
+            : `<b>📄 ${esc(d.kind || "document")}</b>`}
+          <span class="lmeta" style="margin-left:6px">${esc(d.date || "")} · ${d.n} cite${d.n !== 1 ? "s" : ""}</span>
+          ${(d.cites || []).slice(0, 3).map(c => `<div class="lmeta" style="margin-left:14px;color:var(--cream-dim)">p.${c.page} · ${esc((c.text || "").slice(0, 90))}</div>`).join("")}
+        </div>`).join("")}
+    </div>`;
   }
 
   function renderFollow(on) {
@@ -791,6 +900,11 @@ const MemoryPage = (() => {
   function timelineNode(n, idx, total) {
     const beads = (n.beads || []).slice(0, 5);
     const miles = (n.milestones || []);
+    const docs = (n.documents || []);
+    const nVotes = miles.filter(m => m.kind === "vote").length;
+    const tags = [];
+    if (nVotes) tags.push(`<span style="color:var(--memory)">${nVotes} ⬡ vote${nVotes > 1 ? "s" : ""}</span>`);
+    if (docs.length) tags.push(`<span style="color:var(--amber)">${docs.length} 📄</span>`);
     return `<div style="min-width:210px;max-width:240px;flex:0 0 auto;padding:0 12px;position:relative">
       <div style="position:absolute;top:8px;left:0;right:0;height:2px;background:var(--line)"></div>
       ${idx === 0 ? `<div style="position:absolute;top:8px;left:0;width:50%;height:2px;background:var(--ink-2)"></div>` : ""}
@@ -801,7 +915,7 @@ const MemoryPage = (() => {
       <div style="text-align:center;margin-top:6px">
         <div class="lmeta" style="color:var(--cream)">${esc(n.date || "undated")}</div>
         <div style="font-size:11.5px;color:var(--cream-dim);margin-top:2px">${esc((n.body || n.title || "").slice(0, 42))}</div>
-        <div class="lmeta">${n.n} moment${n.n !== 1 ? "s" : ""}${miles.length ? ` · <span style="color:var(--memory)">${miles.length} ◆ vote${miles.length > 1 ? "s" : ""}</span>` : ""}</div>
+        <div class="lmeta">${n.n} moment${n.n !== 1 ? "s" : ""}${tags.length ? " · " + tags.join(" · ") : ""}</div>
       </div>
       <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
         ${beads.map(b => `<div class="hl-seg hl-click" data-open="${esc(n.meeting_id)}" data-t="${b.t}"
@@ -809,8 +923,12 @@ const MemoryPage = (() => {
             <span class="tpill" style="margin-right:5px">${hms(b.t)}</span>${esc((b.text || "").slice(0, 52))}</div>`).join("")}
         ${miles.map(m => `<div class="hl-seg hl-click" data-open="${esc(n.meeting_id)}" data-t="${m.t}"
             style="padding:4px 6px;border-radius:6px;background:var(--ink-3);font-size:11px;border-left:2px solid var(--memory)">
-            ◆ <span class="tpill" style="margin-right:5px">${hms(m.t)}</span>${esc((m.text || "").slice(0, 46))}
+            ${m.kind === "vote" ? "⬡" : "◆"} <span class="tpill" style="margin-right:5px">${hms(m.t)}</span>${esc((m.text || "").slice(0, 42))}
+            ${m.tally ? ` <span class="tpill" style="margin-left:3px">${esc(m.tally)}</span>` : ""}
             ${m.outcome ? ` <span class="hl-kind hl-kind-money">${esc(m.outcome)}</span>` : ""}</div>`).join("")}
+        ${docs.map(d => `<div style="padding:4px 6px;border-radius:6px;background:var(--ink-2);font-size:11px;border-left:2px solid var(--amber)">
+            ${d.url ? `<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--cream)">📄 ${esc((d.kind || "doc"))}</a>` : `📄 ${esc(d.kind || "doc")}`}
+            ${d.cites && d.cites[0] ? ` <span class="lmeta">p.${d.cites[0].page}</span>` : ""}</div>`).join("")}
       </div>
     </div>`;
   }
@@ -845,6 +963,7 @@ const MemoryPage = (() => {
     $("#mem-meeting", el).style.display = "none";
     $("#mem-issue", el).style.display = "none";
     $("#mem-analytics", el).style.display = "none";
+    $("#mem-officials", el).style.display = "none";
   }
   function openAnalytics() {
     stop();
@@ -852,6 +971,82 @@ const MemoryPage = (() => {
     hideAllViews();
     $("#mem-analytics", el).style.display = "";
     czAnalytics.renderInto($("#mem-anbody", el), {});
+  }
+
+  async function openOfficials() {
+    stop(); $("#mem-ytframe", el).src = "";
+    S.view = "officials"; hideAllViews();
+    $("#mem-officials", el).style.display = "";
+    const box = $("#mem-offbody", el);
+    box.innerHTML = `<p class="hint">reading the roll calls…</p>`;
+    try {
+      const d = await api("/api/memory/officials");
+      const offs = d.officials || [];
+      if (!offs.length) { box.innerHTML = `<p class="hint">No roll calls on the record yet. Fetch a meeting's documents, then re-read its votes.</p>`; return; }
+      box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+        ${offs.map(o => `<div class="hl-panel">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <b style="font-size:16px">${esc(o.name)}</b>
+            <span class="lmeta">${esc(o.town || "")}</span></div>
+          <div style="display:flex;gap:6px;align-items:center;margin:8px 0;flex-wrap:wrap">
+            ${RC("yes")} ${o.yes} · ${RC("no")} ${o.no} · ${RC("abstain")} ${o.abstain}
+            <span class="lmeta" style="margin-left:auto">${o.total} recorded votes</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            ${(o.votes || []).slice(0, 30).map(v => `<span class="hl-click" data-open="${esc(v.meeting_id)}" data-t="${v.t || 0}"
+              title="${esc((v.motion || "").slice(0, 80))}" style="cursor:pointer">${RC(v.vote)}</span>`).join("")}
+          </div></div>`).join("")}
+      </div>`;
+      $$("[data-open]", box).forEach(r => r.onclick = () =>
+        openMeeting(r.dataset.open, parseFloat(r.dataset.t || 0)));
+    } catch (e) { box.innerHTML = `<p class="hint">${esc(e.message)}</p>`; }
+  }
+
+  async function publishRecord() {
+    const wrap = $("#mem-publishwrap", el);
+    const btn = $("#mem-publishbtn", el);
+    btn.disabled = true;
+    try {
+      const r = await api("/api/memory/publish", {});
+      const p = czProgress(wrap, { label: "pressing the public edition…", acc: "var(--memory)" });
+      watchJob(r.job.id, j => p.update(j));
+      const done = await jobDone(r.job.id);
+      p.finish(done);
+      if (done.status === "error") { toast(done.error, true); btn.disabled = false; return; }
+      const res = done.result || {};
+      const added = (res.meetings_added || []);
+      const deltas = Object.entries(res.count_deltas || {})
+        .map(([k, v]) => `${v > 0 ? "+" : ""}${v} ${k}`).join(" · ");
+      wrap.innerHTML = `<div class="hl-panel" style="border-color:var(--memory)">
+        <span class="tag">edition pressed — ${esc(res.edition_date || "")} · ${res.meetings} meetings · ${res.issues} issues</span>
+        <p style="font-size:13px;margin-top:6px">
+          ${res.changed ? "" : "No change since the last pressing — "}${added.length ? `${added.length} meeting(s) added. ` : ""}${deltas ? esc(deltas) + ". " : ""}
+          Fingerprint <code>${esc(res.corpus_hash || "")}</code>${res.prev_hash && res.prev_hash !== res.corpus_hash ? ` (was ${esc(res.prev_hash)})` : ""}.
+          ${res.budget_busts ? `<span style="color:var(--memory)">⚠ ${res.budget_busts} budget bust(s).</span>` : ""}</p>
+        <p class="hint">Now push it live (the desk never deploys itself):</p>
+        <pre style="background:var(--ink-3);padding:10px;border-radius:8px;overflow:auto;font-size:11px;user-select:all">git worktree add /tmp/ghp -B gh-pages origin/gh-pages
+cp -R site/docs/app /tmp/ghp/app
+cd /tmp/ghp && git add app && git commit -m "Deploy: the record, ${esc(res.edition_date || "")}" && git push origin gh-pages
+cd - && git worktree remove /tmp/ghp --force && git branch -D gh-pages
+# then poll https://control-z.org/app/ until it serves the new pressing</pre></div>`;
+      toast("edition pressed — the push ritual is ready to copy");
+    } catch (e) { toast(e.message, true); }
+    btn.disabled = false;
+  }
+
+  async function fetchDocuments(mid) {
+    const host = $("#mem-reading", el);
+    try {
+      const r = await api("/api/memory/documents/fetch", { id: mid });
+      const p = czProgress(host, { label: "fetching the town's paper…", acc: "var(--memory)" });
+      watchJob(r.job.id, j => p.update(j));
+      const done = await jobDone(r.job.id);
+      p.finish(done);
+      if (done.status === "error") { toast(done.error, true); return; }
+      const res = done.result || {};
+      const n = (res.documents || []).filter(d => !d.error).length;
+      toast(n ? `${n} document(s) linked · ${res.votes || 0} roll call(s) re-read` : (res.note || "no matching documents found"));
+      if (S.view === "meeting" && S.id === mid) loadDocsVotes(mid);
+    } catch (e) { toast(e.message, true); }
   }
   function backToRecord() {
     stop();
@@ -875,6 +1070,9 @@ const MemoryPage = (() => {
     $("#mem-ibackbtn", el).onclick = backToRecord;
     $("#mem-analyticsbtn", el).onclick = openAnalytics;
     $("#mem-anbackbtn", el).onclick = backToRecord;
+    $("#mem-officialsbtn", el).onclick = openOfficials;
+    $("#mem-offbackbtn", el).onclick = backToRecord;
+    $("#mem-publishbtn", el).onclick = publishRecord;
     $("#mem-rebuild", el).onclick = rebuildIssues;
     $("#mem-bell", el).onclick = ackNotifications;
     $("#mem-digest", el).onclick = copyDigest;
