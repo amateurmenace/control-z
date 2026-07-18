@@ -243,6 +243,7 @@ def create_suite_app():
     from .tools.modelstore import register_modelstore
     from .tools.ofx import register_ofx
     from .tools.pivot import register_pivot
+    from .tools.publisher import register_publisher
     from .tools.rise import register_rise
     from .tools.scribe import register_scribe
     from .tools.settings import register_settings
@@ -259,6 +260,7 @@ def create_suite_app():
     register_modelstore(app, jobs, frames)
     register_ofx(app, jobs, frames)
     register_pivot(app, jobs, frames)
+    register_publisher(app, jobs, frames)
     register_rise(app, jobs, frames)
     register_scribe(app, jobs, frames)
     register_settings(app, jobs, frames)

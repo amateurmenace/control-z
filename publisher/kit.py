@@ -44,18 +44,30 @@ def _read_json(path: Path) -> Optional[dict]:
         return None
 
 
+VIDEO_EXTS = (".mp4", ".mkv", ".mov", ".webm", ".m4v")
+
+
 def video_path(source: str) -> Optional[Path]:
-    """The playable file behind a source — the file itself, or the largest
-    video in a session folder (sessions may hold span clips beside the full
-    recording; largest is the full one)."""
+    """The playable file behind a source. A file is itself. A URL-session
+    folder rarely holds video — Highlighter lands downloads in its media
+    dir, named with the video id — so look there too, skipping the
+    [start-end] span cuts: only the full recording can serve every clip."""
     p = Path(source)
     if p.is_file():
         return p
-    if p.is_dir():
-        vids = [f for f in p.iterdir()
-                if f.suffix.lower() in (".mp4", ".mkv", ".mov", ".webm", ".m4v")]
-        return max(vids, key=lambda f: f.stat().st_size, default=None)
-    return None
+    if not p.is_dir():
+        return None
+    vids = [f for f in p.iterdir() if f.suffix.lower() in VIDEO_EXTS]
+    if vids:
+        return max(vids, key=lambda f: f.stat().st_size)
+    try:
+        from czcore.paths import media_dir
+        pool = [f for f in media_dir("highlighter").iterdir()
+                if f.suffix.lower() in VIDEO_EXTS and f"[{p.name}]" in f.name
+                and not re.search(r"\[\d+-\d+\]$", f.stem)]
+        return max(pool, key=lambda f: f.stat().st_size, default=None)
+    except OSError:
+        return None
 
 
 def meeting_meta(source: str) -> dict:

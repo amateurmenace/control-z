@@ -49,6 +49,7 @@ const HomePage = (() => {
     { id: "pivot", line: "the finished cut, reframed to 9:16 or 1:1" },
     { id: "scribe", line: "captions and subtitles for the locked cut" },
     { id: "rise", line: "the master, pushed up to delivery resolution" },
+    { id: "publisher", line: "the kit that gets it seen — clips, copy, posts" },
   ];
 
   function chainHTML(chain) {

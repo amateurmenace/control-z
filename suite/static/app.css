@@ -202,6 +202,39 @@ h2 { font-family: var(--head); font-size: 15px; font-weight: 600; letter-spacing
   border-top: 3.8px solid transparent; border-bottom: 3.8px solid transparent;
   border-left: 6px solid var(--line); }
 
+/* publisher — the review queue around the kit */
+.beta-chip { font-family: var(--mono); font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
+  border-radius: 5px; padding: 2px 7px; }
+.pb-clip { display: flex; gap: 10px; background: rgba(255,255,255,.55);
+  border: 1px solid var(--line-soft); border-radius: 9px;
+  padding: 10px 12px; margin-top: 8px; }
+.pb-clip.off { opacity: .55; }
+.pb-cliplabel { font-family: var(--head); font-weight: 600; font-size: 13px; }
+.pb-cliptime { display: flex; gap: 14px; align-items: center;
+  color: var(--cream-dim); font-size: 11.5px; font-family: var(--mono);
+  margin-top: 3px; flex-wrap: wrap; }
+.pb-nudge button { border: 1px solid var(--line); background: #fff;
+  border-radius: 5px; width: 20px; height: 18px; font-size: 11px;
+  line-height: 1; margin: 0 1px; }
+.pb-ratios { display: flex; gap: 6px; align-items: center; margin-top: 7px;
+  flex-wrap: wrap; }
+.pb-pill { font-family: var(--mono); font-size: 10.5px; padding: 3px 10px;
+  border-radius: 999px; border: 1px solid var(--line); background: #fff;
+  color: var(--cream-dim); }
+.pb-pill.on { background: var(--publisher); border-color: var(--publisher);
+  color: #fff; }
+.pb-off { display: inline-flex; gap: 6px; align-items: center;
+  font-size: 10.5px; color: var(--cream-faint); font-family: var(--mono); }
+.pb-off input[type="range"] { width: 110px; }
+.pb-why { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.pb-why span { font-size: 10px; font-family: var(--mono);
+  color: var(--cream-faint); border: 1px solid var(--line-soft);
+  border-radius: 5px; padding: 1px 6px; }
+.pb-keep input { width: 15px; height: 15px; accent-color: var(--publisher); }
+.pb-copy .field input[type="text"], .pb-copy .field textarea { width: 100%; }
+
 .recents { margin-top: 26px; }
 .recent-row {
   display: flex; gap: 10px; align-items: baseline; width: 100%; text-align: left;

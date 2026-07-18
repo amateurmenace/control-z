@@ -45,7 +45,7 @@ const TOOLS = [
   /* the community wing grows (specs/12): four more BIG apps moving in.
      Lane ownership + who flips `ready` is law in specs/PARALLEL.md. */
   { id: "publisher", name: "Publisher", acc: "var(--publisher)",
-    ready: false, when: "1.6", group: "community", long: "Community Publisher",
+    ready: true, when: "1.6", group: "community", long: "Community Publisher",
     verb: "gets it seen", one: "program in → clips, copy and posts out" },
   { id: "memory", name: "Memory", acc: "var(--memory)",
     ready: false, when: "1.6", group: "community", long: "Community Memory",

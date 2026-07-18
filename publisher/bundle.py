@@ -93,15 +93,15 @@ def assemble(source: str, kit: dict, rendered: List[dict],
 
     files = []
     for i, r in enumerate(rendered, 1):
-        src = Path(r["out"])
-        if not src.exists():
+        src = Path(r.get("out") or r.get("path", ""))
+        if not src.is_file():
             continue
         dst = kdir / "clips" / f"{name}-clip{i:02d}-{r['ratio']}{src.suffix}"
         shutil.copy2(src, dst)
         files.append(str(dst))
     for i, r in enumerate(thumbs or [], 1):
-        src = Path(r["out"])
-        if not src.exists():
+        src = Path(r.get("out") or r.get("path", ""))
+        if not src.is_file():
             continue
         dst = kdir / "thumbs" / f"{name}-thumb{i:02d}-{r['ratio']}.png"
         shutil.copy2(src, dst)
