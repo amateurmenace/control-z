@@ -143,9 +143,44 @@ def brief(segments: List[dict], n: int = 5) -> List[dict]:
     return [{"t": round(p["t"], 1), "text": p["text"]} for p in picks]
 
 
+def names_match(a: str, b: str) -> bool:
+    """One name, two caption spellings? Conservative on purpose: same
+    word count, every word opening with the same letter, and a high
+    sequence ratio — "Councelor Kim" joins "Councilor Kim"; "Mayor Jan"
+    never joins "Mayor Dan"."""
+    import difflib
+
+    aw, bw = a.lower().split(), b.lower().split()
+    if len(aw) != len(bw):
+        return False
+    if any(x[0] != y[0] for x, y in zip(aw, bw)):
+        return False
+    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() >= 0.84
+
+
+def _fold_names(rows: List[dict]) -> List[dict]:
+    """Fold misspellings into the most-counted spelling. The winner keeps
+    the seat and carries the others in `also` — the fold shows its work."""
+    out: List[dict] = []
+    for r in sorted(rows, key=lambda x: -x["count"]):
+        hit = next((w for w in out if names_match(w["name"], r["name"])),
+                   None)
+        if hit is None:
+            out.append(dict(r))
+        else:
+            hit["count"] += r["count"]
+            hit["t"] = min(hit["t"], r["t"])
+            hit.setdefault("also", []).append(r["name"])
+    out.sort(key=lambda x: -x["count"])
+    return out
+
+
 def entities(segments: List[dict], top: int = 12) -> Dict[str, List[dict]]:
     """People / places / organizations / money, pattern-harvested with
-    counts and a first-mention timestamp. Heuristic and labeled as such."""
+    counts and a first-mention timestamp. Heuristic and labeled as such.
+    Caption misspellings of one name fold into the winning spelling
+    (names_match) so a person isn't split across rows — money strings
+    stay literal."""
     buckets: Dict[str, Counter] = {k: Counter() for k in
                                    ("people", "places", "organizations", "money")}
     first: Dict[str, float] = {}
@@ -175,9 +210,16 @@ def entities(segments: List[dict], top: int = 12) -> Dict[str, List[dict]]:
         if spk and not str(spk).lower().startswith("speaker"):
             buckets["people"][str(spk)] += 1
             first.setdefault(str(spk), t)
-    return {k: [{"name": n_, "count": c, "t": round(first.get(n_, 0), 1)}
-                for n_, c in v.most_common(top)]
-            for k, v in buckets.items()}
+    out: Dict[str, List[dict]] = {}
+    for k, v in buckets.items():
+        # a few extra candidates go in so sub-top spellings can join
+        # their winner before the cut
+        rows = [{"name": n_, "count": c, "t": round(first.get(n_, 0), 1)}
+                for n_, c in v.most_common(top + 8)]
+        if k != "money":
+            rows = _fold_names(rows)
+        out[k] = rows[:top]
+    return out
 
 
 def hotwords(segments: List[dict], meta: Optional[dict] = None,

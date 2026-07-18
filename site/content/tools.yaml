@@ -56,7 +56,10 @@
   name: Pivot
   verbline: Pivot follows the subject.
   oneliner: Auto-reframe your 16:9 masters to 9:16, 1:1, 4:5 — with an editor's eye, not a cropping algorithm's.
-  status: in-progress
+  status: shipped
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
   accent: '#5B7A9E'
   stage: deliver
   audiences:
@@ -107,7 +110,10 @@
   verbline: Stencil traces the subject.
   oneliner: Click an object once, get a matte for the whole shot — delivered as matte clips any page of
     free Resolve can use.
-  status: in-progress
+  status: shipped
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
   accent: '#8E6A9E'
   stage: color
   audiences:
@@ -153,7 +159,10 @@
   verbline: Scribe writes it all down.
   oneliner: 'Local transcription with speakers, captions, and the paper-edit superpower: select text,
     get a cut timeline back.'
-  status: in-progress
+  status: shipped
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
   accent: '#52678C'
   stage: edit
   audiences:
@@ -205,7 +214,10 @@
   verbline: Clear rescues the voice.
   oneliner: Voice isolation, de-hum, de-click, room-tone matching, and loudness to spec — the RX-shaped
     hole in every community edit.
-  status: in-progress
+  status: shipped
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
   accent: '#4A8C7E'
   stage: sound
   audiences:
@@ -253,7 +265,10 @@
   verbline: Rise restores the detail.
   oneliner: SD→HD/4K reconstruction for tape-era archives and punch-in rescue — with a heatmap of what
     it invented.
-  status: in-progress
+  status: shipped
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
   accent: '#C99A3A'
   stage: restore
   audiences:
@@ -299,7 +314,10 @@
   verbline: Depth measures the scene.
   oneliner: A depth matte for every clip — fog, rack focus, and depth-graded atmosphere through a paste-in
     Fusion template pack.
-  status: in-progress
+  status: shipped
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
   accent: '#5E5A8C'
   stage: color
   audiences:
@@ -363,14 +381,37 @@
   - journalists
 - id: slate
   name: Slate
-  status: proposed
+  verbline: Slate makes it official.
+  oneliner: 'Station graphics kit: lower thirds, slates, bars & tone, countdowns — typeset once, rendered broadcast-clean with real alpha.'
+  status: shipped
+  accent: '#B0618F'
   stage: deliver
-  oneliner: 'Station graphics kit: slates, bars & tone, countdowns, lower-third templates.'
+  audiences:
+  - stations
+  - journalists
   replaces:
   - name: hand-rolled every time
     price: hours
-  audiences:
-  - stations
+  platforms:
+  - macOS (control-z Suite) · Windows next
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
+  quickstart:
+  - Open Slate in the suite and pick a template — lower third, slate, countdown, or bars.
+  - Type the names; the preview is the render.
+  - Render ProRes 4444 (alpha), PNG, or GIF and drop it in the editor's bin.
+  shows_its_work: The preview IS the output pipeline — same renderer, same fonts, same alpha; nothing changes between the window and the file.
+  limitations:
+  - Static graphics and countdowns — kinetic type still belongs to Resolve's Text+.
+  - Font discovery uses the fonts your system already has; it won't fetch webfonts.
+  models: []
+  features:
+  - Lower thirds, full slates, countdown clocks, and bars & tone from one panel
+  - ProRes 4444 out with straight alpha (yuva444p12le) — keys clean over anything
+  - PNG stills and looping GIFs for web and social from the same template
+  - The suite's font discovery — your station typeface, not a bundled lookalike
+  tech: 'Typography renders through Pillow at the output''s own pixel size (no scaling pass), composited to premultiplied-safe straight alpha, then encoded by the suite''s LGPL ffmpeg: ProRes 4444 for the editor, PNG for stills, palette-optimized GIF for the web. Countdowns render per-frame from the same layout engine, so the type never shifts between seconds.'
 - id: veil
   name: Veil
   status: proposed
@@ -561,3 +602,142 @@
     self-limiting. Grain is per-RGB-layer density noise, bandpassed at a physical pitch and boiling every
     frame, optionally keyed to Hush's clean-confidence matte. Metal on macOS, OpenCL on Windows/Linux,
     all agreeing with a CPU reference to ~2e-5; identity at default and alpha always passes through untouched.
+- id: highlighter
+  name: Highlighter
+  verbline: Highlighter finds the moments.
+  oneliner: 'Community Highlighter: a public meeting video becomes a highlight reel — read in text, cut by the clock, analyzed like a record.'
+  status: shipped
+  accent: '#1E7F63'
+  stage: edit
+  audiences:
+  - stations
+  - journalists
+  - advocates
+  replaces:
+  - name: an afternoon of scrubbing
+    price: hours per meeting
+  platforms:
+  - macOS (control-z Suite) · Windows next
+  - the web app, free at community-highlighter.onrender.com
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
+    guide: https://community-highlighter.onrender.com
+    guide_label: Try the web app
+  quickstart:
+  - Paste a meeting URL (or open a local recording) — a 7-hour meeting reads in seconds via its own captions.
+  - Mark moments from the transcript, the search, or the ✨ buttons; they land on a timeline with per-clip trims, speed, and fades.
+  - Export a share link the web player opens, or download-and-cut one MP4 with title cards — only the kept seconds leave YouTube.
+  shows_its_work: Every reading is labeled — the brief is extractive, ask is retrieval, entities are pattern-harvested with counts and timestamps; the AI buttons say generative and run only on your own key.
+  limitations:
+  - YouTube gates caption delivery by IP reputation; the suite routes around it honestly (your proxy, or the community caption relay) but a gated bare IP may need one.
+  - The AI reel, report narrative, and translations need your own API key — no key ships, nothing requires one.
+  models: []
+  features:
+  - Reads the meeting from its own captions in seconds; Whisper (with harvested name hotwords) when there are none
+  - 'The Meeting Analyzer: people/places/things with clips and 🔍 Investigate, framing lenses, a cross-reference network, topic heatmap, disagreements, and the town portal''s own agendas and minutes'
+  - '✨ local highlight picks, 🤖 AI picks on your key — every pick clamped to the meeting''s real clock'
+  - 'Two doors out: a share link the deployed web player opens (nothing uploads), or a staged download-and-stitch MP4 with title cards'
+  - Full report as markdown + selectable-text PDF; summary and whole-transcript translation in ten languages
+  tech: 'Ingest races the watch page against yt-dlp for captions and takes the first winner; transcripts live as sidecars any tool can read. The insight engine is counted, not modeled: extractive briefs, pattern entities with conservative spelling folds, word-boundary framing lenses, sentence-level co-occurrence networks. Exports ride one ffmpeg concat graph — cuts, retimes, fades, and Pillow title cards in a single pass. The town''s paper trail comes from its own CivicClerk portal, matched by the meeting''s date and name.'
+- id: grabber
+  name: Grabber
+  verbline: Grabber brings the meeting home.
+  oneliner: 'BIG Video Grabber: find a town''s recordings where they actually live — CivicClerk portals, zoomgov shares, YouTube — and land them ready to edit.'
+  status: shipped
+  accent: '#2E8FB5'
+  stage: edit
+  audiences:
+  - stations
+  - journalists
+  replaces:
+  - name: screen recording the player
+    price: quality + hours
+  platforms:
+  - macOS (control-z Suite) · Windows next
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
+  quickstart:
+  - Type the town's CivicClerk tenant (brooklinema is the part before .api.civicclerk.com) and a date range.
+  - Every event lists its links — the recording, and the agenda/minutes PDFs the portal publishes.
+  - Fetch at the quality you need; the ladder falls back honestly (best → 4K → … → audio-only).
+  shows_its_work: Each event names the raw fields its links came from, and every fetch narrates what yt-dlp is actually doing — including the fallback it took.
+  limitations:
+  - zoomgov.com isn't supported by yt-dlp — the built-in resolver walks Zoom's share pages itself, and when Zoom redecorates, each step fails naming itself.
+  - CivicClerk tenants disagree about where recordings hide; the reader harvests every URL-shaped field and shows its work rather than guessing silently.
+  models: []
+  features:
+  - CivicClerk portal reader — events, recordings, and the published agenda/packet/minutes PDFs
+  - A zoomgov share-link resolver of our own (four requests, cookie jar, honest failures)
+  - yt-dlp underneath — the other thousand sites, with a nightly self-update on every page open
+  - Quality ladder downloads with span-only fetches — only the seconds you keep leave the host
+  tech: 'The portal reader speaks CivicClerk''s OData dialect defensively: every URL-shaped string in an event is harvested with its field path, video-ish links sorted first, publishedFiles resolved through the portal''s own GetMeetingFileStream endpoint. The zoomgov resolver walks share page → meeting id → play info → mp4 with the cookie jar and Referer Zoom expects. Downloads ride the suite''s managed yt-dlp nightly, which never routes its own self-update through your proxy.'
+- id: index
+  name: Index
+  verbline: Index knows where everything is.
+  oneliner: Your footage archive, searchable in plain words — scan folders, search what was said, and jump into the editor with markers.
+  status: shipped
+  accent: '#96714E'
+  stage: edit
+  audiences:
+  - stations
+  - filmmakers
+  replaces:
+  - name: MAM/DAM systems
+    price: $1k–5k/yr
+  platforms:
+  - macOS (control-z Suite) · Windows next
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
+  quickstart:
+  - Point Index at a folder; it scans what's there and reads any transcript sidecars beside the files.
+  - Search in plain words — a name, a street, a phrase — and get files with the moments that say it.
+  - Export FCPXML markers and open the hits in your editor, or hand a meeting straight to the Highlighter.
+  shows_its_work: Search hits show the sentence and the second they came from — the index is your files plus their transcripts, nothing inferred.
+  limitations:
+  - Speech search needs words on disk — run Scribe (or the Highlighter's caption read) once per file first.
+  - It indexes filenames, metadata, and transcripts — not what's visually IN the frame.
+  models: []
+  features:
+  - Folder scans that respect your structure — nothing moves, nothing uploads
+  - Plain-word speech search across every transcript sidecar on the shelf
+  - FCPXML marker export — search hits become editor markers
+  - One-click handoff of any meeting to the Community Highlighter
+  tech: 'Index is deliberately boring: a filesystem scan plus the .scribe.json sidecars the other tools already write, queried with plain substring and word matches. The interesting part is the contract — because Scribe, the Highlighter, and Index share one sidecar format, any file transcribed anywhere becomes searchable everywhere, and the FCPXML export turns hits into markers Resolve reads natively.'
+- id: kb
+  name: Meeting Library
+  verbline: Library reads them together.
+  oneliner: Every meeting on your machine, read as one record — how the framing moves, who keeps appearing, how any topic travels, and reels cut across meetings.
+  status: shipped
+  accent: '#5E5A86'
+  stage: edit
+  audiences:
+  - stations
+  - journalists
+  - advocates
+  replaces:
+  - name: institutional memory
+    price: someone's whole job
+  platforms:
+  - macOS (control-z Suite) · Windows next
+  links:
+    github: https://github.com/amateurmenace/control-z
+    download: https://github.com/amateurmenace/control-z/releases/latest
+  quickstart:
+  - Open Library in the suite — every meeting the Highlighter has read is already on the shelf.
+  - Read the grids — framing across meetings, topic evolution, entity tracking — and click anything to trace it through the full transcripts.
+  - Pick moments from any trace onto the montage tray and render one reel across meetings, each clip carded with its own meeting's name.
+  shows_its_work: Every number is the same counted per-meeting reading the analyzer shows, aggregated in plain code — and the caption-spelling folds list the spellings they joined.
+  limitations:
+  - Cross-meeting cards need at least two read meetings; a meeting without words is listed as unread, not invented.
+  - The optional AI read sends only the counted digest — dates, tallies, names — never a transcript, and only on your own key.
+  models: []
+  features:
+  - Framing across meetings — eight civic lenses, each meeting a column, trends called out
+  - Topic evolution and entity tracking, with caption misspellings folded into one name that shows its work
+  - Meeting comparison side by side — shared topics and names outlined against what each carries alone
+  - Discourse analysis — one term traced through every meeting at a per-1k-word rate, receipts included
+  - The Montage Maker — a reel cut ACROSS meetings; URL sessions fetch only the picked seconds
+  tech: 'The Library is an aggregation, not a database: each meeting''s insight sidecar (counted framing, topics, entities, pace) is read through the same door the analyzer uses, then folded — entity spellings join under a conservative match (same word count, same initials, high sequence ratio), discourse rates normalize per thousand words so a seven-hour meeting can''t out-shout a one-hour one, and the montage stitcher letterboxes mixed resolutions into one frame with a title card naming each clip''s meeting.'

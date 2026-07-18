@@ -84,6 +84,47 @@ def library_rows() -> list:
     return rows
 
 
+def _entity_union(rows: list) -> list:
+    """Every meeting's entities as one folded roll: caption spellings of
+    a name join across meetings too (a February council may write
+    "Councelor" where June writes "Councilor"). The most-counted spelling
+    keeps the seat — and its kind — while the others ride in `also`, so
+    the fold shows its work. person↔org may fold together (the harvester
+    reads "Council Hamilton" as an org and "Councelor Hamilton" as a
+    person — same caption noise); places stay strict. per =
+    {row_index: count}."""
+    from highlighter.insight import names_match
+
+    def kinds_ok(a: str, b: str) -> bool:
+        return a == b or {a, b} == {"person", "org"}
+
+    union: list = []
+    for ri, r in enumerate(rows):
+        for bucket, kind in (("people", "person"), ("places", "place"),
+                             ("organizations", "org")):
+            for e in (r.get("entities") or {}).get(bucket) or []:
+                hit = next((u for u in union
+                            if kinds_ok(u["_kind"], kind)
+                            and names_match(u["_spell"], e["name"])), None)
+                if hit is None:
+                    hit = {"_kind": kind, "_spell": e["name"], "total": 0,
+                           "per": {}, "spellings": {}, "kinds": {}}
+                    union.append(hit)
+                hit["total"] += e["count"]
+                hit["per"][ri] = hit["per"].get(ri, 0) + e["count"]
+                hit["spellings"][e["name"]] = (
+                    hit["spellings"].get(e["name"], 0) + e["count"])
+                hit["kinds"][e["name"]] = kind
+    out = []
+    for u in union:
+        name = max(u["spellings"], key=u["spellings"].get)
+        also = sorted(s for s in u["spellings"] if s != name)
+        out.append({"name": name, "kind": u["kinds"][name],
+                    "total": u["total"], "per": u["per"], "also": also})
+    out.sort(key=lambda u: (-len(u["per"]), -u["total"]))
+    return out[:16]
+
+
 def register_kb(app, jobs, frames):
     from fastapi import Body
     from fastapi.responses import JSONResponse
@@ -134,7 +175,74 @@ def register_kb(app, jobs, frames):
                 "qtypes": qtypes,
                 "disagreements": len(data.get("disagreements") or []),
             })
-        return {"rows": rows, "skipped": skipped}
+        return {"rows": rows, "skipped": skipped,
+                "entity_union": _entity_union(rows)}
+
+    @app.post("/api/kb/ai-compare")
+    def api_ai_compare(body: dict = Body(default={})):
+        """A narrative read ACROSS meetings, on the user's own key — and
+        only over the counted record. The model sees the matrix digest
+        (dates, framing counts, topics, entities, decision/question
+        tallies); the transcripts never leave this machine."""
+        from czcore import llm
+
+        if not llm.enabled():
+            return JSONResponse({"error": "no API key configured — "
+                                          "Settings → AI"}, status_code=409)
+        rows, skipped = [], []
+        for meta in library_rows():
+            try:
+                data = insight_payload(meta["source"])
+            except (LookupError, ValueError):
+                continue
+            rows.append({
+                "title": meta["title"][:80], "day": meta["day"],
+                "duration_min": round(
+                    (data.get("pace") or {}).get("duration", 0) / 60),
+                "wpm": (data.get("pace") or {}).get("wpm_avg", 0),
+                "framing": {l["lens"]: l["count"] for l in
+                            (data.get("framing") or {}).get("lenses", [])
+                            if l["count"]},
+                "topics": [f"{t['topic']} ×{t['count']}"
+                           for t in (data.get("topics") or [])[:8]],
+                "entities": {k: [e["name"] for e in v[:6]]
+                             for k, v in (data.get("entities") or {}).items()
+                             if k != "money" and v},
+                "decisions": len(data.get("decisions") or []),
+                "questions": len(data.get("questions") or []),
+                "tense_moments": len(data.get("disagreements") or []),
+            })
+        if len(rows) < 2:
+            return JSONResponse({"error": "the comparison needs at least "
+                                          "two read meetings"},
+                                status_code=409)
+
+        def work(job):
+            job.message = "asking the model for a read across meetings…"
+            digest = json.dumps(rows, ensure_ascii=False)
+            text = llm.complete(
+                "Here are counted readings of public meetings from one "
+                "town's library — dates, civic-lens word counts, recurring "
+                "topics, harvested names, decision and question tallies. "
+                "No transcripts are included. Write a grounded comparison "
+                "across the meetings: what themes rise or fade over time, "
+                "which bodies talk about what, where the tension "
+                "concentrates, and what a community journalist should "
+                "look at next. Only claim what these counts support, and "
+                "name the meetings by their dates.\n\n" + digest,
+                system="You read civic meeting statistics for a community "
+                       "media station. You are careful: counts are counts, "
+                       "not proof of intent. Short paragraphs, no headers, "
+                       "no bullet spam.",
+                max_tokens=900)
+            st = llm.status()
+            job.message = "the read is in"
+            return {"text": text, "meetings": len(rows),
+                    "origin": f"generative ({st.get('model')}, your key) — "
+                              "counted inputs only, no transcripts sent"}
+
+        return jobs.start("ai-compare", work, tool="kb",
+                          label=f"AI read across {len(rows)} meetings").to_dict()
 
     @app.post("/api/kb/montage")
     def api_montage(body: dict = Body(...)):

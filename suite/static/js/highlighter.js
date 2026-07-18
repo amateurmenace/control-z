@@ -849,7 +849,8 @@ const HighlighterPage = (() => {
         <div class="hl-pptgrid">
         ${merged.map((r, i) => `<div class="hl-entrow">
           <span class="hl-kind hl-kind-${r.kind}">${r.kind}</span>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(r.name)}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis"
+            title="${r.also?.length ? esc("also spelled: " + r.also.join(", ") + " — the captions' spellings, folded") : ""}">${esc(r.name)}${r.also?.length ? ` <span class="hint">· ${r.also.length + 1} spellings</span>` : ""}</span>
           <span class="cnt">×${r.count}</span>
           <button class="btn" data-clips="${esc(r.name)}" title="every moment that says it">clips</button>
           <button class="btn" data-inv="${esc(r.name)}" title="news · Wikipedia · maps · your library">🔍</button>

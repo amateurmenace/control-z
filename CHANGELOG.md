@@ -124,6 +124,28 @@
   meetings: "override" traced ×49 across 3 of 6 — surging in the March
   10 Select Board (×45, 0.85/1k words), echoing in the June School
   Committee.
+- **One person, one row.** Caption misspellings used to split a name
+  across the analyzer and the Library ("Councelor Hamilton" beside
+  "Council Hamilton"). Entity harvesting now folds spellings under a
+  conservative match — same word count, same initials per word, high
+  sequence ratio — so "Mayor Jan" can never join "Mayor Dan". The
+  winning spelling keeps the seat and lists the others (`also`), the
+  Library's tracking folds across meetings too (person↔org may join,
+  since that split IS the caption noise; places stay strict), and the
+  insight cache carries a real version number now so old readings
+  rebuild once.
+- **The Library grew two cards.** **Topic evolution** — each meeting's
+  recurring topics as a grid over time, every cell tracing the term
+  through the full transcripts. And an **AI read across meetings** (BYO
+  key, labeled generative): one button sends the counted digest — dates,
+  lens counts, topics, names, tallies — never a transcript, and the
+  answer names meetings by their dates.
+- **The site tells the truth about what shipped.** control-z.org's
+  suitebar now reads v1.1.0 shipped / v1.5.0 in signing with all ten
+  tools + the Library chipped on it, the six originals flipped to
+  shipped with real download links, and Slate, Community Highlighter,
+  BIG Video Grabber, Index, and the Meeting Library each got a full
+  card — features, quickstart, honest limitations, technical detail.
 - **The civic finder means "latest" now.** Searching a municipality used
   to ride YouTube's relevance index — a smattering of the town's year.
   It now asks YouTube's own date-sorted results page ("brookline" leads

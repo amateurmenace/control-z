@@ -128,10 +128,15 @@ def _load_transcript(source: str):
     return None, None
 
 
+# bump when any insight reading changes shape or behavior — every cached
+# insight.json from an older read rebuilds once instead of shipping stale
+INSIGHT_V = 2   # 2: entity spellings fold (names_match), `also` lists
+
+
 def insight_payload(source: str, fresh: bool = False) -> dict:
     """The meeting's full local reading, cached beside the transcript.
-    One door for the analyzer AND the Library page — the cache gate is the
-    newest key, so caches from before the analyzer grew rebuild once.
+    One door for the analyzer AND the Library page — INSIGHT_V gates the
+    cache, so caches from before a change rebuild once.
     Raises LookupError (a sentence) when the meeting has no words yet."""
     from highlighter import insight
 
@@ -144,14 +149,14 @@ def insight_payload(source: str, fresh: bool = False) -> dict:
         try:
             data = json.loads(cache.read_text())
             if data.get("n_segments") == len(t["segments"]) \
-                    and "framing" in data:
+                    and data.get("v") == INSIGHT_V:
                 return data
         except ValueError:
             pass
     segs = t["segments"]
     meta = _session_meta(Path(source)) if _is_session(source) else None
     data = {
-        "origin": origin, "n_segments": len(segs),
+        "origin": origin, "n_segments": len(segs), "v": INSIGHT_V,
         "brief": insight.brief(segs),
         "entities": insight.entities(segs),
         "wordfreq": insight.word_freq(segs),

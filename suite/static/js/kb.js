@@ -32,8 +32,19 @@ const KBPage = (() => {
       <div id="kb-framing" style="margin-top:8px;overflow-x:auto"></div>
     </div>
     <div class="hl-panel" style="margin-bottom:14px">
+      <span class="tag">topic evolution — each meeting's recurring topics over time; click a cell to trace it through the full transcripts</span>
+      <div id="kb-topics" style="margin-top:8px;overflow-x:auto"></div>
+    </div>
+    <div class="hl-panel" style="margin-bottom:14px">
       <span class="tag">entity tracking — who appears across which meetings, and how often; click a name to trace it</span>
       <div id="kb-entities" style="margin-top:8px;overflow-x:auto"></div>
+    </div>
+    <div class="hl-panel" style="margin-bottom:14px;display:none" id="kb-aicard">
+      <span class="tag">ai read across meetings — generative, your key, counted inputs only</span>
+      <div class="hint" style="margin:6px 0">sends the matrix digest — dates, lens counts, topics,
+        names, tallies — <b>never a transcript</b>. One click, one spend.</div>
+      <button class="btn cta" id="kb-aigo" style="width:auto;padding:6px 16px">✨ Read the library</button>
+      <div id="kb-aiout" style="margin-top:8px;font-size:13px;line-height:1.65"></div>
     </div>
     <div class="hl-panel" style="margin-bottom:14px">
       <span class="tag">meeting comparison — two meetings, side by side</span>
@@ -217,7 +228,51 @@ const KBPage = (() => {
     });
   }
 
-  /* ---------- entity tracking ---------- */
+  /* ---------- topic evolution ---------- */
+  function renderTopics() {
+    const box = $("#kb-topics", el);
+    const rows = K.rows || [];
+    if (rows.length < 2) {
+      box.innerHTML = `<div class="hint">topic evolution needs at least two read meetings</div>`;
+      return;
+    }
+    const union = new Map();  // topic -> {total, per: Map(rowIdx -> count)}
+    rows.forEach((r, ri) => (r.topics || []).forEach(t => {
+      const u = union.get(t.topic) || { total: 0, per: new Map() };
+      u.total += t.count;
+      u.per.set(ri, t.count);
+      union.set(t.topic, u);
+    }));
+    const tops = [...union.entries()]
+      .sort((a, b) => (b[1].per.size - a[1].per.size) || (b[1].total - a[1].total))
+      .slice(0, 12);
+    if (!tops.length) { box.innerHTML = `<div class="hint">nothing recurred enough to chart</div>`; return; }
+    const maxC = Math.max(...tops.flatMap(([, u]) => [...u.per.values()]), 1);
+    box.innerHTML = `<div style="display:grid;grid-template-columns:190px repeat(${rows.length},minmax(56px,1fr));gap:3px;align-items:center">
+      <span></span>
+      ${rows.map(r => `<span style="font-size:11px;text-align:center;color:var(--cream-dim)">${dayLabel(r.day)}</span>`).join("")}
+      ${tops.map(([topic, u]) => `
+        <button class="hl-click" data-topic="${esc(topic)}" title="trace “${esc(topic)}” through the full transcripts"
+          style="display:flex;align-items:center;gap:6px;border:none;background:none;cursor:pointer;font-size:12.5px;text-align:left;padding:2px 0">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(topic)}</span>
+          <span class="cnt">×${u.total} · ${u.per.size} mtg</span>
+        </button>`
+        + rows.map((r, ri) => {
+          const c = u.per.get(ri) || 0;
+          return `<button data-topic="${esc(topic)}" title="${esc(topic)} — ${c ? "×" + c + " in " : "not in the top topics of "}${esc(shortTitle(r.title))}"
+            style="height:22px;border:1px solid var(--line);border-radius:5px;cursor:pointer;
+                   background:color-mix(in srgb, var(--kb) ${Math.round(82 * c / maxC)}%, transparent)"></button>`;
+        }).join("")).join("")}
+    </div>
+    <div class="hint" style="margin-top:5px">cells count each meeting's own recurring-topic list — the trace reads every full transcript</div>`;
+    $$("[data-topic]", box).forEach(b => b.onclick = () => {
+      $("#kb-q", el).value = b.dataset.topic;
+      trace();
+      $("#kb-discourse", el).scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  /* ---------- entity tracking (server-folded union) ---------- */
   function renderEntities() {
     const box = $("#kb-entities", el);
     const rows = K.rows || [];
@@ -225,33 +280,22 @@ const KBPage = (() => {
       box.innerHTML = `<div class="hint">entity tracking needs at least two read meetings</div>`;
       return;
     }
-    const totals = new Map();  // name -> {kind, total, per: Map(rowIdx -> count)}
-    rows.forEach((r, ri) => {
-      [["people", "person"], ["places", "place"], ["organizations", "org"]]
-        .forEach(([bucket, kind]) => (r.entities?.[bucket] || []).forEach(e => {
-          const key = e.name.toLowerCase();
-          const row = totals.get(key) || { name: e.name, kind, total: 0, per: new Map() };
-          row.total += e.count;
-          row.per.set(ri, (row.per.get(ri) || 0) + e.count);
-          totals.set(key, row);
-        }));
-    });
-    const ents = [...totals.values()].filter(e => e.per.size >= 1)
-      .sort((a, b) => (b.per.size - a.per.size) || (b.total - a.total)).slice(0, 14);
+    const ents = (K.union || []).slice(0, 14);
     if (!ents.length) { box.innerHTML = `<div class="hint">no entities harvested yet</div>`; return; }
-    const maxC = Math.max(...ents.flatMap(e => [...e.per.values()]), 1);
+    const maxC = Math.max(...ents.flatMap(e => Object.values(e.per)), 1);
     box.innerHTML = `<div style="display:grid;grid-template-columns:190px repeat(${rows.length},minmax(56px,1fr));gap:3px;align-items:center">
       <span></span>
       ${rows.map(r => `<span style="font-size:11px;text-align:center;color:var(--cream-dim)">${dayLabel(r.day)}</span>`).join("")}
       ${ents.map(e => `
-        <button class="hl-click" data-ent="${esc(e.name)}" title="trace ${esc(e.name)} through every meeting"
+        <button class="hl-click" data-ent="${esc(e.name)}"
+          title="${esc(e.also?.length ? `also spelled: ${e.also.join(", ")} — the captions' spellings, folded` : `trace ${e.name} through every meeting`)}"
           style="display:flex;align-items:center;gap:6px;border:none;background:none;cursor:pointer;font-size:12.5px;text-align:left;padding:2px 0">
           <span class="hl-kind hl-kind-${e.kind}">${e.kind}</span>
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.name)}</span>
-          <span class="cnt">×${e.total} · ${e.per.size} mtg</span>
+          <span class="cnt">×${e.total} · ${Object.keys(e.per).length} mtg${e.also?.length ? ` · ${e.also.length + 1} spellings` : ""}</span>
         </button>`
         + rows.map((r, ri) => {
-          const c = e.per.get(ri) || 0;
+          const c = e.per[ri] || e.per[String(ri)] || 0;
           return `<div title="${esc(e.name)} — ${c ? "×" + c + " in " : "absent from "}${esc(shortTitle(r.title))}"
             style="height:22px;border:1px solid var(--line);border-radius:5px;display:flex;align-items:center;justify-content:center">
             ${c ? `<i style="width:${6 + 10 * c / maxC}px;height:${6 + 10 * c / maxC}px;border-radius:50%;
@@ -263,6 +307,23 @@ const KBPage = (() => {
       trace();
       $("#kb-discourse", el).scrollIntoView({ behavior: "smooth", block: "center" });
     });
+  }
+
+  /* ---------- AI read across meetings (BYO key, counted inputs) ------ */
+  async function aiCompare() {
+    const btn = $("#kb-aigo", el), out = $("#kb-aiout", el);
+    btn.disabled = true;
+    out.innerHTML = `<div class="hint">asking the model for a read across meetings…</div>`;
+    try {
+      const job = await api("/api/kb/ai-compare", {});
+      watchJob(job.id, j => { out.innerHTML = `<div class="hint">${esc(j.message || j.status)}</div>`; });
+      const done = await jobDone(job.id);
+      btn.disabled = false;
+      if (done.status !== "done") { out.innerHTML = `<div class="hint">${esc(done.error || "stopped")}</div>`; return; }
+      out.innerHTML = done.result.text.split(/\n+/)
+        .map(p => `<p style="margin:6px 0">${esc(p)}</p>`).join("")
+        + `<div class="hint" style="margin-top:6px">${esc(done.result.origin)}</div>`;
+    } catch (e) { btn.disabled = false; out.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
   }
 
   /* ---------- comparison ---------- */
@@ -371,9 +432,14 @@ const KBPage = (() => {
         : "";
       const m = await api("/api/kb/matrix", {});
       K.rows = m.rows || [];
+      K.union = m.entity_union || [];
       status.textContent = `${(K.over.meetings || []).length} meetings · ${K.rows.length} read together`
         + (m.skipped?.length ? ` · ${m.skipped.length} without words yet (${m.skipped.slice(0, 2).map(shortTitle).join(", ")}${m.skipped.length > 2 ? "…" : ""})` : "");
-      renderFraming(); renderEntities(); renderCompareSelects(); renderCompare();
+      renderFraming(); renderTopics(); renderEntities(); renderCompareSelects(); renderCompare();
+      try {
+        const s = await api("/api/settings/llm");
+        $("#kb-aicard", el).style.display = s.enabled ? "" : "none";
+      } catch (e) {}
     } catch (e) {
       status.textContent = e.message;
     } finally { K.busy = false; }
@@ -382,6 +448,7 @@ const KBPage = (() => {
   function init() {
     $("#kb-trace", el).onclick = trace;
     $("#kb-render", el).onclick = renderMontage;
+    $("#kb-aigo", el).onclick = aiCompare;
     renderTray();
     $("#kb-q", el).addEventListener("keydown", e => { if (e.key === "Enter") trace(); });
     $("#kb-modal-close", el).onclick = () => { $("#kb-modal", el).style.display = "none"; };

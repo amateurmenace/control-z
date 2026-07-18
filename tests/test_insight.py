@@ -1,8 +1,8 @@
 import unittest
 
 from highlighter.insight import (ask, brief, crossref, decisions, entities,
-                                 framing, participation, questions, topics,
-                                 word_freq)
+                                 framing, names_match, participation,
+                                 questions, topics, word_freq)
 
 
 def seg(start, end, text, speaker=None):
@@ -103,6 +103,29 @@ class TestAsk(unittest.TestCase):
         r = ask(MEETING, "helicopter zoning xylophone")
         self.assertEqual(r["passages"], [])
         self.assertTrue(r["note"])
+
+
+class TestNameFolding(unittest.TestCase):
+    def test_caption_misspellings_fold(self):
+        self.assertTrue(names_match("Councelor Kim", "Councilor Kim"))
+        self.assertTrue(names_match("David Perlman", "David Pearlman"))
+
+    def test_different_people_never_fold(self):
+        # same shape, different first letters — Jan is not Dan
+        self.assertFalse(names_match("Mayor Jan", "Mayor Dan"))
+        self.assertFalse(names_match("Kim Lee", "Kim Dee"))
+        self.assertFalse(names_match("Harvard Street", "Harvard Avenue Park"))
+
+    def test_entities_fold_shows_their_work(self):
+        segs = [seg(0, 4, "Thanks to Councilor Kim for the report.")] * 3 \
+             + [seg(10, 14, "Councelor Kim moves the article.")] * 2
+        ent = entities(segs)
+        people = {p["name"]: p for p in ent["people"]}
+        self.assertIn("Councilor Kim", people)
+        self.assertNotIn("Councelor Kim", people)
+        row = people["Councilor Kim"]
+        self.assertEqual(row["count"], 5)
+        self.assertEqual(row.get("also"), ["Councelor Kim"])
 
 
 class TestFraming(unittest.TestCase):
