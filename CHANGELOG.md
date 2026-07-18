@@ -2,6 +2,46 @@
 
 ## unreleased
 
+### 1.6.0: the wing doubles on paper, and the kit ships itself — 2026-07-17
+- **The community wing grows by four, and Home strings the wire.** The
+  Community AI Project specs moved into the repo (specs/12–15: the
+  program plan, Publisher, Memory, Interpreter+Narrator), and all four
+  new tools stand on the community rail — one already filled in, three
+  as honest coming-pages. Home's new centerpiece is **the wire**: two
+  chains showing where one tool hands to the next — *the meeting, start
+  to finish* (Grabber → Highlighter → Publisher → Memory) and *seen and
+  heard by everyone* (Scribe → Interpreter → Narrator) — every step a
+  door, coming steps dashed with their date, and a live-count per chain
+  that flips itself the moment a tool turns real. A second machine
+  builds Memory in parallel; specs/PARALLEL.md is the two-lane law
+  (ownership by file, contracts before code, single-line slots).
+- **Community Publisher ships (beta) — program in, kit out.** Open
+  anything Highlighter can read and the publish kit builds itself:
+  3–5 clip candidates with their reasons on them, cut in 16:9 / 1:1 /
+  9:16 through one ffmpeg graph with captions burned as image strips
+  (the type matches the brand on any ffmpeg build) and Slate's
+  lower-third in the station's colors — bottom-left on widescreen,
+  top-left on square and vertical, scaled to the short edge. Copy
+  arrives extractive and labeled (titles, description with chapter
+  stamps, alt text per clip, newsletter blurb, social drafts); ✨
+  redraft spends the user's own key, takes a producer instruction, and
+  keeps a way back. Renders run as one queue job; export is a named
+  bundle + zip with copy.md, transcript and provenance — nothing left
+  to rename. Brand kit is config in app support (station, accent,
+  third style, voice) — the In-a-Box tenancy pattern. publisher-cli
+  mirrors every move; 13 new tests; proven on the June 18 School
+  Committee record.
+- **The scorer moved to the middle of the table.** Highlighter's
+  moment detection is now `czcore/moments.py` — detection-as-a-service
+  for the whole wing (Publisher's candidates today, Memory's issue
+  inputs next); `highlighter/highlights.py` stays as a re-export shim
+  so every old import and test holds untouched.
+- **Stale JS lost its lease.** Every static include carries
+  `?v={{version}}`, substituted by the server, and the shell ships
+  no-cache — a new build busts the browser's cache by URL, in the app
+  window and the browser alike (the "⌘R after relaunch" ritual,
+  retired).
+
 ### 1.5.0: the meeting answers back, and the heavies install themselves — 2026-07-17
 - **The summary writes itself.** Pasting a URL opens a terminal in the
   hero — the commands named as they run, every job message a line, the

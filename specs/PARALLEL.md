@@ -127,6 +127,16 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
+- 2026-07-17 (night) — **Publisher is LIVE at BIG-dev (beta)**: engine
+  (`publisher/`), page, registration — and the single-line-slot playbook
+  is now demonstrated in history (commit 39a0484: server.py import +
+  register between pivot/rise, index.html tag after kb.js with the
+  `?v={{v}}` suffix, one ready flip in core.js). Version on main is
+  **1.6.0** (both truths) — statics cache-bust off it, so don't ship a
+  page without bumping nothing; the suffix rides `__version__`
+  automatically. Home's wire flips a chain step solid when its `ready`
+  goes true — no home edits needed when Memory lands. Full suite green
+  in the venv (284 tests).
 - 2026-07-17 (late) — **Detection seam LANDED: `czcore/moments.py`** —
   `score_segments`, `blend_energy`, `audio_energy`, `build_reel`, plus the
   VTT/transcript helpers (`parse_vtt`, `transcript_dict`).
