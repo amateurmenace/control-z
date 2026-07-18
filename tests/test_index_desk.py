@@ -156,6 +156,16 @@ class TestFootageRecord(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["matches"][0]["t"], 3.0)
 
+    def test_living_paths_lists_what_still_exists_under_a_folder(self):
+        self.scan()
+        allp = set(self.cat.living_paths())
+        self.assertEqual(allp, {str(self.a), str(self.b), str(self.silent)})
+        # scoped to the folder, and a vanished clip drops out
+        self.assertEqual(set(self.cat.living_paths(str(self.footage))), allp)
+        self.b.unlink()
+        self.scan()
+        self.assertNotIn(str(self.b), self.cat.living_paths())
+
     def test_old_catalogs_grow_the_column_without_ceremony(self):
         # a pre-1.8 db: build one, drop the new column, reopen
         import sqlite3
@@ -179,6 +189,112 @@ class TestFootageRecord(unittest.TestCase):
         finally:
             con2.close()
         self.assertIn("sidecars", cols)
+
+
+class TestStandingOrders(unittest.TestCase):
+    """A watched folder that tends itself: baseline the past, fire on what
+    newly lands, mark each clip handled once, and say what it did. The road
+    job itself is stubbed (jobs.start faked) so the test stays hermetic — what
+    matters here is the bookkeeping, not the engines."""
+
+    def setUp(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from czcore.appshell.jobs import JobManager
+        from indexer.catalog import Catalog
+        from suite.tools import indexer as ix
+
+        self.td = tempfile.TemporaryDirectory(prefix="cz-standing-")
+        root = Path(self.td.name)
+
+        def sd(sub=""):
+            d = root / sub if sub else root
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+
+        for mod in (ix, __import__("indexer.catalog", fromlist=["x"])):
+            p = mock.patch.object(mod, "support_dir", sd)
+            p.start(); self.addCleanup(p.stop)
+        pp = mock.patch("czcore.media.probe", fake_probe)
+        pp.start(); self.addCleanup(pp.stop)
+
+        self.folder = root / "incoming"
+        self.folder.mkdir()
+        (self.folder / "a.mp4").write_bytes(b"media")
+
+        app = FastAPI()
+        self.jm = JobManager()
+        # stub the queue: the road never actually runs; we assert on dispatch
+        self.jobs_started = []
+
+        def fake_start(kind, work, tool="", label=""):
+            self.jobs_started.append({"kind": kind, "tool": tool, "label": label})
+            return SimpleNamespace(id="fake", to_dict=lambda: {"id": "fake"})
+
+        sp = mock.patch.object(self.jm, "start", fake_start)
+        sp.start(); self.addCleanup(sp.stop)
+
+        ix.register_indexer(app, self.jm, None)
+        self.cl = TestClient(app)
+        # seed the catalog the way life would: watch the folder, scan what's
+        # here now, so a fresh standing order has a past to baseline against
+        self.seed = Catalog()
+        self.seed.add_folder(str(self.folder))
+        self.seed.scan()
+
+        self.addCleanup(self.td.cleanup)
+
+    def _orders(self):
+        return self.cl.get("/api/index/standing").json()["orders"]
+
+    def test_baseline_then_fire_on_the_newly_landed(self):
+        r = self.cl.post("/api/index/standing", json={
+            "add": {"folder": str(self.folder), "stages": ["words"]}}).json()
+        order = r["orders"][0]
+        self.assertTrue(order["enabled"])
+        self.assertIsNone(order["last_run"])
+        # the clip already here is the order's past, not its work
+        self.assertIn(str(self.folder / "a.mp4"), order["handled"])
+        oid = order["id"]
+
+        # a shoot lands overnight
+        (self.folder / "b.mp4").write_bytes(b"media")
+        before = len(self.jobs_started)
+        r = self.cl.post("/api/index/standing", json={"run": oid}).json()
+        order = r["orders"][0]
+        self.assertEqual(len(self.jobs_started), before + 1)  # one road dispatched
+        self.assertIn("standing order", self.jobs_started[-1]["label"])
+        self.assertIn("1 clip sent down words", order["last_note"])
+        self.assertIn(str(self.folder / "b.mp4"), order["handled"])
+
+        # running again with nothing new is a sentence, not a job
+        before = len(self.jobs_started)
+        r = self.cl.post("/api/index/standing", json={"run": oid}).json()
+        self.assertEqual(len(self.jobs_started), before)
+        self.assertEqual(r["orders"][0]["last_note"], "watched · nothing new")
+
+    def test_pause_and_remove(self):
+        oid = self.cl.post("/api/index/standing", json={
+            "add": {"folder": str(self.folder), "stages": ["words", "clear"]}}
+        ).json()["orders"][0]["id"]
+        r = self.cl.post("/api/index/standing", json={
+            "update": {"id": oid, "patch": {"enabled": False}}}).json()
+        self.assertFalse(r["orders"][0]["enabled"])
+        r = self.cl.post("/api/index/standing", json={"remove": oid}).json()
+        self.assertEqual(r["orders"], [])
+
+    def test_an_order_needs_a_real_folder_and_a_stage(self):
+        r = self.cl.post("/api/index/standing", json={
+            "add": {"folder": "/no/such/place", "stages": ["words"]}})
+        self.assertEqual(r.status_code, 422)
+        r = self.cl.post("/api/index/standing", json={
+            "add": {"folder": str(self.folder), "stages": []}})
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(self._orders(), [])
 
 
 if __name__ == "__main__":
@@ -226,6 +342,47 @@ class TestRoadPlan(unittest.TestCase):
         self.assertIn("e.mp4 · words: drive unplugged?", p["skips"])
         self.assertIn("c-silent.mp4 · words: no audio track", p["skips"])
         self.assertIn("d.wav · reframe 9:16: no picture", p["skips"])
+
+    def test_rise_lifts_sd_and_leaves_hd_alone(self):
+        rows = [
+            {"path": "/f/sd.mp4", "name": "sd.mp4", "audio": 1, "width": 720,
+             "height": 480, "missing": 0, "carries": []},
+            {"path": "/f/hd.mp4", "name": "hd.mp4", "audio": 1, "width": 1920,
+             "height": 1080, "missing": 0, "carries": []},
+            {"path": "/f/720.mp4", "name": "720.mp4", "audio": 1, "width": 1280,
+             "height": 720, "missing": 0, "carries": []},
+            {"path": "/f/a.wav", "name": "a.wav", "audio": 1, "width": None,
+             "height": None, "missing": 0, "carries": []},
+        ]
+        from suite.tools.indexer import _road_plan
+        p = _road_plan(rows, ["rise"])
+        names = [i["name"] for i in p["plan"]]
+        self.assertEqual(names, ["sd.mp4"])           # only the SD clip lifts
+        self.assertIn("hd.mp4 · to HD: already 1080p — Rise's craft, not the "
+                      "road's", p["skips"])
+        self.assertIn("720.mp4 · to HD: already 720p — Rise's craft, not the "
+                      "road's", p["skips"])
+        self.assertIn("a.wav · to HD: no picture", p["skips"])
+
+    def test_rise_respects_an_existing_lift(self):
+        from suite.tools import indexer as ix
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "sd.mp4"
+            src.write_bytes(b"x")
+            ix._rise_out(str(src)).write_bytes(b"lifted")
+            rows = [{"path": str(src), "name": "sd.mp4", "audio": 1,
+                     "width": 720, "height": 480, "missing": 0, "carries": []}]
+            p = ix._road_plan(rows, ["rise"])
+            self.assertEqual(p["plan"], [])
+            self.assertIn("sd.mp4 · to HD: already lifted", p["skips"])
+
+    def test_presets_name_only_real_stages(self):
+        from suite.tools.indexer import ROAD_PRESETS, ROAD_STAGES
+        known = {s["id"] for s in ROAD_STAGES}
+        for preset in ROAD_PRESETS:
+            self.assertTrue(set(preset["stages"]) <= known,
+                            f"{preset['id']} names an unknown stage")
+            self.assertTrue(preset["label"] and preset["hint"])
 
     def test_existing_pivot_render_is_respected(self):
         from suite.tools import indexer as ix

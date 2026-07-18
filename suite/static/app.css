@@ -1279,3 +1279,56 @@ button.ix-kind:disabled { opacity: .45; cursor: default; }
 .ix-stage.off { opacity: .55; cursor: default; }
 .ix-stage i { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
 .ix-stage input { accent-color: var(--index); }
+
+/* === desk lane: road presets + standing orders (append-only) ========== */
+.ix-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.ix-preset { width: auto; padding: 3px 11px; font-family: var(--mono);
+  font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+  border-color: var(--line-soft); color: var(--cream-dim); }
+.ix-preset:hover { border-color: var(--index); color: var(--cream);
+  background: color-mix(in srgb, var(--index) 9%, transparent); }
+
+.ix-neworder { margin-top: 10px; }
+.ix-nofields { display: flex; flex-direction: column; gap: 7px; }
+.ix-noinput { width: 100%; }
+.ix-nostages { display: flex; gap: 5px; flex-wrap: wrap; }
+.ix-nostage { display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--cream-dim); cursor: pointer;
+  border: 1px solid var(--line-soft); border-radius: 99px; padding: 2px 9px 2px 7px; }
+.ix-nostage:hover { color: var(--cream); }
+.ix-nostage i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+.ix-nostage input { accent-color: var(--index); margin: 0; }
+
+.ix-order { border: 1px solid var(--line-soft); border-radius: var(--r);
+  padding: 8px 10px; margin-bottom: 6px; background: var(--ink-2); }
+.ix-order.paused { opacity: .6; }
+.ix-orow { display: flex; align-items: center; gap: 8px; }
+.ix-ofolder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 13px; color: var(--cream); }
+.ix-ostages { display: flex; gap: 3px; flex: 0 0 auto; }
+.ix-ochip { font-family: var(--mono); font-size: 8px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--index);
+  border: 1px solid color-mix(in srgb, var(--index) 40%, var(--line-soft));
+  border-radius: 99px; padding: 1px 6px; }
+.ix-obtn { width: auto; padding: 2px 8px; font-size: 11px; flex: 0 0 auto;
+  border-color: var(--line-soft); color: var(--cream-dim); }
+.ix-obtn:hover:not(:disabled) { border-color: var(--index); color: var(--cream); }
+.ix-obtn.del:hover { border-color: var(--amber); color: var(--amber); }
+.ix-onote { margin-top: 5px; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .04em; color: var(--cream-faint); }
+/* the pause/resume switch — a small track that reads on/off at a glance */
+.ix-switch { position: relative; width: 26px; height: 15px; flex: 0 0 26px;
+  cursor: pointer; }
+.ix-switch input { position: absolute; opacity: 0; width: 100%; height: 100%;
+  margin: 0; cursor: pointer; }
+.ix-switch i { position: absolute; inset: 0; border-radius: 99px;
+  background: var(--ink); border: 1px solid var(--line-soft); transition: .15s; }
+.ix-switch i::after { content: ""; position: absolute; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--cream-faint); top: 2px; left: 2px;
+  transition: .15s; }
+.ix-switch input:checked + i { background: color-mix(in srgb, var(--index) 30%, var(--ink));
+  border-color: var(--index); }
+.ix-switch input:checked + i::after { left: 13px; background: var(--index); }
+@media (prefers-reduced-motion: reduce) {
+  .ix-switch i, .ix-switch i::after, .ix-preset { transition: none; }
+}

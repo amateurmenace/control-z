@@ -52,12 +52,47 @@ Run `.venv/bin/python -m suite --serve` → `/#index`.
   work immediately. Verified live end-to-end; re-run refused. **457 green**
   (4 new road-plan tests).
 
+## landed (wave 3 — the road grows up)
+
+Run `.venv/bin/python -m suite --serve` → `/#index`, right rail.
+
+- **Rise joins the road** as a fourth stage (`to HD`). The honest target is
+  chosen per clip, not silently: a clip at or above 720p is left alone
+  (`RISE_ROAD_CEILING`) with the reason said — *"already 1080p — Rise's craft,
+  not the road's"* — and only standard-def footage takes a modest ×2 lift at
+  the h264 preset (`_run_rise_x2`, mirrors rise.video.upscale_video). The road
+  preps; 4K and model choice stay Rise's own page. `_rise_out` skips a clip
+  already lifted. **Proven live:** a 480p fixture dispatched and rendered ×2
+  (Real-ESRGAN when present, Lanczos otherwise); a 1080p clip refused at submit
+  with the exact skip sentence (HTTP 409).
+- **Road presets** — one-click roads above the stage picker: **prep the shoot**
+  (words + rescue) and **make it social** (words + reframe 9:16). Named buttons
+  drive the same `_road_plan`; a preset ticks its available stages, the operator
+  still presses Send (no long job fires behind their back). `ROAD_PRESETS` +
+  `GET /api/index/road-stages`.presets.
+- **Standing orders — a folder that tends itself.** Index already watches
+  folders; a standing order gives one a job: *"when new clips land here, send
+  them down this road."* `GET/POST /api/index/standing`. Each order baselines
+  the clips already present (the folder's past, not its work), then fires only
+  on what newly lands, sending each fresh clip down its road **once** (handled
+  set). A daemon clock (`_orders_clock`, Grabber's scheduler shape, sleeps
+  first so tests never trip it) ticks every 10 min; *run now* forces a tick.
+  Every order is visible, pausable (a real toggle), and says what it did last
+  run. `_start_road` is now shared between the Index page and the clock — one
+  engine, one set of rules. **Proven live end-to-end:** created an order, a new
+  spoken clip dropped into the folder, *run now* scanned + dispatched, the road
+  transcribed it (whisper large-v3-turbo, exact text), the sidecar landed, the
+  order's note read *"1 clip sent down words."* Cleaned up after.
+- **Catalog:** `living_paths(folder=None)` — the clock's "what still exists
+  here" reader. **510 green** (7 new road/preset/standing tests in
+  `tests/test_index_desk.py`).
+
 ## next
 
-- Rise as a fourth stage (its `/batch` exists; decide upscale-target
-  defaults honestly).
-- The coherence pass (thrust 3): czProgress/empty-state/keyboard grammar on
-  the eight production pages.
+- The coherence pass (thrust 1): walk the eight production pages in the
+  browser against the civic wing's bar; fix what the walk finds.
+- The local model cards (thrust 3), the drain client (thrust 5, gated), and
+  the craft-depth picks (thrust 4).
 
 ## asks (A-owned files; single lines, in your hands)
 
@@ -77,3 +112,11 @@ Run `.venv/bin/python -m suite --serve` → `/#index`.
   and one queue job walks each clip through the tools in order, skipping
   what's already made with the reason said; run it twice and the second
   run is a sentence, not a queue entry.
+- **The road grows up.** Rise joins as a fourth stage — but it never 4×'s
+  an archive: it lifts standard-def footage a modest ×2 toward HD and leaves
+  anything already 720p-or-better to Rise's own page, saying so. Two
+  one-click roads sit above the picker — *prep the shoot* (words + rescue)
+  and *make it social* (words + reframe). And a folder can now tend itself:
+  set a **standing order** and clips that land afterward wake up worked —
+  overnight a dumped shoot is transcribed and rescued by morning, each
+  standing order visible, pausable, and honest about its last run.

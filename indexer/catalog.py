@@ -309,6 +309,19 @@ class Catalog:
             rows = con.execute(sql, args).fetchall()
         return [dict(r) for r in rows]
 
+    def living_paths(self, folder: Optional[str] = None) -> List[str]:
+        """Paths of clips that still exist (missing=0), newest first —
+        optionally only those a given watched folder holds. The standing-order
+        clock reads this to spot what has newly landed since it last looked."""
+        sql = "SELECT path FROM clips WHERE missing=0"
+        args: list = []
+        if folder:
+            sql += " AND folder=?"
+            args.append(folder)
+        sql += " ORDER BY mtime DESC"
+        with self._con() as con:
+            return [r["path"] for r in con.execute(sql, args).fetchall()]
+
     def get_clips(self, paths: List[str]) -> List[dict]:
         with self._con() as con:
             rows = [con.execute("SELECT * FROM clips WHERE path=?", (p,)).fetchone()

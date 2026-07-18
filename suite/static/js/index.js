@@ -50,11 +50,18 @@ const IndexPage = (() => {
 
         <div class="insp-sec">
           <span class="tag">the road — ticked clips, clip by clip</span>
+          <div id="ix-roadpresets" class="ix-presets"></div>
           <div id="ix-roadstages" class="hint">…</div>
           <button class="btn primary" id="ix-road" disabled>▶ Send down the road</button>
           <div class="hint" style="margin-top:6px">each clip runs your picked stages in
             order before the next clip starts; what a clip already has is skipped,
             and every skip says why</div>
+        </div>
+
+        <div class="insp-sec">
+          <span class="tag">standing orders — a folder that tends itself</span>
+          <div id="ix-orders"><div class="hint">…</div></div>
+          <div id="ix-neworder" class="ix-neworder"></div>
         </div>
 
         <div class="report" id="ix-report"></div>
@@ -171,6 +178,16 @@ const IndexPage = (() => {
     $("#ix-road", el).disabled = !S.picked.size || !roadPicks().length;
   }
 
+  /* tick exactly this set of stages (skipping any the runtime can't run) —
+     the presets and only the presets drive this */
+  function tickStages(ids) {
+    const set = new Set(ids);
+    $$("#ix-roadstages input", el).forEach(c => {
+      c.checked = !c.disabled && set.has(c.dataset.stage);
+    });
+    roadMeta();
+  }
+
   async function loadRoadStages() {
     try {
       const r = await api("/api/index/road-stages");
@@ -183,9 +200,121 @@ const IndexPage = (() => {
           ${esc(s.label)}${s.ok ? "" : ` <span class="hint">· ${esc(s.why)}</span>`}
         </label>`).join("");
       $$("#ix-roadstages input", el).forEach(c => c.onchange = roadMeta);
+      /* one-click roads: named stage sets above the picker */
+      const pres = $("#ix-roadpresets", el);
+      const byId = Object.fromEntries((r.presets || []).map(p => [p.id, p]));
+      pres.innerHTML = (r.presets || []).map(p => `
+        <button class="ix-preset" data-preset="${p.id}" title="${esc(p.hint)}">${esc(p.label)}</button>`).join("");
+      $$(".ix-preset", pres).forEach(b => b.onclick = () => {
+        const p = byId[b.dataset.preset]; if (!p) return;
+        tickStages(p.stages);
+        toast(p.hint);
+      });
     } catch (e) {
       $("#ix-roadstages", el).textContent = e.message;
     }
+  }
+
+  /* -- standing orders: a watched folder that tends itself --------------- */
+
+  async function loadStanding() {
+    const box = $("#ix-orders", el);
+    try {
+      const r = await api("/api/index/standing");
+      S.standingStages = r.stages;
+      S.watched = r.folders;
+      box.innerHTML = r.orders.length ? r.orders.map(orderHTML).join("")
+        : `<div class="hint">none yet — set one below and a folder starts
+           looking after itself</div>`;
+      wireOrders(box);
+      renderNewOrder();
+    } catch (e) { box.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
+  }
+
+  function orderHTML(o) {
+    const chips = (o.stages || []).map(s =>
+      `<span class="ix-ochip">${esc(s)}</span>`).join("");
+    const when = o.last_run ? `ran ${esc((o.last_run).replace("T", " "))}`
+      : (o.last_check ? `checked ${esc((o.last_check).replace("T", " "))}`
+                      : "not run yet");
+    const tail = o.enabled ? when : "paused";
+    return `<div class="ix-order${o.enabled ? "" : " paused"}" data-id="${o.id}">
+      <div class="ix-orow">
+        <label class="ix-switch" title="${o.enabled ? "pause this order" : "resume this order"}">
+          <input type="checkbox" data-toggle ${o.enabled ? "checked" : ""}><i></i></label>
+        <span class="ix-ofolder" title="${esc(o.folder)}">${esc(o.folder.split("/").slice(-2).join("/"))}</span>
+        <span class="ix-ostages">${chips}</span>
+        <button class="ix-obtn" data-run title="check for new clips now and send them down the road">run now</button>
+        <button class="ix-obtn del" data-del title="stop this standing order">×</button>
+      </div>
+      <div class="ix-onote">${esc(o.last_note || when)}${o.last_note ? " · " + tail : ""}</div>
+    </div>`;
+  }
+
+  function wireOrders(box) {
+    $$(".ix-order", box).forEach(row => {
+      const id = row.dataset.id;
+      $("[data-toggle]", row).onchange = e =>
+        standingEdit({ update: { id, patch: { enabled: e.target.checked } } });
+      $("[data-run]", row).onclick = () => runOrder(id, row);
+      $("[data-del]", row).onclick = () => {
+        if (confirm("stop this standing order? the folder stops tending itself"))
+          standingEdit({ remove: id });
+      };
+    });
+  }
+
+  async function standingEdit(body) {
+    try { await api("/api/index/standing", body); await loadStanding(); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  async function runOrder(id, row) {
+    const btn = $("[data-run]", row);
+    if (btn) { btn.disabled = true; btn.textContent = "checking…"; }
+    try {
+      const r = await api("/api/index/standing", { run: id });
+      const o = (r.orders || []).find(x => x.id === id);
+      if (o) toast(o.last_note);
+      await loadStanding();
+      await loadStatus();
+      $("#ix-q", el).value.trim() ? search() : browse();
+    } catch (e) { toast(e.message, true); if (btn) btn.disabled = false; }
+  }
+
+  function renderNewOrder() {
+    const host = $("#ix-neworder", el);
+    const folders = S.watched || [];
+    const stages = S.standingStages || [];
+    if (!folders.length) {
+      host.innerHTML = `<div class="hint">add a footage folder above first —
+        a standing order watches one of them</div>`;
+      return;
+    }
+    host.innerHTML = `
+      <div class="ix-nofields">
+        <select id="ix-nofolder" class="ix-noinput" title="which watched folder tends itself">
+          ${folders.map(f => `<option value="${esc(f)}">${esc(f.split("/").slice(-2).join("/"))}</option>`).join("")}
+        </select>
+        <div class="ix-nostages">
+          ${stages.map(s => `<label class="ix-nostage" title="run ${esc(s.tool)}'s ${esc(s.label)} on each new clip">
+            <input type="checkbox" data-ns="${s.id}"><i style="background:${(toolById(s.tool) || {}).acc || "var(--cream-dim)"}"></i>${esc(s.label)}</label>`).join("")}
+        </div>
+      </div>
+      <button class="btn" id="ix-nocreate" style="margin-top:7px">＋ set a standing order</button>
+      <div class="hint" style="margin-top:5px">it watches for clips that land
+        <i>after</i> you set it and sends each down the road once — overnight, a
+        shoot dumped here wakes up already worked</div>`;
+    $("#ix-nocreate", host).onclick = async () => {
+      const folder = $("#ix-nofolder", host).value;
+      const picked = $$("[data-ns]:checked", host).map(c => c.dataset.ns);
+      if (!picked.length) { toast("pick at least one stage for the order", true); return; }
+      try {
+        await api("/api/index/standing", { add: { folder, stages: picked } });
+        await loadStanding();
+        toast("standing order set — new clips here now tend themselves");
+      } catch (e) { toast(e.message, true); }
+    };
   }
 
   async function runRoad() {
@@ -372,6 +501,7 @@ const IndexPage = (() => {
         await api("/api/index/folders", { add: p });
         $("#ix-addpath", el).value = "";
         loadStatus();
+        loadStanding();   // the new folder is now a standing-order candidate
         toast("added — now Rescan");
       } catch (e) { toast(e.message, true); }
     };
@@ -386,6 +516,7 @@ const IndexPage = (() => {
   function onshow() {
     if (!inited) { init(); inited = true; }
     loadStatus();
+    loadStanding();
     if (!$("#ix-q", el).value.trim()) browse();
   }
 
