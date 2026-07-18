@@ -171,11 +171,25 @@ def run(corpus, plan: dict, job) -> dict:
             "summary": summ, "summary_origin": summ_origin,
             "status": "live", "error": "",
         })
+
+        # the telescope's stage: fit this meeting into the issues already on the
+        # record — a resurfacing for any followed thread it reopens, a candidate
+        # for whatever it raises that's new. Never blocks the meeting landing.
+        job.progress = 0.95
+        job.message = "placing it on the long view…"
+        resurfaced = []
+        try:
+            from . import issues
+            r = issues.assign_meeting(corpus, mid, emit_events=True)
+            resurfaced = r.get("resurfaced", [])
+        except Exception:
+            pass  # issue assignment is additive — a failure never loses the record
+
         job.progress = 1.0
         job.message = f"in the record — {len(segs)} segments · {tr['origin']}"
         return {"meeting_id": mid, "status": "live", "segments": len(segs),
                 "origin": tr["origin"], "title": info.get("title", ""),
-                "path": corpus.db_path}
+                "resurfaced": resurfaced, "path": corpus.db_path}
     except JobCancelled:
         corpus.forget(mid)   # the shell never became a meeting
         raise

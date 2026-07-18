@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from czcore.appshell.jobs import JobManager
-from memory import ingest, store
+from memory import ingest, issues, store
 from memory.store import Corpus
 
 SEGS = [
@@ -52,6 +52,14 @@ class ApiTest(unittest.TestCase):
         self.seed.upsert_meeting(
             {"id": mid, "status": "live", "n_segments": len(segs), **meta})
         self.seed.replace_segments(mid, segs)
+
+    def _seed_issue(self, iid, name, aliases, town="Brookline"):
+        self.seed.upsert_issue({
+            "id": iid, "town": town, "status": "active", "origin": "auto",
+            "name": name, "aliases": aliases,
+            "keywords": [a.lower() for a in aliases]})
+        issues.reassign_issue(self.seed, iid)   # link segments that say its words
+        return iid
 
     def test_submissions_requires_a_source(self):
         r = self.cl.post("/api/memory/submissions", json={})
@@ -129,6 +137,89 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(r.status_code, 200)               # no crash
         hits = r.json()["hits"]
         self.assertTrue(any(h["meeting_id"] == "m1" for h in hits))  # not dropped
+
+    # -- the issue engine's HTTP surface ----------------------------------
+
+    def test_issues_list_and_detail_with_timeline(self):
+        self._seed("m1", SEGS, title="Select Board", date="2026-05-19",
+                   body="Select Board", town="Brookline")
+        iid = self._seed_issue("iss:rez", "Harvard Street Rezoning",
+                               ["harvard street rezoning", "rezoning"])
+        lst = self.cl.get("/api/memory/issues", params={"town": "Brookline"}).json()
+        self.assertTrue(any(i["id"] == iid for i in lst["issues"]))
+        self.assertIn("Brookline", lst["towns"])
+        d = self.cl.post("/api/memory/issue", json={"id": iid}).json()
+        self.assertEqual(d["issue"]["name"], "Harvard Street Rezoning")
+        self.assertTrue(d["timeline"])                      # a node per meeting
+        self.assertEqual(d["timeline"][0]["meeting_id"], "m1")
+        self.assertIn("t", d["timeline"][0]["beads"][0])    # a second to jump to
+        self.assertIn("overview", d)
+        miss = self.cl.post("/api/memory/issue", json={"id": "nope"})
+        self.assertEqual(miss.status_code, 404)
+
+    def test_context_fills_issues_with_tracked_topics(self):
+        self._seed("m1", SEGS, title="Select Board", date="2026-05-19")
+        self._seed_issue("iss:rez", "Harvard Street Rezoning",
+                         ["harvard street rezoning", "rezoning"])
+        r = self.cl.post("/api/memory/context",
+                         json={"texts": ["what is the story on the rezoning?"]})
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertTrue(any(i["id"] == "iss:rez" for i in d["issues"]))
+        hit = next(i for i in d["issues"] if i["id"] == "iss:rez")
+        self.assertIn("n_meetings", hit)
+        self.assertIn("prior", d)                           # prior shape unchanged
+
+    def test_thread_follow_list_and_unfollow(self):
+        self._seed("m1", SEGS, title="Select Board")
+        iid = self._seed_issue("iss:rez", "Rezoning", ["rezoning"])
+        f = self.cl.post("/api/memory/thread", json={"issue_id": iid}).json()
+        self.assertTrue(f["following"])
+        ts = self.cl.get("/api/memory/threads").json()
+        self.assertEqual(ts["threads"][0]["issue_id"], iid)
+        un = self.cl.post("/api/memory/thread",
+                          json={"issue_id": iid, "follow": False}).json()
+        self.assertTrue(un["removed"])
+        self.assertEqual(self.cl.get("/api/memory/threads").json()["threads"], [])
+
+    def test_thread_mint_from_query(self):
+        self._seed("m1", SEGS, title="Select Board")
+        r = self.cl.post("/api/memory/thread/mint",
+                         json={"q": "overlay motion", "town": "Brookline"}).json()
+        self.assertIn("issue_id", r)
+        # minting follows it, so it shows on the threads list
+        self.assertTrue(self.cl.get("/api/memory/threads").json()["threads"])
+
+    def test_steward_rename_and_merge(self):
+        self._seed("m1", SEGS, title="Select Board")
+        a = self._seed_issue("iss:a", "Rezoning", ["rezoning"])
+        b = self._seed_issue("iss:b", "Overlay", ["overlay"])
+        rn = self.cl.post("/api/memory/issue/rename",
+                          json={"id": a, "name": "Harvard St Rezoning",
+                                "aliases": ["rezoning", "harvard street"]}).json()
+        self.assertEqual(rn["issue"]["name"], "Harvard St Rezoning")
+        mg = self.cl.post("/api/memory/issue/merge",
+                          json={"dst": a, "src": [b]}).json()
+        self.assertIn("overlay", [x.lower() for x in mg["issue"]["aliases"]])
+        self.assertEqual(self.seed.get_issue(b)["status"], "merged")
+
+    def test_issue_forget(self):
+        self._seed("m1", SEGS, title="Select Board")
+        iid = self._seed_issue("iss:rez", "Rezoning", ["rezoning"])
+        self.assertTrue(self.cl.post("/api/memory/issue/forget",
+                                     json={"id": iid}).json()["removed"])
+        self.assertIsNone(self.seed.get_issue(iid))
+
+    def test_digest_and_notifications_shapes(self):
+        self._seed("m1", SEGS, title="Select Board")
+        iid = self._seed_issue("iss:rez", "Rezoning", ["rezoning"])
+        self.cl.post("/api/memory/thread", json={"issue_id": iid})
+        dg = self.cl.get("/api/memory/digest").json()
+        self.assertIn("markdown", dg)
+        self.assertEqual(dg["threads"], 1)
+        nt = self.cl.get("/api/memory/notifications").json()
+        self.assertIn("events", nt)
+        self.assertIn("unseen", nt)
 
 
 if __name__ == "__main__":
