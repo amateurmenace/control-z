@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from czcore import sidecars as sc_law
 from czcore.paths import support_dir
 
 VIDEO_EXTS = {".mov", ".mp4", ".mkv", ".mxf", ".avi", ".m4v", ".mts", ".m2ts",
@@ -38,6 +39,13 @@ class Catalog:
         self.db_path = str(db_path or support_dir("index") / "catalog.db")
         with self._con() as con:
             con.executescript(_SCHEMA)
+            # pre-1.8 catalogs lack the sidecars column; adding it is the
+            # whole migration (rows refresh on their next scan)
+            try:
+                con.execute("ALTER TABLE clips ADD COLUMN sidecars TEXT "
+                            "DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass
             try:
                 con.execute(
                     "CREATE VIRTUAL TABLE IF NOT EXISTS clips_fts USING fts5("
@@ -100,16 +108,25 @@ class Catalog:
             return "", 0.0
 
     def scan(self, progress: Optional[Callable[[str], None]] = None,
-             cancelled: Optional[Callable[[], bool]] = None) -> dict:
+             cancelled: Optional[Callable[[], bool]] = None,
+             only: Optional[List[str]] = None) -> dict:
+        """Walk the folders (or just `only` paths) and refresh what moved.
+
+        Freshness is size+mtime of the media plus the signature of every
+        sidecar beside it (czcore.sidecars) — a new matte or transcript
+        refreshes the row even though the clip itself never changed.
+        """
         from czcore.media import probe
 
         stats = {"seen": 0, "added": 0, "updated": 0, "missing": 0,
                  "unreadable": 0}
+        onlyset = {str(Path(p)) for p in only} if only else None
         with self._con() as con:
             folders = [r["path"] for r in
                        con.execute("SELECT path FROM folders")]
             known = {r["path"]: r for r in con.execute(
-                "SELECT path, size, mtime, sidecar_mtime FROM clips")}
+                "SELECT path, size, mtime, sidecar_mtime, sidecars "
+                "FROM clips")}
             seen = set()
             for folder in folders:
                 for p in sorted(Path(folder).rglob("*")):
@@ -120,13 +137,19 @@ class Catalog:
                     if not p.is_file() or ext not in VIDEO_EXTS | AUDIO_EXTS:
                         continue
                     seen.add(str(p))
+                    if onlyset is not None and str(p) not in onlyset:
+                        continue
                     stats["seen"] += 1
                     st = p.stat()
                     text, sc_m = self._sidecar_text(p)
+                    carries = sc_law.collect(p)
+                    sig = sc_law.signature(carries)
+                    sc_json = json.dumps(sc_law.kinds_present(carries))
                     old = known.get(str(p))
                     fresh = (old and old["size"] == st.st_size
                              and old["mtime"] == st.st_mtime
-                             and (old["sidecar_mtime"] or 0.0) == sc_m)
+                             and (old["sidecar_mtime"] or 0.0) == sc_m
+                             and self._sig(old["sidecars"]) == sig)
                     if fresh:
                         con.execute("UPDATE clips SET missing=0 WHERE path=?",
                                     (str(p),))
@@ -144,27 +167,49 @@ class Catalog:
                            v.fps if v else None, v.width if v else None,
                            v.height if v else None,
                            v.codec if v else "audio", info.audio_streams,
-                           text, time.time(), 0)
+                           text, time.time(), 0,
+                           self._pack_sidecars(sc_json, sig))
                     con.execute(
-                        "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "INSERT INTO clips VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         "ON CONFLICT(path) DO UPDATE SET size=excluded.size, "
                         "mtime=excluded.mtime, sidecar_mtime=excluded.sidecar_mtime, "
                         "duration=excluded.duration, fps=excluded.fps, "
                         "width=excluded.width, height=excluded.height, "
                         "codec=excluded.codec, audio=excluded.audio, "
                         "transcript=excluded.transcript, "
-                        "scanned_at=excluded.scanned_at, missing=0", row)
+                        "scanned_at=excluded.scanned_at, missing=0, "
+                        "sidecars=excluded.sidecars", row)
                     if self.fts:
                         con.execute("DELETE FROM clips_fts WHERE path=?", (str(p),))
                         con.execute("INSERT INTO clips_fts VALUES (?,?,?,?)",
                                     (str(p), p.name, folder, text))
                     stats["updated" if old else "added"] += 1
-            gone = set(known) - seen
-            for path in gone:
-                con.execute("UPDATE clips SET missing=1 WHERE path=?", (path,))
-            stats["missing"] = len(gone)
+            if onlyset is None:
+                gone = set(known) - seen
+                for path in gone:
+                    con.execute("UPDATE clips SET missing=1 WHERE path=?",
+                                (path,))
+                stats["missing"] = len(gone)
             con.commit()
         return stats
+
+    # the sidecars column carries "kinds-json|signature" — the JSON half is
+    # what rows hand the UI, the signature half is the scan's freshness check
+    @staticmethod
+    def _pack_sidecars(kinds_json: str, sig: str) -> str:
+        return f"{kinds_json}|{sig}"
+
+    @staticmethod
+    def _sig(packed: Optional[str]) -> str:
+        return (packed or "").rpartition("|")[2]
+
+    @staticmethod
+    def _kinds(packed: Optional[str]) -> List[str]:
+        head = (packed or "").rpartition("|")[0]
+        try:
+            return list(json.loads(head)) if head else []
+        except ValueError:
+            return []
 
     # -- search --------------------------------------------------------------
 
@@ -194,7 +239,9 @@ class Catalog:
         out = []
         toks = [t.lower() for t in re.findall(r"\w+", q)]
         for r in rows:
-            d = {k: r[k] for k in r.keys() if k != "transcript"}
+            d = {k: r[k] for k in r.keys() if k not in ("transcript",
+                                                        "sidecars")}
+            d["carries"] = self._kinds(r["sidecars"])
             d["matches"] = self._transcript_hits(r["path"], toks) if toks else []
             d["name_hit"] = any(t in r["name"].lower() for t in toks)
             out.append(d)
@@ -230,13 +277,47 @@ class Catalog:
                 "SUM(CASE WHEN transcript!='' THEN 1 ELSE 0 END) AS transcribed, "
                 "SUM(missing) AS missing FROM clips").fetchone()
             n_folders = con.execute("SELECT COUNT(*) FROM folders").fetchone()[0]
+            # coverage: how many living clips carry each sidecar kind — the
+            # kinds are our own fixed names, so LIKE on the packed JSON is safe
+            cover = {}
+            for kind, _sufs, _tool in sc_law.KINDS:
+                cover[kind] = con.execute(
+                    "SELECT COUNT(*) FROM clips WHERE missing=0 AND "
+                    "sidecars LIKE ?", (f'%"{kind}"%',)).fetchone()[0]
+            wordless = con.execute(
+                "SELECT COUNT(*) FROM clips WHERE missing=0 AND audio>0 AND "
+                "sidecars NOT LIKE ?", ('%"words"%',)).fetchone()[0]
         d = dict(r)
         d["folders"] = n_folders
         d["fts"] = self.fts
+        d["coverage"] = cover
+        d["wordless"] = wordless  # clips with sound but no transcript yet
         return d
+
+    def gaps(self, kind: str) -> List[dict]:
+        """The clips still missing a sidecar kind — the coverage band's
+        one-click work list. For words, only clips that carry sound (a
+        silent clip has nothing to transcribe; listing it would be lying
+        about the gap)."""
+        sql = ("SELECT path, name, duration FROM clips WHERE missing=0 "
+               "AND sidecars NOT LIKE ?")
+        args: list = [f'%"{kind}"%']
+        if kind == "words":
+            sql += " AND audio>0"
+        sql += " ORDER BY mtime DESC"
+        with self._con() as con:
+            rows = con.execute(sql, args).fetchall()
+        return [dict(r) for r in rows]
 
     def get_clips(self, paths: List[str]) -> List[dict]:
         with self._con() as con:
             rows = [con.execute("SELECT * FROM clips WHERE path=?", (p,)).fetchone()
                     for p in paths]
-        return [dict(r) for r in rows if r is not None]
+        out = []
+        for r in rows:
+            if r is None:
+                continue
+            d = dict(r)
+            d["carries"] = self._kinds(d.pop("sidecars", ""))
+            out.append(d)
+        return out

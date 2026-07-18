@@ -42,8 +42,19 @@ const IndexPage = (() => {
           <div class="hint" id="ix-selmeta">nothing ticked yet</div>
           <button class="btn primary" id="ix-fcpxml" disabled>Export FCPXML stringout</button>
           <button class="btn" id="ix-csv" disabled>Export CSV</button>
+          <button class="btn" id="ix-selwords" disabled
+            title="Scribe's engine over the ticked clips that still lack a transcript — one queue job">✎ Words for ticked</button>
           <div class="hint" style="margin-top:6px">the stringout imports into Resolve as a
             timeline of your selects — File → Import → Timeline</div>
+        </div>
+
+        <div class="insp-sec">
+          <span class="tag">the road — ticked clips, clip by clip</span>
+          <div id="ix-roadstages" class="hint">…</div>
+          <button class="btn primary" id="ix-road" disabled>▶ Send down the road</button>
+          <div class="hint" style="margin-top:6px">each clip runs your picked stages in
+            order before the next clip starts; what a clip already has is skipped,
+            and every skip says why</div>
         </div>
 
         <div class="report" id="ix-report"></div>
@@ -51,11 +62,20 @@ const IndexPage = (() => {
     </div>
   </div>`;
 
-  const S = { rows: [], picked: new Set(), filter: "all", hasClips: false };
+  const S = { rows: [], picked: new Set(), filter: "all", hasClips: false,
+              stats: null };
+
+  /* the JS twin of czcore/sidecars.py KINDS — kind → owning tool (accent).
+     If a kind joins the law there, it joins here. */
+  const KIND_TOOL = { words: "scribe", captions: "scribe", cut: "scribe",
+                      moments: "highlighter", insight: "highlighter",
+                      kit: "publisher", pivot: "pivot", clear: "clear" };
+  const kindAcc = k => (toolById(KIND_TOOL[k]) || {}).acc || "var(--cream-dim)";
 
   async function loadStatus() {
     try {
       const st = await api("/api/index/status");
+      S.stats = st.stats;
       const f = $("#ix-folders", el);
       f.innerHTML = st.folders.length ? st.folders.map(r => `
         <div class="batchrow" style="margin-bottom:5px">
@@ -70,10 +90,65 @@ const IndexPage = (() => {
       });
       const s = st.stats;
       $("#ix-stats", el).innerHTML =
-        `<b>${s.clips || 0}</b> clips · ${((s.seconds || 0) / 3600).toFixed(1)}h · ` +
-        `${s.transcribed || 0} transcribed${s.missing ? ` · ${s.missing} missing` : ""}` +
+        `<b>${s.clips || 0}</b> clips · ${((s.seconds || 0) / 3600).toFixed(1)}h` +
+        `${s.missing ? ` · ${s.missing} missing` : ""}` +
         (s.fts ? "" : " · slow search (no FTS5)");
     } catch (e) { /* first paint can miss; search still works */ }
+  }
+
+  /* the coverage band — the library counted, each gap one click of work */
+  function coverBand() {
+    const s = S.stats;
+    if (!s || !s.clips) return "";
+    const kinds = ["words", "moments", "pivot", "kit", "clear"]
+      .map(k => ({ k, n: (s.coverage || {})[k] || 0 }))
+      .filter(x => x.n || x.k === "words");
+    return `<div class="ix-cover">
+      <span class="ix-stat"><b>${s.clips}</b>clips</span>
+      <span class="ix-stat"><b>${((s.seconds || 0) / 3600).toFixed(1)}</b>hours</span>
+      ${kinds.map(({ k, n }) => `
+        <button class="ix-stat ix-kind" data-f="${k}" ${n ? "" : "disabled"}
+          title="${n} of ${s.clips} clips carry ${k}">
+          <b style="color:${kindAcc(k)}">${n}</b>${k}</button>`).join("")}
+      ${s.wordless ? `<button class="btn ix-gapbtn" id="ix-batchwords"
+          title="run Scribe's engine over every clip that has sound and no transcript — one queue job">
+          ✎ words for the ${s.wordless} without</button>`
+        : `<span class="hint" style="align-self:center">every clip with sound has its words</span>`}
+    </div>`;
+  }
+
+  async function batchWords(paths) {
+    const n = paths ? paths.length : (S.stats || {}).wordless || 0;
+    const hrs = ((S.stats || {}).seconds || 0) / 3600;
+    // one click is one road, but 700 clips is a day of the machine's time —
+    // say the scale out loud before the queue takes it
+    if (!paths &&
+        !confirm(`transcribe ${n} clip${n > 1 ? "s" : ""}? Scribe's engine, ` +
+                 `one queue job, cancellable — but a big library ` +
+                 `(yours is ${hrs.toFixed(1)}h) can take a long while.`)) return;
+    const btn = $("#ix-batchwords", el);
+    if (btn) btn.disabled = true;
+    try {
+      const job = await api("/api/index/transcribe-missing",
+                            paths ? { paths } : {});
+      const p = czProgress($("#ix-scanhost", el), {
+        label: "the batch line — words", acc: "var(--index)" });
+      watchJob(job.id, j => p.update(j));
+      const done = await jobDone(job.id);
+      p.finish(done);
+      if (done.status === "error") { toast(done.error, true); }
+      else {
+        const r = done.result || {};
+        toast(`${(r.done || []).length} clips got their words` +
+              ((r.failed || []).length ? ` · ${r.failed.length} failed` : ""));
+        (r.failed || []).slice(0, 4).forEach(f => toast(f, true));
+      }
+      await loadStatus();
+      $("#ix-q", el).value.trim() ? search() : browse();
+    } catch (e) {
+      toast(e.message, true);
+      if (btn) btn.disabled = false;
+    }
   }
 
   function selMeta() {
@@ -82,11 +157,67 @@ const IndexPage = (() => {
       : "nothing ticked yet";
     $("#ix-fcpxml", el).disabled = !S.picked.size;
     $("#ix-csv", el).disabled = !S.picked.size;
+    $("#ix-selwords", el).disabled = !S.picked.size;
+    roadMeta();
+  }
+
+  /* -- the road: picked stages over ticked clips ------------------------- */
+
+  function roadPicks() {
+    return $$("#ix-roadstages input:checked", el).map(c => c.dataset.stage);
+  }
+
+  function roadMeta() {
+    $("#ix-road", el).disabled = !S.picked.size || !roadPicks().length;
+  }
+
+  async function loadRoadStages() {
+    try {
+      const r = await api("/api/index/road-stages");
+      $("#ix-roadstages", el).innerHTML = r.stages.map(s => `
+        <label class="ix-stage${s.ok ? "" : " off"}" title="${s.ok
+          ? `runs ${s.tool}'s engine at its defaults`
+          : esc(s.why)}">
+          <input type="checkbox" data-stage="${s.id}" ${s.ok ? "" : "disabled"}>
+          <i style="background:${(toolById(s.tool) || {}).acc || "var(--cream-dim)"}"></i>
+          ${esc(s.label)}${s.ok ? "" : ` <span class="hint">· ${esc(s.why)}</span>`}
+        </label>`).join("");
+      $$("#ix-roadstages input", el).forEach(c => c.onchange = roadMeta);
+    } catch (e) {
+      $("#ix-roadstages", el).textContent = e.message;
+    }
+  }
+
+  async function runRoad() {
+    const stages = roadPicks();
+    if (!stages.length || !S.picked.size) return;
+    const btn = $("#ix-road", el);
+    btn.disabled = true;
+    try {
+      const job = await api("/api/index/road",
+                            { paths: [...S.picked], stages });
+      const p = czProgress($("#ix-scanhost", el), {
+        label: "the road", acc: "var(--index)" });
+      watchJob(job.id, j => p.update(j));
+      const done = await jobDone(job.id);
+      p.finish(done);
+      if (done.status === "error") toast(done.error, true);
+      else {
+        const r = done.result || {};
+        toast(`${(r.done || []).length} clips down the road` +
+              ((r.failed || []).length ? ` · ${r.failed.length} notes` : ""));
+        (r.failed || []).slice(0, 5).forEach(f => toast(f, true));
+      }
+      await loadStatus();
+      $("#ix-q", el).value.trim() ? search() : browse();
+    } catch (e) { toast(e.message, true); }
+    roadMeta();
   }
 
   function rowHTML(row) {
     const picked = S.picked.has(row.path);
     const res = row.width ? `${row.width}×${row.height}` : (row.codec || "");
+    const carries = row.carries || [];
     return `<div class="ix-row${row.missing ? " missing" : ""}" data-path="${esc(row.path)}">
       <input type="checkbox" class="ix-tick" data-path="${esc(row.path)}" ${picked ? "checked" : ""}>
       <img class="ix-thumb" loading="lazy" src="${row.missing ? "" : frameURL(row.path, 24, 90)}"
@@ -94,7 +225,8 @@ const IndexPage = (() => {
       <div class="ix-body">
         <div class="ix-name">${esc(row.name)}
           ${row.missing ? `<span class="badge warn">missing — drive unplugged?</span>` : ""}
-          ${row.sidecar_mtime ? `<span class="badge">words</span>` : ""}</div>
+          ${carries.map(k => `<span class="sc-chip" title="this clip carries ${k}">
+            <i style="background:${kindAcc(k)}"></i>${k}</span>`).join("")}</div>
         <div class="ix-meta">${fmtTime(row.duration)} · ${res}${row.fps ? " @ " + (+row.fps).toFixed(2) : ""} ·
           ${esc(row.folder.split("/").pop())}
           ${row.missing ? "" : `<button class="ix-hit" data-hl="${esc(row.path)}"
@@ -112,7 +244,8 @@ const IndexPage = (() => {
     });
     $$(".ix-hit", box).forEach(b => b.onclick = () => b.dataset.hl
       ? go("highlighter", { openPath: b.dataset.hl })
-      : go("scribe", { openPath: b.dataset.path }));
+      : go("scribe", { openPath: b.dataset.path,
+                       t: parseFloat(b.dataset.t) || 0 }));
     $$(".ix-row .ix-thumb", box).forEach(img => img.onclick = () => {
       const p = img.closest(".ix-row").dataset.path;
       go("scribe", { openPath: p });
@@ -121,7 +254,13 @@ const IndexPage = (() => {
 
   const FILTERS = [
     ["all", "all", () => true],
-    ["words", "with words", r => !!r.sidecar_mtime],
+    ["words", "with words", r => (r.carries || []).includes("words")],
+    ["wordless", "no words yet",
+     r => !!r.audio && !(r.carries || []).includes("words") && !r.missing],
+    ["moments", "moments", r => (r.carries || []).includes("moments")],
+    ["pivot", "pivot", r => (r.carries || []).includes("pivot")],
+    ["kit", "kit", r => (r.carries || []).includes("kit")],
+    ["clear", "clear", r => (r.carries || []).includes("clear")],
     ["missing", "missing", r => !!r.missing],
   ];
 
@@ -132,6 +271,7 @@ const IndexPage = (() => {
     const box = $("#ix-results", el);
     box.innerHTML = `<div class="hint" style="padding:12px 2px">opening the catalog…</div>`;
     try {
+      if (!S.stats) await loadStatus();
       const r = await api(`/api/index/search?q=&limit=300`);
       S.rows = r.rows;
       S.hasClips = !!r.rows.length;
@@ -154,13 +294,15 @@ const IndexPage = (() => {
         const g = groups.find(x => x.folder === row.folder);
         g ? g.rows.push(row) : groups.push({ folder: row.folder, rows: [row] });
       }
-      box.innerHTML = chips + groups.map(g => `
+      box.innerHTML = coverBand() + chips + groups.map(g => `
         <div class="tag ix-folderhead" title="${esc(g.folder)}">${esc(g.folder.split("/").slice(-2).join("/"))}
           <span style="letter-spacing:0;text-transform:none"> · ${g.rows.length} clip${g.rows.length > 1 ? "s" : ""}</span></div>
         ${g.rows.map(rowHTML).join("")}`).join("");
       wireRows(box);
       $$("button[data-f]", box).forEach(b => b.onclick = () => {
         S.filter = b.dataset.f; browse(); });
+      const bw = $("#ix-batchwords", box);
+      if (bw) bw.onclick = batchWords;
     } catch (e) {
       box.innerHTML = `<div class="progmsg err" style="padding:12px 2px">${esc(e.message)}</div>`;
     }
@@ -236,6 +378,9 @@ const IndexPage = (() => {
     $("#ix-scan", el).onclick = scan;
     $("#ix-fcpxml", el).onclick = () => exportSel("fcpxml");
     $("#ix-csv", el).onclick = () => exportSel("csv");
+    $("#ix-selwords", el).onclick = () => batchWords([...S.picked]);
+    $("#ix-road", el).onclick = runRoad;
+    loadRoadStages();
   }
 
   function onshow() {
