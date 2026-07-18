@@ -22,8 +22,28 @@ Record" buttons, the Prior-appearances panel, the workflow chains on Home.
 **Lane B — the record** (the second machine). Builds **Community Memory**
 (specs/14) end to end as a suite tool: ingest, pipeline, corpus store,
 search, meeting pages, the long view, issue engine, submissions + context
-endpoints. Later — by agreement at a wave boundary, never assumed —
-Interpreter + Narrator (specs/15) as a pair.
+endpoints.
+
+**Lane C — seen and heard** (a third session; on lane A's machine it works
+in a git worktree, never lane A's checkout). Builds **Community
+Interpreter + Community Narrator** (specs/15) as the adjacent pair they
+are: translated caption tracks in the seven panel languages + Simple
+English with per-town glossaries, then the VOD audio-description
+pipeline with its review timeline and the meeting-graphics wedge.
+
+Lane C creates and exclusively owns: `interpreter/` and `narrator/`
+(HANDOFF.md lives in `interpreter/`), `suite/tools/interpreter.py`,
+`suite/tools/narrator.py`, `suite/static/js/interpreter.js`,
+`suite/static/js/narrator.js`, `tests/test_interpreter*.py`,
+`tests/test_narrator*.py` — plus, as the one czcore exception, the NEW
+files `czcore/mt.py` and `czcore/tts.py` (translation and speech
+engines the whole wing will eventually share; stdlib-guarded imports
+per the house convention). Its single-line slots work exactly like B's:
+import/register pairs in server.py (alphabetical), script tags in
+index.html after publisher.js, ready flips on its own two core.js
+entries. Everything else follows the lane B rules verbatim — branch
+`lane/access`, merge main in at every session start, A merges you,
+asks via HANDOFF.
 
 ## Ownership map
 
