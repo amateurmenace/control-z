@@ -20,7 +20,7 @@
   const homeGlyph = `<svg viewBox="0 0 20 20" fill="none">
     <path d="M3.5 9.5 10 3.5l6.5 6v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"
       stroke="var(--cream-dim)" stroke-width="1.6" fill="none"/></svg>`;
-  railTools.before(railItem("home", "Home", homeGlyph, null));
+  $("#rail-home").appendChild(railItem("home", "Home", homeGlyph, null));
 
   TOOLS.filter(t => t.group !== "community").forEach(t => {
     railTools.appendChild(railItem(t.id, t.name, glyphSVG(t.acc, t.ready), t.acc,

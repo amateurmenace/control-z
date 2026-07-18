@@ -16,7 +16,7 @@ const GrabberPage = (() => {
   el.innerHTML = `
   <div class="ws" style="--acc:${T.acc}">
     <div class="mediabar">
-      <span class="toolname"><i>BIG Video Grabber</i> · brings the meeting home</span>
+      <span class="toolname"><i>Video Grabber</i> · brings the meeting home</span>
       <input type="text" id="gb-tenant" value="brooklinema" spellcheck="false"
         style="flex:0 1 150px;min-width:110px" title="the CivicClerk tenant — the part before .api.civicclerk.com">
       <input type="date" id="gb-from" class="gb-date">

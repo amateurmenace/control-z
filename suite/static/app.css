@@ -69,7 +69,7 @@ button:disabled { opacity: .4; cursor: default; }
   user-select: none;
 }
 .brand { padding: 0 18px 16px; }
-.brand .z { font-family: var(--head); font-weight: 700; font-size: 19px; letter-spacing: -.3px; }
+.brand .z { font-family: var(--head); font-weight: 700; font-size: 17.5px; letter-spacing: -.2px; }
 .brand .z b { color: var(--amber); }
 .brand .sub { font-family: var(--mono); font-size: 9.5px; letter-spacing: .22em;
   text-transform: uppercase; color: var(--cream-faint); margin-top: 2px; }
@@ -93,6 +93,10 @@ button:disabled { opacity: .4; cursor: default; }
   margin-left: auto; font-family: var(--mono); font-size: 8.5px;
   color: var(--cream-faint); letter-spacing: .06em;
 }
+.rail-sub { display: block; font-size: 8.5px; letter-spacing: .12em;
+  color: var(--cream-faint); opacity: .8; margin-top: 1px;
+  text-transform: lowercase; }
+
 /* node-wire active indicator (the site motif) */
 .rail-item .wire {
   position: absolute; left: 0; top: 50%; width: 12px; height: 2px;
