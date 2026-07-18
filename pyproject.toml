@@ -50,11 +50,13 @@ packages = ["czcore", "czcore.exports", "czcore.appshell",
             "pivot", "stencil", "scribe", "clear", "rise", "depth",
             "highlighter", "grabber", "indexer", "slate", "publisher",
             "memory", "interpreter", "narrator",
+            "web",
             "suite", "suite.tools"]
 
 [tool.setuptools.package-data]
 pivot = ["static/*.html"]
 depth = ["templates/*.setting"]
 interpreter = ["glossaries/*.json"]
+web = ["static/*"]
 # static/* alone misses static/js/*.js — the whole UI. Both globs, explicitly.
 suite = ["static/*.html", "static/*.css", "static/js/*.js"]
