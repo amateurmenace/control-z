@@ -1,5 +1,5 @@
 #!/bin/bash
-# control-z Suite — notarize, staple, and build the DMG (specs/09 §4).
+# Civic Media Studio — notarize, staple, and build the DMG (specs/09 §4).
 #
 # Order of operations is load-bearing: the .app is stapled FIRST and the DMG
 # is built FROM the stapled copy, then the DMG gets its own submission and
@@ -12,7 +12,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="dist/control-z Suite.app"
+APP="dist/Civic Media Studio.app"
 NOTARY_PROFILE="${NOTARY_PROFILE:-opennr-notary}"
 [ -d "$APP" ] || { echo "FATAL: $APP missing"; exit 1; }
 
@@ -44,7 +44,7 @@ if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>
 fi
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
-DMG="dist/control-z-suite-$VERSION-macos-arm64.dmg"
+DMG="dist/civicmedia-studio-$VERSION-macos-arm64.dmg"
 
 submit() {  # submit <artifact> — waits; on anything but Accepted, prints the log
     local artifact="$1"
@@ -94,15 +94,15 @@ cp icon.icns "$STAGE/.VolumeIcon.icns"
 cp ../NOTICE "$STAGE/NOTICE.txt"
 cp vendor/src/ffmpeg-8.1.2/COPYING.LGPLv2.1 "$STAGE/LICENSE-FFmpeg-LGPL-2.1.txt"
 rm -f "$DMG" dist/_rw.dmg
-hdiutil create -volname "control-z Suite" -srcfolder "$STAGE" -ov -format UDRW -quiet dist/_rw.dmg
+hdiutil create -volname "Civic Media Studio" -srcfolder "$STAGE" -ov -format UDRW -quiet dist/_rw.dmg
 hdiutil attach -quiet dist/_rw.dmg
 if command -v SetFile >/dev/null 2>&1 || xcrun -f SetFile >/dev/null 2>&1; then
-    (SetFile -a C "/Volumes/control-z Suite" 2>/dev/null || \
-     xcrun SetFile -a C "/Volumes/control-z Suite")
+    (SetFile -a C "/Volumes/Civic Media Studio" 2>/dev/null || \
+     xcrun SetFile -a C "/Volumes/Civic Media Studio")
 else
     echo "  note: SetFile unavailable — volume icon bit not set (cosmetic)"
 fi
-hdiutil detach -quiet "/Volumes/control-z Suite"
+hdiutil detach -quiet "/Volumes/Civic Media Studio"
 hdiutil convert -quiet dist/_rw.dmg -format UDZO -o "$DMG"
 rm -f dist/_rw.dmg
 rm -rf "$STAGE"

@@ -6,7 +6,7 @@ const ComingPages = (() => {
     el.className = "page";
     el.id = `page-${id}`;
     el.innerHTML = `<div class="page-pad coming">
-      <div class="tag">community ai project</div>
+      <div class="tag">civicmedia.studio</div>
       <h1 style="margin-top:6px">${title}</h1>
       <div class="verb">${verb}</div>
       <span class="when">coming in ${when}</span>

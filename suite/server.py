@@ -44,7 +44,7 @@ def create_suite_app():
         yield
         loop_box.clear()
 
-    app = FastAPI(title="Community AI Project", docs_url=None, redoc_url=None,
+    app = FastAPI(title="Civic Media Studio", docs_url=None, redoc_url=None,
                   lifespan=lifespan)
     jobs = JobManager(db_path=str(app_support() / "jobs.db"), queued=True)
     frames = FrameService()
@@ -311,11 +311,11 @@ def run(app, port: int = 8300, open_window: bool = True, host: str = "127.0.0.1"
                 uvicorn.run(app, host=host, port=port, log_level="warning")
 
             threading.Thread(target=serve, daemon=True).start()
-            webview.create_window("Community AI Project", f"http://{host}:{port}",
+            webview.create_window("Civic Media Studio", f"http://{host}:{port}",
                                   width=1480, height=940, min_size=(1100, 700))
             webview.start()
             return
         except ImportError:
             pass
-    print(f"Community AI Project — open http://{host}:{port} (Ctrl-C to quit)")
+    print(f"Civic Media Studio — open http://{host}:{port} (Ctrl-C to quit)")
     uvicorn.run(app, host=host, port=port, log_level="warning")

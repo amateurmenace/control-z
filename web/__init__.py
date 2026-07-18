@@ -1,4 +1,4 @@
-"""The web app — the Community AI Project, pressed into a static edition.
+"""The web app — publicrecord.studio (The Public Record), pressed into a static edition.
 
 `python -m web.bake --corpus <corpus.db> --out site/docs/app` reads everything
 Memory knows and writes a browsable, backend-free edition: JSON data planes,

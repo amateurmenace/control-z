@@ -1,7 +1,7 @@
 [project]
 name = "control-z-apps"
 version = "1.9.0"
-description = "control-z: free cleaning, prepping, and finishing tools for DaVinci Resolve (standalone apps monorepo)"
+description = "Civic Media Studio (civicmedia.studio) — free media cleaning, prepping, analysis, and finishing tools (standalone apps monorepo)"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = []

@@ -1,4 +1,4 @@
-/* control-z Suite — paper light (the site's cream, the web app's cues).
+/* Civic Media Studio — paper light (the site's cream, the web app's cues).
    Cream paper surfaces, ink text, amber strictly for measurements/attention,
    per-tool accents on rail glyphs and primary actions. Media surfaces
    (viewer, filmstrip, scopes, the NLE strip) stay dark — footage lives in
@@ -69,8 +69,9 @@ button:disabled { opacity: .4; cursor: default; }
   user-select: none;
 }
 .brand { padding: 0 18px 16px; }
-.brand .z { font-family: var(--head); font-weight: 700; font-size: 17.5px; letter-spacing: -.2px; }
-.brand .z b { color: var(--amber); }
+.brand .z { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-weight: 700; font-size: 15px; letter-spacing: -.2px; }
+.brand .z .kc { width: 22px; height: 22px; flex: 0 0 auto; }
+.brand .z b { color: #8a8f98; font-weight: 500; }
 .brand .sub { font-family: var(--mono); font-size: 9.5px; letter-spacing: .22em;
   text-transform: uppercase; color: var(--cream-faint); margin-top: 2px; }
 

@@ -1,0 +1,8 @@
+:root{
+  --font-mono:'JetBrains Mono',ui-monospace,monospace; /* logo lockups (lowercase), headings, labels, code */
+  --font-sans:'Inter',system-ui,sans-serif;            /* supporting/body text only */
+  --text-xs:11px; --text-sm:13px; --text-base:14px; --text-md:16px; --text-lg:20px; --text-xl:24px; --text-display:32px;
+  --weight-regular:400; --weight-medium:500; --weight-bold:700; --weight-black:800;
+  --leading-tight:1.2; --leading-body:1.55;
+  --tracking-label:0.06em; /* uppercase mono labels */
+}

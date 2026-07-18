@@ -18,7 +18,9 @@ b { font-weight: 600; }
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 12px 26px; background: var(--ink-2);
   border-bottom: 1.5px solid var(--line); }
-.brand { font-family: var(--head); font-size: 19px; letter-spacing: -.01em; }
+.brand { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
+.brand .brandmark { flex: 0 0 auto; }
+.brand .tld { color: var(--cream-faint); font-weight: 500; }
 .brand i { font-style: italic; color: var(--memory); }
 .webchip { font-family: var(--mono); font-size: 9px; letter-spacing: .16em;
   border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px;
@@ -402,6 +404,6 @@ table.twin a { color: var(--memory); text-decoration: none; }
   body { color: #000; background: #fff; }
   .transcript { border: 0; padding: 0; }
   .seg .ts { color: #000; }
-  .meeting::before { content: "Community AI Project — the record";
+  .meeting::before { content: "publicrecord.studio — the record";
     display: block; font-family: var(--mono); font-size: 10px; color: #444; }
 }

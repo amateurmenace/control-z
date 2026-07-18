@@ -1,5 +1,5 @@
 #!/bin/bash
-# control-z Suite — sign the frozen app (specs/09 §4).
+# Civic Media Studio — sign the frozen app (specs/09 §4).
 #
 # Inside-out, leaf-first, batched. Mach-O by INSPECTION, never by extension:
 # the first extension-matched pass in the research build missed
@@ -19,7 +19,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP="dist/control-z Suite.app"
+APP="dist/Civic Media Studio.app"
 [ -d "$APP" ] || { echo "FATAL: $APP missing — run build_suite.sh first"; exit 1; }
 
 # Identity: grep the literal Developer ID Application string. The FIRST
@@ -37,7 +37,7 @@ if [ -z "${DEV_ID:-}" ]; then
 fi
 echo "signing with: $DEV_ID"
 
-MAIN="$APP/Contents/MacOS/control-z Suite"
+MAIN="$APP/Contents/MacOS/Civic Media Studio"
 
 echo "== leaf pass: every nested Mach-O, by file(1) inspection =="
 # -type f skips symlinks (codesign errors on them — sherpa_onnx ships one);

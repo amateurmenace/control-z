@@ -85,11 +85,11 @@ def head(title, desc, canonical, og_image="", version="0"):
 
 def mark():
     return f"""<header class="mark">
-  <a class="brand" href="/app/"><b>community</b> <i>ai</i> <b>project</b></a>
+  <a class="brand" href="/app/"><svg class="brandmark" viewBox="0 0 96 96" width="22" height="22" aria-hidden="true"><rect x="2" y="2" width="92" height="92" rx="20" fill="#ffffff" stroke="#94a3b8" stroke-width="3"/><rect x="22" y="28" width="52" height="8" fill="#052e16"/><rect x="22" y="44" width="52" height="8" fill="#052e16"/><rect x="22" y="60" width="34" height="8" fill="#052e16"/></svg><span class="wm">publicrecord<span class="tld">.studio</span></span></a>
   <span class="webchip">WEB</span>
   <details class="mark-panel"><summary class="btn">Get the desktop app</summary>
     <div class="mark-body">
-      <p>The desktop app adds what a browser can't:</p>
+      <p><b>Civic Media Studio</b> (the desktop app) adds what a browser can't:</p>
       <ul><li>work on your own footage</li>
           <li>render, transcribe and cut with local AI</li>
           <li>nothing ever uploads</li></ul>
@@ -225,7 +225,7 @@ def page_home(meetings, issues, stats, manifest, base):
   <section class="card"><span class="tag">the mission, measured</span>
     <div class="meters">{meters}</div></section>
 """
-    return shell("The record — Community AI Project",
+    return shell("The record — publicrecord.studio",
                  f"{c['meetings']} meetings, {c['hours']} hours, {c['issues']} issues "
                  "tracked across the record — open in any browser.",
                  f"{base}/app/", body, "home", manifest, version=manifest["version"])
@@ -579,7 +579,7 @@ def page_covenant(manifest, base):
       from a corpus fingerprinted {esc(manifest.get('corpus_hash',''))}.</p>
   </section>
 """
-    return shell("The covenant — Community AI Project",
+    return shell("The covenant — publicrecord.studio",
                  "Static files, no accounts, no tracking. The covenant in one screen.",
                  f"{base}/app/covenant", body, "", manifest,
                  version=manifest["version"])
@@ -677,7 +677,7 @@ def page_analytics(analytics, manifest, base):
     </div>
   </section>
 """
-    return shell("The record, drawn — Community AI Project",
+    return shell("The record, drawn — publicrecord.studio",
                  "The town's meetings as one picture — framing, topics, and names "
                  "counted across the record.",
                  f"{base}/app/analytics", body, "analytics", manifest,
@@ -748,7 +748,7 @@ def page_graph(graph, manifest, base):
     </details>
   </section>
 """
-    return shell("The issue graph — Community AI Project",
+    return shell("The issue graph — publicrecord.studio",
                  "The town's issues drawn as the network they are — tied when "
                  "they share meetings.",
                  f"{base}/app/graph", body, "graph", manifest,
@@ -820,7 +820,7 @@ def page_door(t, manifest, base):
     </div>
   </section>
 """
-    return shell(f'{t.get("long", t["name"])} — Community AI Project',
+    return shell(f'{t.get("long", t["name"])} — publicrecord.studio',
                  f'{t["verb"]} — {t["one"]}. A desk tool; its work lives on the record.',
                  f"{base}/app/t/{t['id']}", body, t["id"], manifest,
                  version=manifest["version"])
@@ -849,10 +849,14 @@ def emit_assets(out: Path, version, manifest):
     # app.js (the reader)
     shutil.copyfile(Path(__file__).resolve().parent / "static" / "app.js",
                     out / "app.js")
-    # favicon — the node motif, oxblood (the record)
+    # favicon — the publicrecord keycap (the minutes, on the record)
     (out / "favicon.svg").write_text(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">'
-        '<rect x="4" y="4" width="12" height="12" rx="3" fill="#8E4A55"/></svg>',
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">'
+        '<rect x="2" y="2" width="92" height="92" rx="20" fill="#ffffff" '
+        'stroke="#94a3b8" stroke-width="5"/>'
+        '<rect x="20" y="26" width="56" height="11" fill="#052e16"/>'
+        '<rect x="20" y="44" width="56" height="11" fill="#052e16"/>'
+        '<rect x="20" y="62" width="34" height="11" fill="#052e16"/></svg>',
         encoding="utf-8")
     # demo slides the doors reference
     src = REPO / "site" / "content" / "assets"
@@ -870,7 +874,7 @@ def emit_assets(out: Path, version, manifest):
 def _write_pwa(out: Path, manifest):
     import json as _json
     webmanifest = {
-        "name": "Community AI Project — the record",
+        "name": "The Public Record — publicrecord.studio",
         "short_name": "the record",
         "description": "A town's whole spoken life, cross-linked and searchable "
                        "— open in any browser.",

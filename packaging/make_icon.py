@@ -1,84 +1,50 @@
-"""The control-z icon — the brand as a rebus: a caret over an amber z.
+"""The Civic Media Studio icon — the civicmedia.studio keycap.
 
-Renders the macOS app icon (squircle, ink surface, cream ⌃ above the amber
-z — "control z" read aloud) at 2× supersample, emits the full .iconset, and
-compiles packaging/icon.icns via iconutil. Also writes logo-512.png for any
-surface that wants the mark. Deterministic: same inputs, same bytes-ish
-(font rendering aside) — rerun any time, commit the .icns.
+Renders the macOS app icon (the brand's ink keycap: two green clips under a
+purple playhead — "clips under the playhead") at 2× supersample, emits the full
+.iconset, and compiles packaging/icon.icns via iconutil. Also writes
+logo-512.png for any surface that wants the mark. Deterministic: same inputs,
+same bytes — rerun any time, commit the .icns.
+
+Geometry is the civicmedia mark from brand/logos/civicmedia-mark.svg, drawn (not
+rasterized) so it stays crisp at every icon size.
 
     .venv/bin/python packaging/make_icon.py
 """
 
 from __future__ import annotations
 
-import math
 import subprocess
-import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
 
-from slate.fonts import find  # noqa: E402  (the suite's own font discovery)
-
-INK_TOP = (32, 32, 43, 255)
-INK_BOT = (21, 21, 27, 255)
-CREAM = (245, 243, 238, 255)
-AMBER = (229, 168, 53, 255)
-HAIRLINE = (245, 243, 238, 20)
-
-
-def squircle_points(cx, cy, a, n=4.6, steps=720):
-    pts = []
-    for k in range(steps):
-        t = 2 * math.pi * k / steps
-        c, s = math.cos(t), math.sin(t)
-        x = cx + a * math.copysign(abs(c) ** (2 / n), c)
-        y = cy + a * math.copysign(abs(s) ** (2 / n), s)
-        pts.append((x, y))
-    return pts
+# civicmedia palette (brand/tokens/colors.css)
+KEYCAP = (15, 23, 42, 255)      # ink     #0f172a
+CLIP_HI = (34, 197, 94, 255)    # bright  #22c55e
+CLIP_LO = (74, 222, 128, 255)   # soft    #4ade80
+PLAYHEAD = (168, 85, 247, 255)  # purple  #a855f7
 
 
 def render_master(size=1024, ss=2):
+    """The civicmedia keycap on a transparent tile, at Apple's artwork footprint."""
     S = size * ss
     img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    cx = cy = S / 2
-    a = S * 0.406          # 832/1024 — Apple's Big-Sur-era artwork footprint
-    pts = squircle_points(cx, cy, a)
+    L = S * 0.812                      # 832/1024 — Big-Sur-era artwork footprint
+    ox = oy = (S - L) / 2
+    sc = L / 96.0                      # the mark's own viewBox is 96×96
 
-    # vertical gradient clipped to the squircle
-    grad = Image.new("RGBA", (S, S))
-    top, bot = INK_TOP, INK_BOT
-    px = grad.load()
-    for y in range(S):
-        f = y / (S - 1)
-        row = tuple(round(top[i] + (bot[i] - top[i]) * f) for i in range(4))
-        for x in range(0, S, 1):
-            px[x, y] = row
-    mask = Image.new("L", (S, S), 0)
-    ImageDraw.Draw(mask).polygon(pts, fill=255)
-    img.paste(grad, (0, 0), mask)
+    def box(x, y, w, h):               # mark-space rect → device pixels
+        return [ox + x * sc, oy + y * sc, ox + (x + w) * sc, oy + (y + h) * sc]
+
     d = ImageDraw.Draw(img)
-    d.line(pts + [pts[0]], fill=HAIRLINE, width=max(2, 3 * ss))
-
-    # the caret — drawn, not typeset, so it's crisp at 16 px
-    car_w = S * 0.30
-    car_h = S * 0.115
-    car_cy = cy - S * 0.208
-    stroke = round(S * 0.052)
-    d.line([(cx - car_w / 2, car_cy + car_h / 2), (cx, car_cy - car_h / 2),
-            (cx + car_w / 2, car_cy + car_h / 2)],
-           fill=CREAM, width=stroke, joint="curve")
-
-    # the amber z — the brand's own letter
-    font = ImageFont.truetype(find("HelveticaNeue"), size=round(S * 0.46))
-    bb = d.textbbox((0, 0), "z", font=font)
-    zw, zh = bb[2] - bb[0], bb[3] - bb[1]
-    d.text((cx - zw / 2 - bb[0], cy + S * 0.042 - zh / 2 - bb[1]), "z",
-           font=font, fill=AMBER)
-
+    d.rounded_rectangle(box(0, 0, 96, 96), radius=22 * sc, fill=KEYCAP)
+    d.rectangle(box(18, 40, 46, 11), fill=CLIP_HI)    # top clip
+    d.rectangle(box(18, 58, 30, 11), fill=CLIP_LO)    # bottom clip
+    d.rectangle(box(54, 24, 6, 56), fill=PLAYHEAD)    # playhead stem
+    d.rectangle(box(46, 16, 22, 12), fill=PLAYHEAD)   # playhead head
     return img.resize((size, size), Image.LANCZOS)
 
 
