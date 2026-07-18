@@ -81,7 +81,9 @@
     const msg = kind === "listening"
       ? { event: "listening", id: "czweb", channel: "widget" }
       : { event: "command", func, args: args || [] };
-    YT.win.postMessage(JSON.stringify(msg), "*");
+    // pin the embed origin (the inbound handler already gates on it) — the
+    // frame src is fixed at youtube-nocookie.com, so this never drops a message
+    YT.win.postMessage(JSON.stringify(msg), "https://www.youtube-nocookie.com");
   }
   function ytSeek(t) { YT.win ? (ytSend("cmd", "seekTo", [t, true]), ytSend("cmd", "playVideo", [])) : null; YT.time = t; strip(t); }
   function onYT(e) {
@@ -236,15 +238,14 @@
     }));
     let ids = [...(sets[0] || [])];
     for (let i = 1; i < sets.length; i++) ids = ids.filter(x => sets[i].has(x));
-    // phrase: if the query is multi-word, keep only segments containing it
+    // prefer exact-phrase segments on a multi-word query; else keep the AND hits
     const phrase = q.trim().toLowerCase();
-    const multi = terms.length > 1;
     let hits = ids.map(id => segs[id]).filter(Boolean);
-    if (multi) hits = hits.filter(s => String(s[3]).toLowerCase().includes(phrase)).concat(
-      // fall back to AND matches if no exact phrase
-      hits.length && hits.some(s => String(s[3]).toLowerCase().includes(phrase)) ? [] :
-        ids.map(id => segs[id]).filter(Boolean));
-    hits = [...new Set(hits)].slice(0, 80);
+    if (terms.length > 1) {
+      const exact = hits.filter(s => String(s[3]).toLowerCase().includes(phrase));
+      if (exact.length) hits = exact;
+    }
+    hits = hits.slice(0, 80);
     if (!hits.length) { box.innerHTML = `<p class="hint">nothing in the record for “${esc(q)}”. It holds ${meta.length} meeting(s).</p>`; return; }
     box.innerHTML = `<p class="hint">${hits.length} moment${hits.length>1?"s":""} across the record</p>` +
       hits.map(([mi, t, spk, text]) => {

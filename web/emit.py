@@ -263,9 +263,11 @@ def page_meeting(m, manifest, base):
     meta = " · ".join([x for x in (m["body"], m["town"], m["date"] or "undated",
                                    f'{m["n_speakers"]} speakers' if m["n_speakers"] else "")
                        if x])
-    dl = (f'<a class="dl" href="/app/tracks/{m["pid"]}/en.vtt" download>captions .vtt</a>'
-          if False else "")  # english served from transcript; per-lang below
-    tdl = "".join(f'<a class="dl" href="/app/tracks/{m["pid"]}/{t["code"]}.vtt" download>{esc(t["name"])} .vtt</a>'
+    # english is served from the transcript itself; per-language tracks below.
+    # esc() the code into the href too — a local sidecar filename is
+    # operator-controlled and the track-code regex ([^.]+) permits quotes/angle
+    # brackets, so match the escaping the <option value> already does.
+    tdl = "".join(f'<a class="dl" href="/app/tracks/{m["pid"]}/{esc(t["code"])}.vtt" download>{esc(t["name"])} .vtt</a>'
                   for t in m["tracks"])
     addl = (f'<a class="dl" href="/app/ad/{m["pid"]}.vtt" download>described .vtt</a>' if m["ad"] else "")
     body = f"""
