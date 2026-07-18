@@ -233,7 +233,14 @@ class Corpus:
                 con.execute("DELETE FROM segments_fts WHERE meeting_id=?",
                             (meeting_id,))
             con.execute("DELETE FROM segments WHERE meeting_id=?", (meeting_id,))
-            # nothing cascades — the meeting's paper and its roll calls go too
+            # nothing cascades — the meeting's paper and its roll calls go too,
+            # and so do its issue links. Without this last one the segments go
+            # but their issue rows stay, pointing at ids that no longer exist:
+            # list_issues LEFT JOINs and counts the ghosts, issue_appearances
+            # INNER JOINs and hides them, and the two surfaces disagree about
+            # the same issue. An issue's size is what its timeline shows.
+            con.execute("DELETE FROM issue_segments WHERE meeting_id=?",
+                        (meeting_id,))
             con.execute(
                 "DELETE FROM issue_documents WHERE doc_id IN "
                 "(SELECT id FROM documents WHERE meeting_id=?)", (meeting_id,))
