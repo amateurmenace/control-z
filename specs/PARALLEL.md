@@ -127,6 +127,15 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
+- 2026-07-17 (later) — **The app is the Community AI Project now**:
+  window/tab/brand renamed, rail reordered (Civic Media Suite section
+  on top; your memory entry lives there), Home runs a conveyor of the
+  civic chain, Grabber is a search-first desk with schedules and a
+  broadcast re-namer, Index browses on open, and `czProgress(container,
+  {label, acc})` in core.js is the house progress card — use it for any
+  long job UI you build. Statics now cache-bust on version + mtime.
+  Nothing in your owned paths was touched. 294 tests green.
+
 - 2026-07-17 (night) — **Publisher is LIVE at BIG-dev (beta)**: engine
   (`publisher/`), page, registration — and the single-line-slot playbook
   is now demonstrated in history (commit 39a0484: server.py import +

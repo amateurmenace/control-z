@@ -3,6 +3,41 @@
 ## unreleased
 
 ### 1.6.0: the wing doubles on paper, and the kit ships itself — 2026-07-17
+- **The app says its real name.** The window, tab, brand and serve line
+  all read **Community AI Project** — "the world's most advanced civic
+  media suite" beneath. The rail reorders to the mission: Home, the
+  **Civic Media Suite** on top (all seven squares), then **control-z ·
+  free pro production tools** with the diamonds. BIG Video Grabber
+  signs as **Video Grabber**.
+- **Home runs the line.** The centerpiece is a conveyor: search + fetch
+  → find the moments → make the kit → keep the record — a package rides
+  the dashed belt station to station picking up each stop's color,
+  coming stations stand dashed with their date, and ▶ Run the line
+  drops you at the search desk.
+- **The Grabber becomes the search desk.** One query runs YouTube
+  (newest first) and the CivicClerk portal in parallel — events arrive
+  with video and Zoom links badged, YouTube rows carry → Highlighter
+  and Fetch, fetch-all queues the lot. Direct paste downloads at any
+  quality — and the container promise is real: mp4-family codecs
+  preferred at every rung, lossless remux catching fallbacks, audio-only
+  landing m4a. New: **weekly schedules** ("everything from the last
+  week, every Thursday at nine" — runs while the app is open, catches
+  up on launch, says so), and the **broadcast re-namer** —
+  {title}_{date} patterns to playout-safe names, live preview, sidecars
+  traveling with the file. The bin grew publish and rename doors.
+- **Index opens on the shelf.** The catalog appears on open — newest
+  first, grouped by folder, filter chips (all / with words / missing),
+  thumbs, → Highlighter on every row; typing narrows, clearing brings
+  the shelf back. (The browse lived in the catalog all along; no UI
+  ever called it.)
+- **The finder takes Highlighter's front door** — town + board search
+  first, the paste field second, the drop zone third.
+- **One beautiful face for progress.** czProgress: an accent bar that
+  shimmers while a job finds its feet and fills when it knows its
+  fraction, stage message in mono, a live clock, green on done, the
+  sentence on error — on every Grabber fetch and conform, Index scan,
+  Publisher render and bundle. And the static cache token grew an
+  mtime tail, so an edited file busts the browser mid-version too.
 - **The community wing grows by four, and Home strings the wire.** The
   Community AI Project specs moved into the repo (specs/12–15: the
   program plan, Publisher, Memory, Interpreter+Narrator), and all four
