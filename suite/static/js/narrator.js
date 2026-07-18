@@ -112,7 +112,17 @@ const NarratorPage = (() => {
     const st = stepState();
     if (!st.planned) return "";
     const bits = [`<b>AI descriptions — beta</b>`];
-    if (sc.model) bits.push(`vision ${esc(sc.model)} (your key)`);
+    if (sc.model) {
+      // origin is "local:<name>" (on-device), "ai:<model>" (your key), or
+      // "mixed:<a>+<b>" for a track drawn by both — label all cases honestly
+      const one = m => m.startsWith("local:") ? `${esc(m.slice(6))} — on-device`
+        : m.startsWith("ai:") ? `${esc(m.slice(3))} (your key)`
+        : `${esc(m)} (your key)`;
+      const m = String(sc.model);
+      const label = m.startsWith("mixed:")
+        ? m.slice(6).split("+").map(one).join(" + ") : one(m);
+      bits.push(`vision ${label}`);
+    }
     if (sc.voice) bits.push(`voice ${esc(sc.voice)} — local`);
     bits.push(esc(sc.review || "unreviewed"));
     const n = (sc.cues || []).filter(c => c.text).length;

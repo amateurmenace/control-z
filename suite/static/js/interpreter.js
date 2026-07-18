@@ -121,9 +121,10 @@ const InterpreterPage = (() => {
     const st = S.langs[code] || {};
     if (!st.has) return "";
     const g = st.glossary || {};
+    const where = st.engine === "local" ? " — on-device" : " (your key)";
     const bits = [
       `<b>AI translation — beta</b>`,
-      esc(st.model || "?") + " (your key)",
+      esc(st.model || "?") + where,
       `glossary ${esc(g.town || "?")} v${g.version ?? "?"}`,
       esc(st.review || "unreviewed"),
     ];

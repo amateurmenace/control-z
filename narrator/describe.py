@@ -64,23 +64,38 @@ def draft_prompt(kind: str, words_budget: int) -> str:
 
 
 def describe_frame(jpeg: bytes, kind: str, words_budget: int,
-                   timeout: float = 60.0) -> str:
-    """One vision call on the user's key — through czcore.llm's multimodal
-    door (this module's request shape moved in there for 1.7.1, so the
-    tokens land in the suite-wide AI audit). Returns the draft text; raises
-    RuntimeError with a sentence on every failure mode."""
+                   timeout: float = 60.0):
+    """Draft a description of one frame. Tries the on-device VLM first (no key,
+    no tokens), then falls back to the user's key through czcore.llm's
+    multimodal door (whose tokens land in the suite-wide AI audit). Returns
+    ``(text, origin)`` — origin is "local" or "ai:<model>", so the drafting
+    route can label each cue by what actually drew it. Raises RuntimeError with
+    a sentence only when NEITHER engine can run."""
     from czcore import llm
+    prompt = draft_prompt(kind, words_budget)
+
+    # local first — on-device, covenant's preference
+    try:
+        from czcore import vision
+        if vision.available()["ok"]:
+            text = vision.describe(jpeg, prompt, system=DCMP_SYSTEM,
+                                   max_tokens=300)
+            text = re.sub(r"\s+", " ", text).strip()
+            if text:
+                return text, "local:" + (vision.model_name() or "vlm")
+    except Exception:
+        pass   # any local failure falls through to the key path, honestly
 
     if not llm.enabled():
-        raise RuntimeError("descriptions need your API key — Settings → AI")
+        raise RuntimeError("descriptions need an on-device model (Models page) "
+                           "or your API key — Settings → AI")
     b64 = base64.b64encode(jpeg).decode("ascii")
-    text = llm.complete_vision(draft_prompt(kind, words_budget), b64,
-                               system=DCMP_SYSTEM, max_tokens=300,
+    text = llm.complete_vision(prompt, b64, system=DCMP_SYSTEM, max_tokens=300,
                                timeout=timeout)
     text = re.sub(r"\s+", " ", text).strip()
     if not text:
         raise RuntimeError("the model answered with no description")
-    return text
+    return text, "ai:" + (llm.status().get("model") or "?")
 
 
 # -- the lint: DCMP style, checked not assumed -------------------------------

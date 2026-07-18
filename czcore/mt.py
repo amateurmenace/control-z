@@ -50,20 +50,58 @@ def lang(code: str) -> Optional[dict]:
     return next((l for l in LANGUAGES if l["code"] == code), None)
 
 
+def engine_for(code: str) -> dict:
+    """The engine that will ACTUALLY carry one language — {engine, model}.
+    'simple' (an intralingual English rewrite) has no local target, so it stays
+    on the key path even when a local model is installed; every other panel
+    language prefers the local engine. Returns engine None (with a sentence)
+    when nothing can carry that code — the caller skips it honestly rather than
+    crashing mid-job or mislabeling the track."""
+    if code != "simple":
+        try:
+            from . import mt_local
+            loc = mt_local.available()
+            if loc.get("engine") == "local":
+                return {"engine": "local", "model": loc["model"]}
+        except Exception:
+            pass
+    # simple, or no local model: the key path
+    from . import llm
+    st = llm.status()
+    if st["enabled"]:
+        return {"engine": "key", "model": st["model"]}
+    return {"engine": None, "model": None,
+            "sentence": ("Simple English is an English rewrite — it needs your "
+                         "API key (Settings → AI), even with a local model")
+            if code == "simple" else
+            "no translation engine — install a local model or add your key"}
+
+
 def available() -> dict:
     """What can translate today, as the UI shows it: {engine, model,
-    sentence}. engine is "key" or None — a local runtime would add its
-    name here rather than pretending to be one of these."""
-    from . import llm
+    sentence}. engine is "local" (an on-device model, no key), "key" (the
+    user's API key), or None. Local wins when present — it spends no tokens
+    and needs no account, the covenant's preference; the key remains the
+    quality path and the fallback."""
+    # local first: an on-device model needs no key and spends nothing
+    try:
+        from . import mt_local
+        loc = mt_local.available()
+        if loc.get("engine") == "local":
+            return {"engine": "local", "model": loc["model"], "provider": None,
+                    "sentence": loc["sentence"]}
+    except Exception:
+        pass
 
+    from . import llm
     st = llm.status()
     if st["enabled"]:
         return {"engine": "key", "model": st["model"],
                 "provider": st.get("provider"),
                 "sentence": f"translation runs on your key — {st['model']}"}
     return {"engine": None, "model": None, "provider": None,
-            "sentence": "no translation engine yet — add your API key in "
-                        "Settings → AI and every language below lights up"}
+            "sentence": "no translation engine yet — install a local model on "
+                        "the Models page, or add your API key in Settings → AI"}
 
 
 # -- cue math: rolling fragments -> caption-shaped cues ----------------------
@@ -190,11 +228,23 @@ def translate_cues(cues: List[dict], code: str,
         raise RuntimeError(f"unknown language code “{code}” — the panel "
                            "speaks " + ", ".join(l["code"] for l in LANGUAGES))
     if complete is None:
-        from . import llm
-        if not llm.enabled():
-            raise RuntimeError("no translation engine — add your API key in "
-                               "Settings → AI")
-        complete = llm.complete
+        # a local on-device model translates every panel language but Simple
+        # English (an intralingual rewrite NLLB has no target for) — that one
+        # stays on the key path. Local wins when it can carry the language.
+        if code != "simple":
+            try:
+                from . import mt_local
+                if mt_local.available().get("engine") == "local":
+                    complete = mt_local.adapter(code, glossary)
+            except Exception:
+                complete = None
+        if complete is None:
+            from . import llm
+            if not llm.enabled():
+                raise RuntimeError(
+                    "no translation engine — install a local model on the "
+                    "Models page, or add your API key in Settings → AI")
+            complete = llm.complete
     keep_terms = list((glossary or {}).get("keep") or [])
     out: List[dict] = []
     parts = chunks(cues, per=per)

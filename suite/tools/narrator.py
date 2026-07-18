@@ -35,11 +35,27 @@ def _duration_fps(video: str) -> tuple:
     return float(info.duration or 0.0), float(v.fps if v else 30.0) or 30.0
 
 
+def _vision_label(model: str) -> str:
+    """Render a script's vision origin honestly: 'moondream (on-device)',
+    'claude-… (your key)', or, for a track drawn by both, the honest union
+    'moondream (on-device) + claude-… (your key)'. The origin string is
+    'local:<name>', 'ai:<model>', or 'mixed:<a>+<b>' (older scripts carry a
+    bare model name from the key path)."""
+    m = model or "?"
+    if m.startswith("mixed:"):
+        return " + ".join(_vision_label(p) for p in m[6:].split("+"))
+    if m.startswith("local:"):
+        return f"{m[6:]} (on-device)"
+    if m.startswith("ai:"):
+        return f"{m[3:]} (your key)"
+    return f"{m} (your key)" if m != "?" else "?"
+
+
 def _note(script: dict) -> str:
     tail = (" · reviewer-approved" if script.get("review") == "approved"
             else " · in review")
     return ("audio description — beta · vision "
-            f"{script.get('model') or '?'} · voice "
+            f"{_vision_label(script.get('model'))} · voice "
             f"{script.get('voice') or '?'}{tail} · control-z Community "
             "Narrator")
 
@@ -50,14 +66,22 @@ def register_narrator(app, jobs, frames):
 
     @app.get("/api/narrator/status")
     def api_status():
-        from czcore import llm
-        return {"tts": tts.available(), "ai": llm.status(),
-                "vision": {"ok": llm.enabled(),
-                           "sentence": ("descriptions draft on your key — "
-                                        + llm.status()["model"])
-                           if llm.enabled() else
-                           ("no API key — Settings → AI; the page still "
-                            "reads and edits an existing script")}}
+        from czcore import llm, vision
+        loc = vision.available()
+        if loc["ok"]:
+            vis = {"ok": True, "engine": "local", "model": loc["model"],
+                   "sentence": loc["sentence"]}
+        elif llm.enabled():
+            vis = {"ok": True, "engine": "key", "model": llm.status()["model"],
+                   "sentence": "descriptions draft on your key — "
+                               + llm.status()["model"]}
+        else:
+            vis = {"ok": False, "engine": None, "model": None,
+                   "sentence": "no vision engine — install an on-device model "
+                               "on the Models page, or add your API key in "
+                               "Settings → AI; the page still reads and edits "
+                               "an existing script"}
+        return {"tts": tts.available(), "ai": llm.status(), "vision": vis}
 
     @app.get("/api/narrator/library")
     def api_library():
@@ -138,12 +162,13 @@ def register_narrator(app, jobs, frames):
 
     @app.post("/api/narrator/describe")
     def api_describe(body: dict = Body(...)):
-        from czcore import llm
+        from czcore import llm, vision
 
         src = str(Path(str(body.get("path", "")).strip()).expanduser())
         only = body.get("only")
-        if not llm.enabled():
-            return JSONResponse({"error": "descriptions need your API key "
+        if not vision.available()["ok"] and not llm.enabled():
+            return JSONResponse({"error": "descriptions need an on-device model "
+                                          "(Models page) or your API key "
                                           "— Settings → AI"},
                                 status_code=409)
         video = sourcesmod.video_for(src)
@@ -162,7 +187,6 @@ def register_narrator(app, jobs, frames):
         title = sourcesmod.meta(src).get("title") or Path(src).name
 
         def work(job):
-            model = llm.status()["model"]
             done = 0
             for k, i in enumerate(idxs):
                 job.check_cancel()
@@ -173,8 +197,8 @@ def register_narrator(app, jobs, frames):
                                f"at {int(c['at'] // 60)}:{int(c['at'] % 60):02d}")
                 try:
                     jpeg = frame_jpeg(video, c["at"])
-                    text = describe_frame(jpeg, c["kind"],
-                                          int(c.get("words_budget") or 0))
+                    text, origin = describe_frame(jpeg, c["kind"],
+                                                  int(c.get("words_budget") or 0))
                 except RuntimeError as e:
                     c["status"] = "failed"
                     c["lint"] = [f"draft failed: {str(e)[:80]}"]
@@ -182,13 +206,22 @@ def register_narrator(app, jobs, frames):
                     continue
                 c["text"] = text
                 c["status"] = "draft"
+                c["origin"] = origin      # what actually drew this cue
                 c["lint"] = lint(text, float(c.get("dur") or 0)
                                  if c.get("words_budget") else 0)
-                script["model"] = model
+                # the script-level stamp is the UNION of every drawn cue's
+                # origin, never just the last one — a track that spent key
+                # tokens on even one cue must never read as purely on-device
+                origins = sorted({cc["origin"] for cc in cues
+                                  if cc.get("origin")})
+                script["model"] = (origins[0] if len(origins) == 1
+                                   else "mixed:" + "+".join(origins)) \
+                    if origins else script.get("model")
                 scriptmod.save(src, script)
                 done += 1
             job.message = f"{done} of {len(idxs)} cues drafted — your read next"
-            return {"drafted": done, "asked": len(idxs)}
+            return {"drafted": done, "asked": len(idxs),
+                    "origin": script.get("model")}
 
         return jobs.start("ad-draft", work, tool="narrator",
                           label=f"draft descriptions ({len(idxs)}) — "

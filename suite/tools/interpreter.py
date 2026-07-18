@@ -32,12 +32,13 @@ def _lang_entry(kit: dict, code: str) -> dict:
 
 
 def _note_for(code: str, model: str, town: str, gv: int,
-              corrected: int = 0) -> str:
+              corrected: int = 0, engine: str = "key") -> str:
     name = (mt.lang(code) or {}).get("name", code)
+    where = "on-device" if engine == "local" else "your key"
     tail = (f" · {corrected} reviewer-corrected lines" if corrected else
             " · unreviewed")
-    return (f"AI translation — beta · {name} · {model} · glossary {town} "
-            f"v{gv}{tail} · control-z Community Interpreter")
+    return (f"AI translation — beta · {name} · {model} ({where}) · glossary "
+            f"{town} v{gv}{tail} · control-z Community Interpreter")
 
 
 def _write_tracks(source: str, code: str, cues, note: str) -> dict:
@@ -109,8 +110,10 @@ def register_interpreter(app, jobs, frames):
         if not codes:
             return JSONResponse({"error": "pick at least one language"},
                                 status_code=422)
-        if mt.available()["engine"] is None:
-            return JSONResponse({"error": mt.available()["sentence"]},
+        # at least one requested language must have an engine that can carry it
+        # ('simple' needs the key even when a local model is installed)
+        if all(mt.engine_for(c)["engine"] is None for c in codes):
+            return JSONResponse({"error": mt.engine_for(codes[0])["sentence"]},
                                 status_code=409)
         t, _ = sourcesmod.transcript(src)
         if not t or not t.get("segments"):
@@ -123,15 +126,22 @@ def register_interpreter(app, jobs, frames):
         gloss = glossarymod.load(town)
 
         def work(job):
-            from czcore import llm
-
-            model = llm.status()["model"]
             cues_en = mt.coalesce(segs)
             kit = kitmod.load_kit(src) or kitmod.new_kit(src)
             done, skipped = [], []
             for li, code in enumerate(codes):
                 job.check_cancel()
                 name = mt.lang(code)["name"]
+                # the engine that will ACTUALLY carry THIS language — 'simple'
+                # rides the key even under a local model, so ask per-code and
+                # label honestly (never stamp 'on-device' on a key-side track)
+                ceng = mt.engine_for(code)
+                engine = ceng.get("engine")
+                model = ceng.get("model") or "?"
+                if engine is None:
+                    job.message = f"{name} — {ceng.get('sentence', 'no engine')}"
+                    skipped.append(code)
+                    continue
                 entry = _lang_entry(kit, code)
                 tp = kitmod.track_paths(src, code)
                 if (not fresh and entry
@@ -151,10 +161,10 @@ def register_interpreter(app, jobs, frames):
                 n_fb = sum(1 for c in cues if c.get("fallback"))
                 n_miss = sum(1 for c in cues if c.get("miss"))
                 note = _note_for(code, model, gloss.get("town", town),
-                                 int(gloss.get("version") or 0))
+                                 int(gloss.get("version") or 0), engine=engine)
                 paths = _write_tracks(src, code, cues, note)
                 kit.setdefault("languages", {})[code] = {
-                    "engine": "key", "model": model,
+                    "engine": engine, "model": model,
                     "glossary": {"town": gloss.get("town", town),
                                  "version": int(gloss.get("version") or 0)},
                     "created": int(time.time()),
@@ -250,7 +260,7 @@ def register_interpreter(app, jobs, frames):
             g = entry.get("glossary") or {}
             note = _note_for(code, entry.get("model", "?"),
                              g.get("town", "?"), int(g.get("version") or 0),
-                             corrected=n_corr)
+                             corrected=n_corr, engine=entry.get("engine", "key"))
             _write_tracks(src, code, cues, note)
         kitmod.save_kit(src, kit)
         kitmod.resolve_item(src, code, i)
