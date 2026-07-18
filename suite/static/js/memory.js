@@ -278,14 +278,14 @@ const MemoryPage = (() => {
         : m.origin === "scribe"
           ? "words from Scribe — on-device transcription · AI-assisted reading — verify against the official record"
           : "AI-assisted reading — verify against the official record";
-      // a jump-to arrives with the embed still loading — hold it and apply
-      // the moment the player reports ready (see wireSessionClock)
+      // a jump-to arrives before the player can seek — hold it and apply the
+      // moment the player is ready: the embed's onReady (wireSessionClock) for
+      // YouTube, the <audio>'s loadedmetadata (openLocal) for local files.
       S.pendingSeek = (typeof seekTo === "number" && !isNaN(seekTo)) ? seekTo : null;
       setupPlayback(m);
       renderTranscript();
       renderReading(m, d.moments);
       showMeeting();
-      if (S.pendingSeek != null) seek(S.pendingSeek, true);   // local files seek now
     } catch (e) { toast(e.message, true); }
   }
 
@@ -299,8 +299,9 @@ const MemoryPage = (() => {
       $("#mem-ytbox", el).style.display = "";
       $("#mem-ytframe", el).src =
         `https://www.youtube.com/embed/${encodeURIComponent(m.video_id)}?enablejsapi=1`;
-    } else if (m.media_path) {
-      openLocal(m.media_path);
+    } else {
+      $("#mem-ytframe", el).src = "";   // stop any previous meeting's embed audio
+      if (m.media_path) openLocal(m.media_path);
     }
   }
 
@@ -314,6 +315,10 @@ const MemoryPage = (() => {
         viewer.setClip(S.clip);
       }
       audio().src = `/api/scribe/audio?path=${encodeURIComponent(r.path)}`;
+      if (S.pendingSeek != null) {   // a search jump — apply once the clip has a duration
+        const t = S.pendingSeek; S.pendingSeek = null;
+        audio().addEventListener("loadedmetadata", () => seek(t, true), { once: true });
+      }
     } catch (e) { /* audio-less source: transcript still works */ }
   }
 
@@ -367,7 +372,8 @@ const MemoryPage = (() => {
 
   function wireSessionClock() {
     addEventListener("message", e => {
-      if (!/https:\/\/(www\.)?youtube(-nocookie)?\.com/.test(e.origin)) return;
+      // anchored: only exact youtube hosts, so youtube.com.evil.com can't spoof
+      if (!/^https:\/\/(www\.)?youtube(-nocookie)?\.com$/.test(e.origin)) return;
       let d; try { d = JSON.parse(e.data); } catch (err) { return; }
       if (d.event === "onReady" || d.event === "onStateChange") {
         hello();
@@ -398,6 +404,20 @@ const MemoryPage = (() => {
   function stop() {
     if (raf) cancelAnimationFrame(raf), raf = 0;
     try { audio().pause(); } catch (e) {}
+  }
+
+  // leaving the tab (rail nav) only hides the page via CSS — the router has no
+  // onhide — so pause both players when Memory loses its active class, or a
+  // meeting keeps playing audio underneath another tool.
+  function pauseAway() {
+    stop();
+    if (S.session) {
+      try {
+        $("#mem-ytframe", el).contentWindow.postMessage(JSON.stringify(
+          { event: "command", func: "pauseVideo", args: [] }), "*");
+      } catch (e) {}
+      S.ytPlaying = false;
+    }
   }
 
   /* ---------------- transcript (follow-along) ---------------- */
@@ -538,6 +558,11 @@ const MemoryPage = (() => {
     audio().addEventListener("pause", () => { $("#mem-play", el).textContent = "▶ play"; if (raf) cancelAnimationFrame(raf); tick(); });
     audio().addEventListener("seeked", () => tick());
     wireSessionClock();
+    // the page is shown/hidden by a CSS class the router toggles; watch it so
+    // we can pause when the user navigates to another tool
+    new MutationObserver(() => {
+      if (!el.classList.contains("active")) pauseAway();
+    }).observe(el, { attributes: true, attributeFilter: ["class"] });
   }
 
   function onshow(arg) {

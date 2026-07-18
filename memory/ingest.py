@@ -89,7 +89,10 @@ def submit_dedupe(corpus, plan: dict) -> Optional[dict]:
         hit = corpus.find_by_url_canon(plan.get("url_canon", ""))
     if not hit and plan.get("source_hash"):
         hit = corpus.find_by_hash(plan["source_hash"])
-    if hit and hit.get("status") == "live":
+    # already live OR already in the pipeline → don't queue a second job (which
+    # would revert a finished meeting to 'transcribing' and recompute it). Only
+    # error / no_transcript rows are re-tried.
+    if hit and hit.get("status") in ("live", "queued", "transcribing", "analyzing"):
         return hit
     return None
 
@@ -208,12 +211,16 @@ def _resolve_transcript(corpus, plan: dict, job) -> dict:
     if plan["kind"] in ("youtube", "url"):
         segs, meta = _fetch_captions(plan, workdir, job)
         if segs:
-            from highlighter.highlights import transcript_dict
+            from czcore.moments import transcript_dict
             t = transcript_dict(segs, str(workdir), origin="captions:youtube")
             sc.write_text(json.dumps(t))
             _merge_info(info_p, meta)
-            return {"segments": segs, "origin": "captions", "meta": meta,
-                    "media_path": "", "duration": meta.get("duration") or 0}
+            # yt-dlp/relay routes leave the scraped meta empty but write a full
+            # meeting.info.json — read the merged file so title/date/uploader
+            # aren't lost when the watch-page scrape was the one that failed.
+            info = _read_info(info_p) or meta
+            return {"segments": segs, "origin": "captions", "meta": info,
+                    "media_path": "", "duration": info.get("duration") or 0}
         return {"segments": [], "origin": "none", "meta": _read_info(info_p),
                 "media_path": "", "duration": 0}
 
@@ -236,7 +243,7 @@ def _fetch_captions(plan: dict, workdir: Path, job):
     the watch page, then the yt-dlp binary, then — only if the user left the
     community caption service on in Settings — BIG's own relay. Each is a
     caption route, never a video download. Returns (segments, meta)."""
-    from highlighter.highlights import parse_vtt
+    from czcore.moments import parse_vtt
     from czcore import proxy
     url = plan["url"]
     meta: dict = {}

@@ -1,17 +1,16 @@
 """Moment detection, behind our own door.
 
-PARALLEL's detection seam: lane A is extracting Highlighter's moment scoring
-into czcore/moments.py during the Publisher build. Until it lands, Memory wraps
-Highlighter's scorer here and swaps the import when A announces the landing —
-callers below never change. Everything here is local and extractive; it reads
-the transcript and names its reasons.
+PARALLEL's detection seam: lane A extracted Highlighter's moment scoring into
+`czcore/moments.py` (landed on main), so Memory reads it there directly — the
+callers below never changed across the swap. Everything here is local and
+extractive; it reads the transcript and names its reasons.
 """
 
 from __future__ import annotations
 
 from typing import List, Optional
 
-from highlighter.highlights import build_reel, score_segments
+from czcore.moments import build_reel, score_segments
 
 
 def scored(segments: List[dict],

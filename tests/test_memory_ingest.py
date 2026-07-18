@@ -148,7 +148,7 @@ class IngestTest(unittest.TestCase):
         self.assertEqual(self.c.stats()["live"], 1)       # not duplicated
 
     def test_captions_parse_to_store(self):
-        from highlighter.highlights import parse_vtt
+        from czcore.moments import parse_vtt
         vtt = ("WEBVTT\n\n00:00:00.000 --> 00:00:03.000\n"
                "The rezoning article is next.\n\n"
                "00:00:03.000 --> 00:00:06.000\nThe motion carries.\n")
@@ -158,6 +158,43 @@ class IngestTest(unittest.TestCase):
                                "n_segments": len(segs)})
         self.c.replace_segments("cap", segs)
         self.assertTrue(self.c.search("rezoning"))
+
+    def test_dedupe_covers_in_progress(self):
+        # a meeting still in the pipeline must dedupe, so a double-submit doesn't
+        # queue a second job that reverts the finished row to 'transcribing'
+        plan = ingest.resolve_input(
+            {"url": "https://www.youtube.com/watch?v=CCCCCCCCCCC"})
+        self.c.upsert_meeting({"id": plan["id"], "status": "transcribing",
+                               "url_canon": plan["url_canon"]})
+        self.assertIsNotNone(ingest.submit_dedupe(self.c, plan))
+        # but an errored / no-transcript row is retryable, not deduped
+        self.c.set_status(plan["id"], "no_transcript")
+        self.assertIsNone(ingest.submit_dedupe(self.c, plan))
+
+    def test_captions_meta_read_from_info_json(self):
+        # captions arrive but the scraped meta is empty (the yt-dlp/relay route);
+        # title/date/uploader must come from the info.json on disk, not be lost
+        plan = ingest.resolve_input(
+            {"url": "https://www.youtube.com/watch?v=DDDDDDDDDDD"})
+        wd = ingest.meetings_dir() / ingest._safe(plan["id"])
+        wd.mkdir(parents=True, exist_ok=True)
+        (wd / "meeting.info.json").write_text(json.dumps(
+            {"title": "Brookline Select Board Meeting - May 5, 2026",
+             "uploader": "Brookline Interactive Group",
+             "upload_date": "20260505", "duration": 1200}))
+        segs = [{"start": 0.0, "end": 4.0, "text": "The rezoning is next.",
+                 "speaker": None}]
+        with mock.patch.object(ingest, "_fetch_captions",
+                               lambda plan, wd, job: (segs, {})):
+            job = self._run(plan)
+        self.assertEqual(job.status, "done", job.error)
+        m = self.c.get_meeting(plan["id"])
+        self.assertEqual(m["status"], "live")
+        self.assertEqual(m["origin"], "captions")
+        self.assertIn("Brookline Select Board", m["title"])
+        self.assertEqual(m["date"], "2026-05-05")   # meeting_day from the title
+        self.assertEqual(m["town"], "Brookline")     # town-guess from uploader
+        self.assertEqual(m["uploader"], "Brookline Interactive Group")
 
 
 if __name__ == "__main__":

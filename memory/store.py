@@ -61,9 +61,11 @@ _HEAVY = {"info_json", "analysis_json", "shingles", "summary"}
 class Corpus:
     def __init__(self, db_path: Optional[str] = None):
         self.db_path = str(db_path or media_dir("memory") / "corpus.db")
-        self._mat = None            # cached numpy matrix of segment vectors
-        self._mat_ids: List[int] = []
-        self._mat_writes = -1       # the write-counter the matrix was built at
+        # one Corpus is shared by every request thread AND the single job
+        # worker; the vector cache is one tuple (writes, matrix, ids) so a
+        # reader always sees a consistent trio — a single attribute read/write
+        # is atomic under the GIL, three separate fields are not.
+        self._cache = (-1, None, [])
         with self._con() as con:
             con.executescript(_SCHEMA)
             try:
@@ -290,8 +292,9 @@ class Corpus:
 
     def _matrix(self):
         writes = self._writes()
-        if self._mat_writes == writes:
-            return self._mat, self._mat_ids
+        cached = self._cache          # one atomic read → a consistent trio
+        if cached[0] == writes:
+            return cached[1], cached[2]
         if embed.np is None:
             return None, []
         with self._con() as con:
@@ -304,10 +307,9 @@ class Corpus:
             if v is not None:
                 ids.append(r["id"])
                 vecs.append(v)
-        self._mat = embed.np.vstack(vecs) if vecs else None
-        self._mat_ids = ids
-        self._mat_writes = writes
-        return self._mat, self._mat_ids
+        mat = embed.np.vstack(vecs) if vecs else None
+        self._cache = (writes, mat, ids)   # one atomic write; readers see old or new, never a mix
+        return mat, ids
 
     def _segment(self, seg_id: int) -> Optional[sqlite3.Row]:
         return self._first_row("SELECT * FROM segments WHERE id=?", (seg_id,))

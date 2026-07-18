@@ -112,6 +112,24 @@ class ApiTest(unittest.TestCase):
         self.assertTrue(r.json()["removed"])
         self.assertEqual(self.cl.get("/api/memory/corpus").json()["meetings"], [])
 
+    def test_context_tolerates_non_list_texts(self):
+        # a scalar `texts` must not 500 (list(5) would raise) — clean 200
+        for bad in (5, True, {"a": 1}):
+            r = self.cl.post("/api/memory/context", json={"texts": bad})
+            self.assertEqual(r.status_code, 200, bad)
+            self.assertEqual(r.json()["issues"], [])
+        # a bare string is still accepted as one query
+        self.assertEqual(
+            self.cl.post("/api/memory/context", json={"texts": "rezoning"}).status_code,
+            200)
+
+    def test_search_clamps_negative_limit(self):
+        self._seed("m1", SEGS, title="Select Board")
+        r = self.cl.get("/api/memory/search", params={"q": "rezoning", "limit": -1})
+        self.assertEqual(r.status_code, 200)               # no crash
+        hits = r.json()["hits"]
+        self.assertTrue(any(h["meeting_id"] == "m1" for h in hits))  # not dropped
+
 
 if __name__ == "__main__":
     unittest.main()

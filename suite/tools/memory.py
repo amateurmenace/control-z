@@ -92,7 +92,8 @@ def register_memory(app, jobs, frames):
     # -- the long view: cross-corpus search with jump-to-timestamp --------
     @app.get("/api/memory/search")
     def api_search(q: str = "", limit: int = 80):
-        hits = corpus.search(q, limit=min(int(limit), 200))
+        limit = max(1, min(int(limit), 200))   # clamp both ends; -1 would scan all
+        hits = corpus.search(q, limit=limit)
         return {"q": q, "hits": hits, "stats": corpus.stats()}
 
     # -- context: prior appearances for Highlighter's panel (stable) ------
@@ -104,8 +105,12 @@ def register_memory(app, jobs, frames):
     @app.post("/api/memory/context")
     def api_context(body: dict = Body(...)):
         texts = body.get("texts") or []
+        # accept a list of strings; tolerate a bare string; ignore anything else
+        # (a scalar would blow up list() with a 500 instead of a clean answer)
         if isinstance(texts, str):
             texts = [texts]
+        elif not isinstance(texts, list):
+            texts = []
         prior, seen = [], set()
         for tx in list(texts)[:20]:
             for h in corpus.semantic(embed.embed(str(tx)), limit=6):

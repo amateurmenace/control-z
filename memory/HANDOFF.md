@@ -5,6 +5,12 @@ pages → cross-corpus search with jump-to-timestamp playback, working end to en
 in the suite UI on two real meetings, with tests. Per PARALLEL, lane A merges
 `lane/memory` → main.
 
+Re-merged `origin/main` (1.6.0, Publisher live): the three slots reconciled
+(server.py import/register kept; `memory.js` tag carries the new `?v={{v}}`
+cache-bust; core.js flip kept beside Publisher's). Detection seam **swapped** to
+`czcore.moments` now that it landed — `memory/detect.py` and `memory/ingest.py`
+import it directly. Suite green at 320 tests.
+
 ## landed (what works, how to see it)
 
 Run `.venv/bin/python -m suite --serve` → http://127.0.0.1:8300/#memory.
@@ -58,8 +64,8 @@ actually pulls transcripts here.)
    (alongside the other tool packages). Until then `suite/tools/memory.py`
    inserts the repo root on `sys.path` as a guarded fallback so `import memory`
    resolves regardless of cwd — delete that block once `memory` is declared.
-2. **Detection seam:** when `czcore/moments.py` lands, say so in "state of main";
-   `memory/detect.py` swaps one import (it wraps Highlighter's scorer today).
+2. **Detection seam:** ✅ done — swapped `memory/detect.py` + `memory/ingest.py`
+   to `czcore.moments` after it landed on main.
 3. **The buttons** (optional, when convenient): Highlighter's / Publisher's
    "Send to the Record" → `POST /api/memory/submissions` with `{url}` or
    `{path}`. The endpoint is stable and live now.
