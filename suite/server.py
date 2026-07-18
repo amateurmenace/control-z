@@ -239,9 +239,11 @@ def create_suite_app():
     from .tools.grabber import register_grabber
     from .tools.highlighter import register_highlighter
     from .tools.indexer import register_indexer
+    from .tools.interpreter import register_interpreter
     from .tools.kb import register_kb
     from .tools.memory import register_memory
     from .tools.modelstore import register_modelstore
+    from .tools.narrator import register_narrator
     from .tools.ofx import register_ofx
     from .tools.pivot import register_pivot
     from .tools.publisher import register_publisher
@@ -257,9 +259,11 @@ def create_suite_app():
     register_grabber(app, jobs, frames)
     register_highlighter(app, jobs, frames)
     register_indexer(app, jobs, frames)
+    register_interpreter(app, jobs, frames)
     register_kb(app, jobs, frames)
     register_memory(app, jobs, frames)
     register_modelstore(app, jobs, frames)
+    register_narrator(app, jobs, frames)
     register_ofx(app, jobs, frames)
     register_pivot(app, jobs, frames)
     register_publisher(app, jobs, frames)
