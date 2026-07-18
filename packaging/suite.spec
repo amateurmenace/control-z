@@ -64,7 +64,12 @@ a = Analysis(
     hiddenimports=["webview.platforms.cocoa",
                    "highlighter", "grabber", "indexer", "slate",
                    "publisher", "memory", "interpreter", "narrator",
-                   "czcore.mt", "czcore.tts",
+                   # czcore.mt / czcore.tts / czcore.vision / czcore.mt_local and
+                   # pypdf are all imported lazily inside functions (a shape the
+                   # static walk misses); Memory's documents.py imports pypdf,
+                   # the local-model engines import their runtimes on demand.
+                   "czcore.mt", "czcore.tts", "czcore.vision", "czcore.mt_local",
+                   "pypdf",
                    "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont",
                    "PIL.ImageFilter"],
     excludes=[

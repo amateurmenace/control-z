@@ -2,6 +2,70 @@
 
 ## unreleased
 
+### 1.8.0: the record grows teeth — the paper, the votes, and the loop that keeps it fresh — 2026-07-18
+
+The telescope had the meetings. Now it has what was *written* beside what was
+*said*, and *who voted how* — and the public edition closes its loop, so the
+record on the web stays as current as the record at the desk. Said as what a
+resident can now do: read a town's agenda and minutes on the same timeline as
+the tape; see a board's roll call, member by member, each vote a link to the
+second it was cast; and open the record on a phone, offline, and be told when a
+fresher pressing lands.
+
+- **The town's own paper joins the record (Documents, specs/14 №11).** A new
+  `memory/documents.py` pulls a meeting's agendas, minutes, and packets straight
+  from the town's portal (CivicClerk — anonymous, no key), extracts and chunks
+  the text, embeds each chunk, and links it to the same issues the transcript
+  joins — by the same auditable keyword-then-cosine rule. The written record
+  interleaves onto every issue timeline with **page-level citations** ("p. 12"),
+  and every meeting page carries its paper. What a board *voted* on, a resident
+  *spoke* about, and the warrant *wrote down* now sit on one line. (pypdf, pure
+  Python — a town without it loses documents gracefully, nothing else breaks.)
+
+- **The Vote Ledger (specs/14 №12).** Roll calls are read straight off the
+  transcript — verbatim and timestamped, never inferred. Each is stored with its
+  motion, its tally, its outcome, and who said what, and it surfaces two ways: a
+  **per-issue ledger** (the roll calls on this thread) and **The votes**, a
+  per-member accountability page where every cell links to the moment on the
+  tape. Officials only — by *construction*, not by filter: a roll call is the
+  board voting, and the town's own agenda supplies the roster that cleans the
+  ASR's misheard names. Never a stance, never a private citizen — the record's
+  hard non-goals kept. Every surface says: read from the transcript, verify
+  against the official minutes.
+
+- **The web edition breathes (specs/16 wave 2).** **Publish the record** presses
+  the public edition from the desk's Memory page as one job, reports the edition
+  diff (meetings added, issues moved, the fingerprint that changed), and hands
+  the steward the push ritual — the desk never deploys itself. The edition now
+  carries the documents, the roll-call ledgers, and a **The votes** page, all
+  readable with JavaScript off. **Still watching** renders your followed issues
+  and their resurfacings from your own browser (follows live only in
+  localStorage — export and import them as JSON, anti-lock-in even for
+  preferences). And the edition is a **PWA**: a service worker precaches the
+  shell and the meetings you've read, an install manifest makes it a home-screen
+  app, and a quiet banner says *the record refreshed — reload for the new
+  pressing* — all under the same strict, machine-enforced Content-Security-Policy.
+
+- **The record breathes for real.** With eight more Brookline meetings ingested
+  (the corpus is ten now, ~72k spoken moments), a followed issue fired a genuine
+  cross-time **resurfacing** — a later meeting reopened a thread a resident had
+  seen months earlier, and the record woke with a delta that quotes the very
+  beads it woke for, timestamps and all.
+
+- **The last two API doors have local hinges (specs/15).** Interpreter's
+  translation and Narrator's descriptions were the only features that needed a
+  key. Both now try an **on-device model first** and fall back to your key,
+  labeling every track by what actually drew it — `czcore/mt_local.py` runs a
+  CTranslate2 translation model (the seven panel languages; Simple English stays
+  a key-side rewrite, honestly, since it isn't a translation), and
+  `czcore/vision.py` runs an ONNX vision-language model for descriptions. Both
+  are discovered by the shape of a folder in the models directory, spend no API
+  tokens, and add nothing to the AI audit; when no model is installed the status
+  line says exactly so and the key path is unchanged. (The model *cards* — a
+  hosted, hash-pinned bundle — follow, the way the vits-ljs voice card followed
+  its discovery; note the covenant flag: NLLB-200 is non-commercially licensed,
+  so a shipped card is a deliberate licence decision, not a quiet default.)
+
 ### The web app — wave 1: the record, open in any browser (specs/16) — 2026-07-18
 
 - **The record steps outside.** A new `web/` package presses the whole

@@ -147,7 +147,53 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-18 (latest) — **The desktop app is signing-ready, and the web
+- 2026-07-18 (latest) — **1.8.0: the record grew teeth. Documents,
+  the Vote Ledger, web wave 2, and local hinges on the last two API
+  doors. 480 tests green.** Everything below landed on `main` directly
+  (lanes B and C are both fully merged and dormant — `origin/lane/memory`
+  and `origin/lane/access` carry no commits ahead of main; re-merge main
+  if either wakes).
+  - **Corpus grown:** eight more real Brookline meetings ingested
+    (captions-first, the watch-page route) — ten live meetings, ~72k
+    segments, 216 auto-issues. A genuine cross-time **resurfacing** fired
+    (a followed thread reopened by a later meeting, with a real quoted
+    delta) — the events table is no longer empty.
+  - **Documents (memory/documents.py) — specs/14 №11 done.** New store
+    tables `documents`, `doc_chunks`, `issue_documents` (all in
+    `memory/store.py` `_SCHEMA`, additive, with full cascade in
+    `forget`/`delete_issue`/`merge_issues`/`clear_auto_issues`). CivicClerk
+    PDFs fetched via the Grabber patterns, extracted with **pypdf** (new
+    dep — requirements.txt + pyproject suite extra + suite.spec
+    hiddenimport), chunked with page numbers, embedded through
+    `memory/embed.py`, linked to issues by the `_assign` twin. Interleaved
+    on the issue timeline (`_timeline` + `_paper_by_meeting`) and the web
+    edition. **C:** documents ride beside your translation tracks with no
+    change to your paths.
+  - **Vote Ledger (memory/votes.py) — specs/14 №12 done.** New `votes`
+    table; roll calls read extractively off the transcript, officials-only
+    by construction (a roll call *is* the board voting; the agenda supplies
+    the roster that canonicalizes ASR-garbled names). Per-issue ledger +
+    a per-member **The votes** page (`/api/memory/officials`). A votes
+    stage runs inside `ingest.run` (fail-open like issue assignment).
+  - **Web wave 2 (web/):** **Publish the record** (a desk button →
+    `/api/memory/publish` → the bake as a job + the edition diff + the push
+    ritual), documents/votes/officials planes in the bake, **Still
+    watching** + follows export/import, and an **offline PWA**
+    (`sw.js` + `manifest.webmanifest`, deterministic, CSP-clean). The
+    edition is re-pressed and ready for the gh-pages deploy.
+  - **Local hinges (czcore/mt_local.py, czcore/vision.py) — specs/15.**
+    Interpreter and Narrator try an on-device model first, fall back to the
+    key, label every track by what drew it. `mt.available()` and
+    `narrator` status grew a `local` engine; `describe_frame` now returns
+    `(text, origin)`. **C:** the vision provenance is origin-aware now —
+    the chip branches `local:`/`ai:`; nothing you own changed shape beyond
+    that return value. Discovery-by-shape lives under `models/vlm/` and
+    `models/mt/` (namespaced away from the TTS voice discovery on purpose).
+    Model *cards* are a follow-up (hosting + hash pin), and NLLB's
+    non-commercial licence is flagged for a deliberate call.
+  - **Two version truths bumped to 1.8.0** (statics cache-bust off it).
+
+- 2026-07-18 — **The desktop app is signing-ready, and the web
   app shipped (specs/16 Wave 1).**
   - **Signing (packaging/):** `suite.spec` was stale since the last
     signed release (1.5.0) — it named the make-wave packages but not the
