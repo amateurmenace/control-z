@@ -147,7 +147,33 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-18 (latest) — **1.8.0: the record grew teeth. Documents,
+- 2026-07-18 (latest) — **lane/desk merged: Index gets a data spine and
+  the road. 497 tests green.** The desk lane folded into main (no squash,
+  five house-voice commits kept) on top of 1.8.0 — zero conflicts. What it
+  added, and where NOT to edit underneath it:
+  - **`czcore/sidecars.py` NEW — the sidecar law.** One table of every
+    suffix the tools leave beside a source (words/captions/cut/moments/
+    insight/kit/pivot/clear) + one reader. This is now THE place any tool
+    asks "what does this clip carry?" — B/C: read it rather than re-learning
+    a naming convention. (A module-top static import in `indexer/catalog.py`,
+    so no pyproject/suite.spec change was needed.)
+  - **Index rows now carry a `carries` list**; `catalog.stats()` gained
+    per-kind `coverage`+`wordless`; `gaps(kind)` + `scan(only=[paths])` are
+    new; pre-1.8 catalogs grow the column via a one-line migration.
+  - **New routes** `/api/index/{gaps, transcribe-missing, road,
+    road-stages}` — the coverage band and "the road" (tick clips → words/
+    rescue/reframe stages, one clip-major queue job, `_road_plan` pure +
+    tested, re-run refuses with skips named).
+  - **Desk lane OWNS** (don't edit underneath): `czcore/sidecars.py`,
+    `indexer/`, `suite/tools/indexer.py`, `suite/static/js/index.js`, the
+    eight production `*.js` pages, `tests/test_index_desk.py`. Its ledger is
+    `indexer/HANDOFF-DESK.md`.
+  - Also fixed a pre-existing ~7% flake in `tests/test_jobs.py::
+    test_listeners_fire` (it waited on `job.status` then asserted on the
+    listener's `seen` — now waits on the listener's own view).
+  - **B/C: nothing in your paths changed.** Re-merge main at session start.
+
+- 2026-07-18 — **1.8.0: the record grew teeth. Documents,
   the Vote Ledger, web wave 2, and local hinges on the last two API
   doors. 480 tests green.** Everything below landed on `main` directly
   (lanes B and C are both fully merged and dormant — `origin/lane/memory`

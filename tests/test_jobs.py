@@ -173,9 +173,11 @@ class TestQueuedMode(unittest.TestCase):
         seen = []
         jm.on_update(lambda d: seen.append(d["status"]))
         job = jm.start("t", lambda j: None)
-        self.assertTrue(wait_for(lambda: job.status == "done"))
+        # wait on the LISTENER's own view, not job.status: the job object flips
+        # to "done" before the terminal broadcast callback has appended to seen,
+        # so asserting right after a status-wait raced ~7% of the time
+        self.assertTrue(wait_for(lambda: "done" in seen))
         self.assertIn("queued", seen)
-        self.assertIn("done", seen)
 
     def test_fn_raising_cancelled_is_cancelled(self):
         jm = JobManager(db_path=self.db, queued=True)

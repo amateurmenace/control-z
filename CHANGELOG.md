@@ -66,6 +66,28 @@ fresher pressing lands.
   its discovery; note the covenant flag: NLLB-200 is non-commercially licensed,
   so a shipped card is a deliberate licence decision, not a quiet default.)
 
+- **The desk gets what the record got — Index knows what every clip carries.**
+  What Memory did for the town's meetings, Index now does for your footage.
+  A new sidecar law (`czcore/sidecars.py`) is one table of every mark the tools
+  leave beside a source — words, captions, cut, moments, insight, kit, pivot,
+  rescue — and one reader, so any tool can ask "what does this clip already
+  have?" without re-learning eight naming conventions. The catalog reads it: the
+  Index shelf opens with the library counted in the dashboard grammar — clips,
+  hours, per-kind coverage in each owning tool's accent — and turns the one real
+  gap into one click, *"words for the N without,"* running Scribe's own engine
+  over the wordless as one queue job (silent clips honestly excluded — listing
+  them would be lying; failures named).
+
+- **The road: ticked clips walk the tools, clip by clip.** Tick clips on the
+  Index shelf, pick stages — words (Scribe) · rescue (Clear at road defaults) ·
+  reframe 9:16 (Pivot) — and one queue job carries each clip through its stages
+  clip-major, so the first is fully finished while the last still waits. The
+  plan rules before any engine runs: no sound → no words, no picture → no
+  reframe, an unplugged drive → never joins, already made → skipped with the
+  reason said; run a finished road twice and the second run is a sentence, not
+  an empty queue. And a time-coded search hit finally lands Scribe on the
+  moment, instead of dropping the timestamp on the floor.
+
 ### The web app — wave 1: the record, open in any browser (specs/16) — 2026-07-18
 
 - **The record steps outside.** A new `web/` package presses the whole
