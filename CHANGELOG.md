@@ -3,6 +3,25 @@
 ## unreleased
 
 ### 1.6.0: the wing doubles on paper, and the kit ships itself — 2026-07-17
+- **The wiring is ready for Memory before Memory exists.** Highlighter
+  and Publisher both carry **⬛ Send to the Record** — dashed and honest
+  today ("Community Memory joins in 1.6"), live against the contract
+  route the day lane B's `ready` flips, no further edits needed. Every
+  loaded meeting carries the record line: prior appearances of
+  tonight's topics once the record answers, the promise of it until
+  then. And the chain got its hand-offs: **→ Publish kit** from any
+  read meeting (pill on the loaded view, chip on every library row),
+  publish + rename doors in the Grabber bin.
+- **Publisher is ready.** Clip cards carry real frame thumbnails
+  (retrying once if the first decode is cold), every copy field has a
+  ⧉ copy-to-clipboard button, and the lower-third's two lines are
+  editable per kit with the brand's defaults as placeholders. The
+  format ladder learned the difference between "mp4" and "plays
+  everywhere": h264 preferred explicitly (YouTube ships AV1 inside mp4,
+  which the suite's own frame service can't decode), then any mp4,
+  then anything, remuxed.
+- **The last name tags fall in line** — coming-pages and About carry
+  the Community AI Project tag.
 - **The app says its real name.** The window, tab, brand and serve line
   all read **Community AI Project** — "the world's most advanced civic
   media suite" beneath. The rail reorders to the mission: Home, the

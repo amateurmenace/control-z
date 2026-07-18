@@ -19,7 +19,7 @@ const AboutPage = (() => {
     const info = CZ.appInfo || {};
     const hw = (info.presets || []).filter(p => p.available && p.hardware).length;
     el.innerHTML = `<div class="page-pad" style="max-width:760px">
-      <div class="tag">control-z suite</div>
+      <div class="tag">community ai project</div>
       <h1 style="margin-top:6px">About</h1>
 
       <div class="about-story">

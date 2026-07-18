@@ -198,6 +198,38 @@ function go(name, arg) {
   if (page.onshow) page.onshow(arg);
 }
 
+/* ---------- Send to the Record (Community Memory) ----------
+   The suite's hub gesture (specs/12 §2): Highlighter and Publisher both
+   offer it. Until Memory lands (lane B, specs/PARALLEL.md), the button
+   renders dashed and answers honestly; the moment memory's `ready` flips
+   in TOOLS, the same button goes live against the contract route. */
+function recordBtnHTML(id) {
+  const m = toolById("memory");
+  return `<button class="btn record-btn${m.ready ? "" : " soon"}" id="${id}"
+    style="--acc:var(--memory);width:auto"
+    title="${m.ready ? "file this program in the town's record"
+    : `Community Memory is being built now — this button lights up in ${m.when}`}">
+    ⬛ Send to the Record${m.ready ? "" : ` <span class="soon">${m.when}</span>`}</button>`;
+}
+async function sendToRecord(payload, btn) {
+  if (!toolById("memory").ready) {
+    toast(`Community Memory joins in ${toolById("memory").when} — the record ` +
+          `opens the day it lands`, true);
+    return false;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api("/api/memory/submissions", payload);
+    toast(r.status === "exists"
+      ? "already in the record — linked, not duplicated"
+      : "sent to the record — Memory is processing it");
+    return true;
+  } catch (e) {
+    toast(`the record didn't take it — ${e.message}`, true);
+    return false;
+  } finally { if (btn) btn.disabled = false; }
+}
+
 /* ---------- czProgress: the house progress card ----------
    One look for every download, conversion, render and export: an accent
    bar that shimmers while indeterminate and fills when the job knows its

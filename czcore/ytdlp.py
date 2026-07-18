@@ -29,13 +29,15 @@ NIGHTLY_API = ("https://api.github.com/repos/yt-dlp/"
                "yt-dlp-nightly-builds/releases/latest")
 
 # quality presets the UIs offer — every one merges to mp4 for edit-friendliness
-# mp4-family codecs preferred at every rung (h264+m4a when the site has
-# them — YouTube always does), so "lands as mp4 with audio" is the format
-# choice, not a transcode; the remux flag in download() catches the
-# fallback paths losslessly.
+# h264+m4a preferred at every rung — the codecs that decode EVERYWHERE
+# (QuickTime, playout servers, and the suite's own PyAV frame service,
+# which has no AV1 decoder). ext=mp4 alone is not enough: YouTube ships
+# AV1 in mp4 too. Fall through to any mp4, then anything; the remux flag
+# in download() keeps the container promise on the fallbacks, losslessly.
 def _rung(h: str = "") -> str:
     lim = f"[height<={h}]" if h else ""
-    return (f"bv*{lim}[ext=mp4]+ba[ext=m4a]/"
+    return (f"bv*{lim}[vcodec^=avc1]+ba[ext=m4a]/"
+            f"bv*{lim}[ext=mp4]+ba[ext=m4a]/"
             f"bv*{lim}+ba/b{lim}")
 
 
