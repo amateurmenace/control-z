@@ -78,8 +78,14 @@ done
 # made it in", not a number.
 # The whole UI, count-matched against source — a one-file spot check can't
 # detect what it's named for (a page's js missing = that tool opens dead).
-N_UI_SRC=$(find "$REPO/suite/static" -type f | wc -l | tr -d ' ')
-N_UI=$(find "$FW" "$RS" -path "*suite/static/*" -type f | wc -l | tr -d ' ')
+# Dotfiles are excluded on both sides, and that is not a loosening of the gate:
+# Finder writes .DS_Store into any directory a human opens, PyInstaller quite
+# correctly refuses to bundle it, and the count-match then reports a missing
+# asset that does not exist. It cost one 2.0.0 build already. The other two
+# gates below match on a name pattern and were never exposed to this; this one
+# counted every file, which is what made it both stricter and more fragile.
+N_UI_SRC=$(find "$REPO/suite/static" -type f ! -name '.*' | wc -l | tr -d ' ')
+N_UI=$(find "$FW" "$RS" -path "*suite/static/*" -type f ! -name '.*' | wc -l | tr -d ' ')
 [ "$N_UI" -ge "$N_UI_SRC" ] && [ "$N_UI_SRC" -ge 20 ] || {
     echo "FATAL: suite/static: $N_UI_SRC files in source, $N_UI in bundle"; exit 1; }
 # Interpreter's seed glossaries, count-matched: "any one JSON exists" held
