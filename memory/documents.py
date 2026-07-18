@@ -140,7 +140,7 @@ def assign_document(corpus: Corpus, doc_id: str) -> dict:
                     hit.add(i["id"])
                     break
         if not hit and cen_mat is not None:
-            v = embed.from_bytes(c.get("emb"))
+            v = embed.as_vec(c.get("emb"))
             if v is not None:
                 sims = cen_mat @ v
                 b = int(sims.argmax())
