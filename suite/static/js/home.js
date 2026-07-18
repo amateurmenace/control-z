@@ -8,21 +8,25 @@ const HomePage = (() => {
   el.className = "page";
   el.id = "page-home";
 
-  /* the chains: ordered hand-offs, drawn on one wire. Steps carry their own
-     micro-line for THIS chain; coming tools ride the wire honestly (unfilled
-     glyph, dashed pill, their "coming" tag) — the chain is the promise and
-     the chip is the date. */
+  /* the line: the whole project as one conveyor — a meeting travels
+     station to station and becomes media. Coming stations ride dashed
+     with their date; the package chip picks up each station's color as
+     it arrives. The second chain keeps the smaller card form. */
+  const LINE = {
+    title: "The line — watch a meeting become media",
+    why: "one recording in; clips, copy, posts and a place in the record out",
+    steps: [
+      { id: "grabber", verb: "search + fetch",
+        micro: "the portal searched, the recording brought home" },
+      { id: "highlighter", verb: "find the moments",
+        micro: "read, scored, cut to what mattered" },
+      { id: "publisher", verb: "make the kit",
+        micro: "three frames, captions burned, copy drafted" },
+      { id: "memory", verb: "keep the record",
+        micro: "filed with everything the town ever said" },
+    ],
+  };
   const CHAINS = [
-    {
-      title: "The meeting, start to finish",
-      why: "fetched off the portal, cut to its moments, made into a kit, kept in the record",
-      steps: [
-        { id: "grabber", micro: "fetch + conform" },
-        { id: "highlighter", micro: "moments + reel" },
-        { id: "publisher", micro: "clips, copy, posts" },
-        { id: "memory", micro: "into the record" },
-      ],
-    },
     {
       title: "Seen and heard by everyone",
       why: "captions first; then every language; then the picture, spoken",
@@ -51,6 +55,39 @@ const HomePage = (() => {
     { id: "rise", line: "the master, pushed up to delivery resolution" },
     { id: "publisher", line: "the kit that gets it seen — clips, copy, posts" },
   ];
+
+  function lineHTML() {
+    const live = LINE.steps.filter(s => toolById(s.id).ready).length;
+    const n = LINE.steps.length;
+    const stations = LINE.steps.map(({ id, verb, micro }, i) => {
+      const t = toolById(id);
+      return `<button class="line-station${t.ready ? "" : " soon-step"}"
+        data-tool="${t.id}" style="--acc:${t.acc}" title="${t.long || t.name}">
+        <span class="line-glyph">${glyphSVG(t.acc, t.ready, t.group === "community")}</span>
+        <span class="line-name">${t.name}${t.ready ? "" : `<span class="soon">${t.when}</span>`}</span>
+        <span class="line-verb">${verb}</span>
+        <span class="line-micro">${micro}</span>
+      </button>`;
+    }).join("");
+    // the belt's package pauses under each station — timing baked as CSS
+    // keyframes over --n stations; accents painted per stop
+    const accs = LINE.steps.map(s => toolById(s.id).acc);
+    return `<div class="line" style="--n:${n}">
+      <div class="chain-head"><h2>${LINE.title}</h2>
+        <span class="chain-live">${live} of ${n} stations live today</span></div>
+      <div class="why">${LINE.why}</div>
+      <div class="line-belt">
+        <span class="line-rail-wire" aria-hidden="true"></span>
+        <span class="line-pkg" aria-hidden="true"
+          style="${accs.map((a, i) => `--acc${i}:${a}`).join(";")}"></span>
+        <div class="line-stations">${stations}</div>
+      </div>
+      <div class="line-foot">
+        <button class="btn primary" id="line-run" style="--acc:var(--grabber);width:auto">▶ Run the line</button>
+        <span class="hint">starts at the search desk — every station hands to the next</span>
+      </div>
+    </div>`;
+  }
 
   function chainHTML(chain) {
     const live = chain.steps.filter(s => toolById(s.id).ready).length;
@@ -102,6 +139,7 @@ const HomePage = (() => {
       <h1 style="margin-top:6px">Make Something.</h1>
       <div class="chains">
         <div class="tag">the wire — where one tool hands to the next</div>
+        ${lineHTML()}
         ${CHAINS.map(chainHTML).join("")}
       </div>
       <div class="doors">
@@ -119,6 +157,9 @@ const HomePage = (() => {
 
     $$(".door-tool", el).forEach(b => b.onclick = () => go(b.dataset.tool));
     $$(".chain-step", el).forEach(b => b.onclick = () => go(b.dataset.tool));
+    $$(".line-station", el).forEach(b => b.onclick = () => go(b.dataset.tool));
+    const run = $("#line-run", el);
+    if (run) run.onclick = () => go("grabber", { focusSearch: true });
     $$(".recent-row", el).forEach(b => b.onclick = () => {
       const tool = toolById(b.dataset.tool)?.ready ? b.dataset.tool : "pivot";
       go(tool, { openPath: b.dataset.path });
