@@ -48,7 +48,7 @@ const TOOLS = [
     ready: false, when: "1.6", group: "community", long: "Community Publisher",
     verb: "gets it seen", one: "program in → clips, copy and posts out" },
   { id: "memory", name: "Memory", acc: "var(--memory)",
-    ready: false, when: "1.6", group: "community", long: "Community Memory",
+    ready: true, group: "community", long: "Community Memory",
     verb: "keeps the record", one: "issues tracked across meetings and years" },
   { id: "interpreter", name: "Interpreter", acc: "var(--interpreter)",
     ready: false, when: "1.7", group: "community", long: "Community Interpreter",
