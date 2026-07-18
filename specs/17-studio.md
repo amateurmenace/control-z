@@ -1,24 +1,33 @@
 # Community AI Studio
 ### The record, hosted — a civic memory that exists on its own
 
-**Status:** Draft spec, v0.1 · **Stage:** design (build in a fresh session) · **Owner:** Stephen Walter (Weird Machine / BIG) · **Family:** The Community AI Project · **Related:** Memory (specs/14 — the engine and the original cloud sketch this spec fulfills), the web app (specs/16 — becomes the Studio's reader), Publisher (specs/13 §P2 — the same "separate networked product" lane), PARALLEL.md
+**Status:** v0.1 · **Stage:** **wave 1 built** (branch `lane/studio`; nothing provisioned — see `record/INFRA.md`) · **Owner:** Stephen Walter (Weird Machine / BIG) · **Family:** The Community AI Project · **Related:** Memory (specs/14 — the engine and the original cloud sketch this spec fulfills), the web app (specs/16 — becomes publicrecord's reader), Publisher (specs/13 §P2 — the same "separate networked product" lane), PARALLEL.md
 
-> **The desk presses editions; the Studio keeps the record.** Today the public
+> **The desk presses editions; publicrecord keeps the record.** Today the public
 > record is a snapshot pressed from one Mac — brilliant, and stuck breathing
-> through a human. The Studio is the record with its own heartbeat: meetings
+> through a human. Publicrecord is the record with its own heartbeat: meetings
 > arrive nightly from the towns' own channels, the corpus lives in a real
 > database, search understands meaning as well as words, and a steward can
 > tend it from any browser. No Mac in the loop — and the reader still never
 > logs in.
 
-**On the name.** The hosted product is **Community AI Studio** — and the domain
+**On the name — superseded 2026-07-18.** This spec was written for a product
+called *Community AI Studio*. The brand architecture has since split: the
+umbrella is **communityai.studio** (R&D), the desktop suite is
+**civicmedia.studio** (with control-z.org as its sub-brand), and *this* product —
+the hosted record — is **publicrecord.studio**. The package is `record/`, not
+`studio/`, because "studio" now names three brands and a directory, and one word
+carrying four meanings had already confused two sessions. The spec's numbering
+(`specs/17`) is unchanged so every citation to it still resolves.
+
+**The original naming note.** The hosted product is **Community AI Studio** — and the domain
 already exists: `communityai.studio` is owned and currently just redirects.
-Recommendation: the Studio lives AT `communityai.studio` (its own first-class
+Recommendation: publicrecord lives AT `communityai.studio` (its own first-class
 home, decoupled from any one host's DNS), the marketing page at
 `community.weirdmachine.org` keeps the umbrella story and gains the big
-two-button section (Open the Studio · Get the desktop app), and
+two-button section (Open publicrecord · Get the desktop app), and
 `community.weirdmachine.org/studio` redirects in. The desktop suite keeps its
-name; the Studio is the record's public house, not a rename of the desk.
+name; publicrecord is the record's public house, not a rename of the desk.
 
 ---
 
@@ -49,13 +58,13 @@ officials-only, editions as exports, provenance as UI.
 3. **Search that understands.** Semantic search over the whole corpus via
    real neural embeddings, blended with the existing lexical/FTS half, with
    the provenance line saying which found what. This is the feature the
-   static envelope structurally cannot hold; it is the Studio's reason to
+   static envelope structurally cannot hold; it is publicrecord's reason to
    have a server at all.
 4. **A steward's console.** Everything the desk's Memory page can curate —
    merge, split, rename, promote, forget, rebuild — plus ingest approval,
    town/roster config, corrections-that-annotate, and takedowns, from a
    browser, behind real auth, with an audit log.
-5. **Resilient by construction.** The reader is static-first: the Studio
+5. **Resilient by construction.** The reader is static-first: publicrecord
    presses its own edition continuously, so if the API or database is down,
    yesterday's record still reads (and still works offline as a PWA). The
    database is managed Postgres with automated backups. Nothing about
@@ -82,11 +91,11 @@ officials-only, editions as exports, provenance as UI.
   ours, the desk's is the user's, and every AI surface stays labeled with an
   extractive fallback.
 - **No video hosting, still.** Embeds and transcripts; captions-first;
-  nothing rehosted. The Studio makes the record *available*, not the tapes.
+  nothing rehosted. Publicrecord makes the record *available*, not the tapes.
 - **No person pages for private citizens** — officials-only aggregation is
   enforced in the same code path it is today (press-time and query-time).
 - **Not a replacement for the desk.** The suite remains the craft surface
-  (renders, reels, kits, AD mixes) and the sovereignty story. The Studio is
+  (renders, reels, kits, AD mixes) and the sovereignty story. Publicrecord is
   the record's public house; the desk can still press and read editions.
 
 ## 4. Users
@@ -115,10 +124,10 @@ failure).
 seam: the current SQLite `Corpus` and a new Postgres-backed store implement
 the same interface, so the issue engine, dedupe, vote reader — the measured,
 hand-audited logic — run identically at the desk and in the cloud. No fork,
-no rewrite: the Studio service (`studio/`, FastAPI, same house style) wraps
+no rewrite: publicrecord service (`record/`, FastAPI, same house style) wraps
 the same package the suite imports.
 
-**6.2 The read path is static-first.** The Studio presses the specs/16
+**6.2 The read path is static-first.** Publicrecord presses the specs/16
 edition on every corpus change (debounced) into GCS behind the CDN — same
 stubs, same JS-off readability, same offline PWA. The reader shell calls the
 API for exactly three things: semantic search, freshness ("a newer pressing
@@ -153,7 +162,7 @@ host-computer dependency for the common case while keeping marginal cost at
 zero for the hard case.**
 
 **6.5 Embeddings — the seam pays off.** `memory/embed.py` declared itself a
-seam ("swap the body here and every caller inherits it"). The Studio swaps
+seam ("swap the body here and every caller inherits it"). Publicrecord swaps
 in **Gemini text embeddings** server-side (batched at ingest; pennies per
 meeting), stored beside — not instead of — the lexical vector. Search blends:
 FTS (exact) + lexical (related words) + neural (meaning), and the results
@@ -183,7 +192,7 @@ writes who/when/what — the record remembers its own edits (specs/14 §8).
   account); every page scopes; `?town=` deep links override.
 - **Semantic search** — one search field, blended results, provenance chips
   per hit; when the API is unreachable the field degrades to lexical-static
-  with one honest line ("meaning-search needs the Studio; words still work").
+  with one honest line ("meaning-search needs publicrecord; words still work").
 - **Freshness** — the footer's edition date gains "a newer record exists —
   reload" when the pressed edition advances.
 - Everything else — meeting pages, the long view, ledgers, officials,
@@ -199,7 +208,7 @@ server logs what Cloud Run logs (operational, rotated, never product data).
 Follows stay in localStorage. The edition remains downloadable-whole
 (anti-lock-in as a URL). Provenance is UI everywhere AI touched anything.
 Officials-only aggregation enforced server-side. Corrections annotate.
-AGPL-3.0 on `studio/` — anyone can run the same record for their town, and
+AGPL-3.0 on `record/` — anyone can run the same record for their town, and
 In-a-Box v2 is literally `docker compose up` of these containers.
 
 ## 10. Costs (honest, monthly, at launch scale)
@@ -222,16 +231,16 @@ disability equity) are exactly what this line item belongs to.
 
 1. Store seam in `memory/store.py` (interface extraction, SQLite impl
    unchanged) — the one refactor the desk absorbs; lane-law note required.
-2. `studio/` package: PG store impl, FastAPI app, connectors (port
+2. `record/` package: PG store impl, FastAPI app, connectors (port
    `memory/ingest.py` resolve/dedupe/captions paths), press job (calls
    `web.bake` — already parameterized by base URL).
 3. `corpus.db → studio` import command (the two real Brookline meetings and
    41 issues arrive day one; nothing is re-derived that was hand-audited).
-4. DNS: `communityai.studio` → the Studio (today it redirects to the
-   marketing page); `control-z.org/app/*` → redirect stubs into the Studio
+4. DNS: `communityai.studio` → publicrecord (today it redirects to the
+   marketing page); `control-z.org/app/*` → redirect stubs into publicrecord
    so every civic citation minted so far survives.
 5. The desk's "Publish the record" learns the third target: press locally
-   (kiosk), push gh-pages (legacy), or POST to the Studio (steward key).
+   (kiosk), push gh-pages (legacy), or POST to publicrecord (steward key).
 
 ## 12. Success Metrics
 
@@ -244,30 +253,52 @@ count (the anti-lock-in metric the covenant lets us count); uptime of the
 
 ## 13. Phasing
 
-- **Wave 1 — the record moves in.** `studio/` service + PG schema + store
-  seam; import Brookline; nightly YouTube connector for the two existing
-  bodies; semantic search live; reader pointed at pressed-from-cloud
-  editions; steward auth + submission queue. *The record exists on its own.*
+- **Wave 1 — the record moves in.** ✅ **BUILT 2026-07-18** (branch
+  `lane/studio`; **nothing provisioned** — `record/INFRA.md` is the runbook,
+  and the whole wave was proven against `docker compose up`). `record/`
+  service + PG schema + store seam; Brookline imported (16,443 segments, 41
+  issues, nothing re-derived); nightly YouTube connector written (RSS,
+  captions-first — **not scheduled**, and Brookline's channel id is still
+  owed); semantic search live as an API with the neural half pinned to
+  `gemini-embedding-001@768` behind a seam; the edition presses from
+  Postgres; steward auth + submission queue + audit and spend ledgers.
+  *The record exists on its own.*
+
+  **Three remainders, named rather than quietly carried:** the reader's search
+  field still uses its static index and its specs/16 copy — the API serves the
+  blend and §8's honest line, but wiring `web/static/app.js` (copied verbatim,
+  under `connect-src 'self'`) is a change to the shared reader that wanted a
+  decision; `press.sync_to_gcs` has only ever spoken to a stub; and the
+  connector has never fetched a live feed (this venv has no CA bundle). The
+  `control-z.org/app/*` redirect stubs are written and **deliberately not
+  run** — pointing a working edition at a Studio that does not exist yet would
+  break every civic citation minted so far.
 - **Wave 2 — many towns, one steward.** Town onboarding UI, CivicClerk
   connector port, rosters/glossaries per town, town picker, the drain
   (AsrTask + desk volunteer mode), audit log + spend ledger. *Boston joins
   without a deploy.*
 - **Wave 3 — the wide record.** Crosstown views, per-town RSS/digests,
-  Highlighter/Publisher "Send to the Record" pointed at the Studio,
+  Highlighter/Publisher "Send to the Record" pointed at publicrecord,
   In-a-Box v2 (compose file), IAP graduation if stewards multiply.
 
 ## 14. Open Questions
 
-- **(Stephen, blocking wave 1 DNS)** `communityai.studio` as the Studio's
+- **(Stephen, blocking wave 1 DNS)** `communityai.studio` as publicrecord's
   primary home (recommended) vs `community.weirdmachine.org/studio` as
   primary with the .studio domain redirecting — either works; the spec
   assumes the former.
 - **(Stephen)** GCP project/billing account to create — nothing in this
   spec has been provisioned; wave 1 starts with `gcloud` from a clean
   project so the bill is legible from day one.
-- **(Eng)** Embedding model + dimension pin (Gemini text-embedding vs a
-  self-hosted open model on the drain later); write the choice into the
-  schema comment the way models.py pins hashes.
+- ~~**(Eng)** Embedding model + dimension pin~~ — **decided:**
+  `gemini-embedding-001` at `output_dimensionality=768`, stored *beside* the
+  256-dim lexical vector, pinned in four places the way models.py pins hashes
+  (`record/settings.py`, the `vector(768)` column, a CHECK constraint, and
+  `meta('embed_neural')` asserted at connect time). It is MRL-truncatable, so
+  1536 or 3072 is a re-embed away rather than a code change. Note the model
+  does **not** normalise below 3072 dimensions and `memory.embed.cosine()` is
+  a bare dot product — `record/embed_neural.py` L2-normalises on the way in,
+  and that is load-bearing.
 - **(Eng)** Postgres FTS parity with FTS5's bm25 ranking — port the desk's
   ranking behavior or accept ts_rank; measure on the real corpus before
   choosing.

@@ -87,6 +87,27 @@ def from_bytes(blob: Optional[bytes]):
     return np.frombuffer(blob, dtype=np.float32)
 
 
+def as_vec(x):
+    """Read an embedding back from whatever a store hands over.
+
+    The desk stores vectors as raw float32 bytes in a BLOB; publicrecord stores
+    them as a typed pgvector column and gets an array back. Both are the same
+    256 numbers, and no caller should have to know which one it is holding —
+    so this is the one dialect-free reader, and `memory.seam` declares the
+    column opaque to everything above it. Accepts bytes, an ndarray, a plain
+    list of floats, or None; returns a float32 array or None."""
+    if x is None or np is None:
+        return None
+    if isinstance(x, (bytes, bytearray, memoryview)):
+        return from_bytes(bytes(x))
+    # pgvector hands back its own Vector, which numpy will not coerce — it
+    # raises rather than converting, so ask the object first and never guess.
+    if hasattr(x, "to_numpy"):
+        x = x.to_numpy()
+    a = np.asarray(x, dtype=np.float32)
+    return a if a.size else None
+
+
 def cosine(a, b) -> float:
     """Cosine similarity of two already-unit vectors (dot product). Pure-python
     fallback so a caller without numpy still gets a number."""

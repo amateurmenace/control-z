@@ -28,7 +28,7 @@ from typing import List, Optional
 
 from czcore.paths import media_dir
 
-from . import embed
+from . import embed, policy
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meetings (
@@ -126,11 +126,17 @@ CREATE TABLE IF NOT EXISTS votes (
 CREATE INDEX IF NOT EXISTS idx_vote_meeting ON votes(meeting_id);
 """
 
-# columns that are big or JSON — kept out of the light list view
-_HEAVY = {"info_json", "analysis_json", "shingles", "summary"}
+# The record's rules live in policy.py now, so publicrecord's Postgres store
+# inherits the same answers instead of re-deciding them. These names stay as
+# aliases because this module has always spelled them this way.
+_HEAVY = policy.HEAVY
+_MEETING_COLS = policy.MEETING_COLS
 
 
 class Corpus:
+    """The desk's store — one SQLite file. Implements `memory.seam.CorpusStore`
+    (structurally; the Protocol is not a base class on purpose)."""
+
     def __init__(self, db_path: Optional[str] = None):
         self.db_path = str(db_path or media_dir("memory") / "corpus.db")
         # one Corpus is shared by every request thread AND the single job
@@ -148,6 +154,23 @@ class Corpus:
             except sqlite3.OperationalError:
                 self.fts = False    # search falls back to LIKE, and says so
             con.commit()
+
+    # -- lifecycle ---------------------------------------------------------
+
+    def close(self) -> None:
+        """Nothing to release: every operation here opens and closes its own
+        connection, and the only shared state is the vector cache. Publicrecord's
+        store returns a pool; the seam asks both the same question."""
+        self._cache = (-1, None, [])
+
+    @contextmanager
+    def unit(self):
+        """A unit of work. SQLite has one writer and WAL already serialises it,
+        so this yields immediately and every inner `_con()` behaves exactly as
+        it always has — the desk's behavior is untouched by design. It exists
+        because publicrecord's curation verbs are multi-call sequences that must
+        not half-land, and the callers of those sequences live in shared code."""
+        yield self
 
     @contextmanager
     def _con(self):
@@ -172,19 +195,18 @@ class Corpus:
         with self._con() as con:
             exists = con.execute("SELECT id FROM meetings WHERE id=?",
                                  (m["id"],)).fetchone()
+            fresh, cols = policy.merge_plan(m, now)
             if exists:
-                cols = [k for k in m if k != "id"]
                 if cols:
                     sets = ", ".join(f"{c}=?" for c in cols) + ", updated_at=?"
                     con.execute(f"UPDATE meetings SET {sets} WHERE id=?",
                                 [m[c] for c in cols] + [now, m["id"]])
             else:
-                m = {"added_at": now, "updated_at": now, **m}
-                cols = list(m)
+                cols = list(fresh)
                 con.execute(
                     f"INSERT INTO meetings ({', '.join(cols)}) "
                     f"VALUES ({', '.join('?' for _ in cols)})",
-                    [m[c] for c in cols])
+                    [fresh[c] for c in cols])
             con.commit()
 
     def set_status(self, meeting_id: str, status: str, error: str = "") -> None:
@@ -233,7 +255,14 @@ class Corpus:
                 con.execute("DELETE FROM segments_fts WHERE meeting_id=?",
                             (meeting_id,))
             con.execute("DELETE FROM segments WHERE meeting_id=?", (meeting_id,))
-            # nothing cascades — the meeting's paper and its roll calls go too
+            # nothing cascades — the meeting's paper and its roll calls go too,
+            # and so do its issue links. Without this last one the segments go
+            # but their issue rows stay, pointing at ids that no longer exist:
+            # list_issues LEFT JOINs and counts the ghosts, issue_appearances
+            # INNER JOINs and hides them, and the two surfaces disagree about
+            # the same issue. An issue's size is what its timeline shows.
+            con.execute("DELETE FROM issue_segments WHERE meeting_id=?",
+                        (meeting_id,))
             con.execute(
                 "DELETE FROM issue_documents WHERE doc_id IN "
                 "(SELECT id FROM documents WHERE meeting_id=?)", (meeting_id,))
@@ -256,6 +285,8 @@ class Corpus:
             if self.fts:
                 con.execute("DELETE FROM segments_fts WHERE meeting_id=?",
                             (meeting_id,))
+            con.execute("DELETE FROM issue_segments WHERE meeting_id=?",
+                        (meeting_id,))
             con.execute("DELETE FROM segments WHERE meeting_id=?", (meeting_id,))
             for i, s in enumerate(segments):
                 text = str(s.get("text", ""))
@@ -299,66 +330,89 @@ class Corpus:
                 "SELECT id, shingles FROM meetings "
                 "WHERE shingles!='' AND status='live'").fetchall()
         for r in rows:
-            have = set((r["shingles"] or "").split())
-            if not have:
-                continue
-            inter = len(want & have)
-            union = len(want | have)
-            if union and inter / union >= threshold:
+            if policy.jaccard_hit(want, set((r["shingles"] or "").split()),
+                                  threshold):
                 return self.get_meeting(r["id"])
         return None
 
     # -- search ------------------------------------------------------------
 
-    def search(self, q: str, limit: int = 60) -> List[dict]:
+    def search(self, q: str, limit: int = 60, town: str = "") -> List[dict]:
         """Cross-corpus search: FTS keyword hits, blended with related-language
-        (vector) hits, every hit time-coded to a segment for jump-to-play."""
+        (vector) hits, every hit time-coded to a segment for jump-to-play.
+
+        `town` scopes the whole search to one town. It defaults to empty — the
+        behavior this has always had — but a record serving several towns must
+        pass it, and publicrecord's API layer always does: aggregation across
+        towns is a covenant question, not a convenience."""
         q = (q or "").strip()
         if not q:
             return []
-        by_id: dict = {}
         # 1) keyword — exact, ordered by relevance
-        for seg, score in self._keyword(q, limit):
-            by_id[seg["id"]] = {**self._hit(seg), "score": score, "why": "word"}
-        # 2) related language — vector neighbours the words missed
+        keyword_hits = [{**self._hit(seg), "score": score}
+                        for seg, score in self._keyword(q, limit, town)]
+        by_kw = {h["seg_id"]: h for h in keyword_hits}
+        # 2) related language — vector neighbours the words missed. The matrix
+        # is corpus-wide, so a town filter is applied once a hit is resolved;
+        # over-fetch so scoping cannot quietly shorten the result.
         qvec = embed.embed(q)
-        for seg_id, sim in self._semantic(qvec, limit):
-            if seg_id in by_id:
-                by_id[seg_id]["score"] = max(by_id[seg_id]["score"], sim)
-                by_id[seg_id]["why"] = "both"
-            else:
+        vector_hits = []
+        for seg_id, sim in self._semantic(qvec, limit * 5 if town else limit):
+            hit = by_kw.get(seg_id)
+            if hit is None:
                 seg = self._segment(seg_id)
-                if seg:
-                    by_id[seg_id] = {**self._hit(seg), "score": round(sim, 4),
-                                     "why": "related"}
-        hits = sorted(by_id.values(), key=lambda h: h["score"], reverse=True)
-        return hits[:limit]
+                hit = self._hit(seg) if seg else None
+            if hit is None or hit.get("_status") != "live":
+                continue
+            if town and hit.get("town") != town:
+                continue
+            vector_hits.append((hit, sim))
+        # the fold — and the provenance the reader is shown — is policy, shared
+        hits = policy.blend(keyword_hits, vector_hits, limit)
+        for h in hits:
+            h.pop("_status", None)
+        return hits
 
-    def semantic(self, qvec, limit: int = 40) -> List[dict]:
+    def semantic(self, qvec, limit: int = 40, town: str = "") -> List[dict]:
         """Vector-only search — the context API's prior-appearances feed."""
         out = []
-        for seg_id, sim in self._semantic(qvec, limit):
+        for seg_id, sim in self._semantic(qvec, limit * 5 if town else limit):
             seg = self._segment(seg_id)
-            if seg:
-                out.append({**self._hit(seg), "score": round(sim, 4)})
+            if not seg:
+                continue
+            hit = self._hit(seg)
+            if hit.pop("_status", "") != "live":
+                continue
+            if town and hit.get("town") != town:
+                continue
+            out.append({**hit, "score": round(sim, 4)})
+            if len(out) >= limit:
+                break
         return out
 
-    def _keyword(self, q: str, limit: int):
+    def _keyword(self, q: str, limit: int, town: str = ""):
         with self._con() as con:
             if self.fts and _fts_query(q):
-                rows = con.execute(
-                    "SELECT s.* FROM segments_fts f JOIN segments s "
-                    "ON s.id=f.seg_id WHERE segments_fts MATCH ? "
-                    "ORDER BY bm25(segments_fts, 1, 1, 8) LIMIT ?",
-                    (_fts_query(q), limit)).fetchall()
+                sql = ("SELECT s.* FROM segments_fts f JOIN segments s "
+                       "ON s.id=f.seg_id JOIN meetings m ON m.id=s.meeting_id "
+                       "WHERE segments_fts MATCH ? AND m.status='live'" +
+                       (" AND m.town=?" if town else "") +
+                       " ORDER BY bm25(segments_fts, 1, 1, 8) LIMIT ?")
+                args = [_fts_query(q)] + ([town] if town else []) + [limit]
+                rows = con.execute(sql, args).fetchall()
             else:
-                like = f"%{q}%"
-                rows = con.execute(
-                    "SELECT * FROM segments WHERE text LIKE ? "
-                    "ORDER BY meeting_id LIMIT ?", (like, limit)).fetchall()
-        n = len(rows) or 1
-        # bm25 order → a descending 1.0..~0.5 score so keyword beats vector ties
-        return [(r, round(1.0 - 0.5 * i / n, 4)) for i, r in enumerate(rows)]
+                sql = ("SELECT s.* FROM segments s "
+                       "JOIN meetings m ON m.id=s.meeting_id "
+                       "WHERE s.text LIKE ? AND m.status='live'" +
+                       (" AND m.town=?" if town else "") +
+                       " ORDER BY s.meeting_id LIMIT ?")
+                args = [f"%{q}%"] + ([town] if town else []) + [limit]
+                rows = con.execute(sql, args).fetchall()
+        # bm25 order → a descending 1.0..~0.5 score so keyword beats vector
+        # ties. The store owes an ordering; the numbers are policy's, because
+        # bm25 is negative and Postgres's ts_rank_cd is positive and the two
+        # can never hand back comparable relevance.
+        return policy.rank_scores(rows)
 
     def _semantic(self, qvec, limit: int):
         if qvec is None or embed.np is None:
@@ -369,7 +423,8 @@ class Corpus:
         sims = mat @ qvec
         k = min(limit, len(ids))
         top = sims.argsort()[::-1][:k]
-        return [(ids[i], float(sims[i])) for i in top if sims[i] > 0.05]
+        return [(ids[i], float(sims[i])) for i in top
+                if sims[i] > policy.VECTOR_FLOOR]
 
     def _matrix(self):
         writes = self._writes()
@@ -398,7 +453,7 @@ class Corpus:
     def _hit(self, seg) -> dict:
         m = self._first_row(
             "SELECT id, title, date, body, town, url, source_kind, video_id, "
-            "media_path, duration FROM meetings WHERE id=?",
+            "media_path, duration, status FROM meetings WHERE id=?",
             (seg["meeting_id"],))
         info = dict(m) if m else {"id": seg["meeting_id"]}
         return {
@@ -411,6 +466,9 @@ class Corpus:
             "video_id": info.get("video_id", ""),
             "media_path": info.get("media_path", ""),
             "duration": info.get("duration", 0),
+            # not part of the envelope — search filters on it and drops it, so
+            # both stores hand back the same seventeen keys.
+            "_status": info.get("status", ""),
         }
 
     # -- stats -------------------------------------------------------------
@@ -481,19 +539,18 @@ class Corpus:
         with self._con() as con:
             exists = con.execute("SELECT id FROM issues WHERE id=?",
                                  (m["id"],)).fetchone()
+            fresh, cols = policy.merge_plan(m, now)
             if exists:
-                cols = [k for k in m if k != "id"]
                 if cols:
                     sets = ", ".join(f"{c}=?" for c in cols) + ", updated_at=?"
                     con.execute(f"UPDATE issues SET {sets} WHERE id=?",
                                 [m[c] for c in cols] + [now, m["id"]])
             else:
-                m = {"added_at": now, "updated_at": now, **m}
-                cols = list(m)
+                cols = list(fresh)
                 con.execute(
                     f"INSERT INTO issues ({', '.join(cols)}) "
                     f"VALUES ({', '.join('?' for _ in cols)})",
-                    [m[c] for c in cols])
+                    [fresh[c] for c in cols])
             con.commit()
 
     def link_segments(self, issue_id: str, links: List[tuple]) -> int:
@@ -521,6 +578,26 @@ class Corpus:
                         (meeting_id,))
             con.commit()
 
+    def linked_seg_ids(self, meeting_id: str) -> set:
+        """Which of a meeting's segments already belong to some issue. The
+        candidate queue asks this to find what is left over; it used to ask by
+        opening the store's own connection and running the SELECT itself."""
+        with self._con() as con:
+            rows = con.execute(
+                "SELECT seg_id FROM issue_segments WHERE meeting_id=?",
+                (meeting_id,)).fetchall()
+        return {r["seg_id"] for r in rows}
+
+    def unlink_meeting(self, issue_id: str, meeting_id: str) -> int:
+        """Detach one meeting's segments from one issue — the second half of
+        split, once the new issue has taken them."""
+        with self._con() as con:
+            cur = con.execute(
+                "DELETE FROM issue_segments WHERE issue_id=? AND meeting_id=?",
+                (issue_id, meeting_id))
+            con.commit()
+            return cur.rowcount
+
     def recompute_centroid(self, issue_id: str):
         """Average the linked segments' vectors into the issue's centroid. Runs
         after assignment so ranking (context, mint) tracks membership."""
@@ -531,13 +608,10 @@ class Corpus:
                 "SELECT s.emb FROM issue_segments g JOIN segments s ON s.id=g.seg_id "
                 "WHERE g.issue_id=? AND s.emb IS NOT NULL AND length(s.emb)>0",
                 (issue_id,)).fetchall()
-        vecs = [embed.from_bytes(r["emb"]) for r in rows]
-        vecs = [v for v in vecs if v is not None]
-        if not vecs:
+        cen = policy.centroid_of([embed.as_vec(r["emb"]) for r in rows],
+                                 embed.np)
+        if cen is None:
             return None
-        c = embed.np.mean(embed.np.vstack(vecs), axis=0)
-        n = float(embed.np.linalg.norm(c))
-        cen = (c / n) if n else c
         self.upsert_issue({"id": issue_id, "centroid": cen})
         return cen
 
@@ -813,19 +887,18 @@ class Corpus:
         with self._con() as con:
             exists = con.execute("SELECT id FROM documents WHERE id=?",
                                  (d["id"],)).fetchone()
+            fresh, cols = policy.merge_plan(d, now)
             if exists:
-                cols = [k for k in d if k != "id"]
                 if cols:
                     sets = ", ".join(f"{c}=?" for c in cols) + ", updated_at=?"
                     con.execute(f"UPDATE documents SET {sets} WHERE id=?",
                                 [d[c] for c in cols] + [now, d["id"]])
             else:
-                d = {"added_at": now, "updated_at": now, **d}
-                cols = list(d)
+                cols = list(fresh)
                 con.execute(
                     f"INSERT INTO documents ({', '.join(cols)}) "
                     f"VALUES ({', '.join('?' for _ in cols)})",
-                    [d[c] for c in cols])
+                    [fresh[c] for c in cols])
             con.commit()
 
     def replace_doc_chunks(self, doc_id: str, chunks: List[dict]) -> int:
@@ -1032,42 +1105,14 @@ class Corpus:
             return con.execute(sql, args).fetchone()
 
 
-_MEETING_COLS = [
-    "id", "town", "body", "title", "date", "url", "url_canon", "source_kind",
-    "video_id", "media_path", "duration", "uploader", "origin", "n_segments",
-    "n_speakers", "status", "error", "source_hash", "shingles", "info_json",
-    "analysis_json", "summary", "summary_origin", "added_at", "updated_at",
-]
-
-
-def _loads(s: str):
-    if not s:
-        return None
-    try:
-        return json.loads(s)
-    except (ValueError, TypeError):
-        return None
-
-
-def _dedupe_keep_order(items) -> list:
-    seen, out = set(), []
-    for x in items:
-        k = str(x).strip().lower()
-        if k and k not in seen:
-            seen.add(k)
-            out.append(x)
-    return out
-
-
-def _keyword_set(name: str, aliases) -> list:
-    """The lowercased phrases a segment must contain to belong to an issue —
-    the canonical name plus its aliases, deduped. This is what assignment
-    matches on, so it is deliberately the visible, auditable surface."""
-    return _dedupe_keep_order(
-        [str(name).lower()] + [str(a).lower() for a in (aliases or [])])
+# The record's judgement calls now live in policy.py, shared with publicrecord's
+# store. These stay as this module's names for the callers that already use them.
+_loads = policy.loads
+_dedupe_keep_order = policy.dedupe_keep_order
+_keyword_set = policy.keyword_set
 
 
 def _fts_query(q: str) -> str:
-    import re
-    toks = [t for t in re.findall(r"\w+", q) if t]
-    return " ".join(f'"{t}"*' for t in toks)
+    """FTS5's prefix syntax over the shared tokenizer. Postgres spells the same
+    query `tok:*`; the tokens are policy, the punctuation is dialect."""
+    return " ".join(f'"{t}"*' for t in policy.query_tokens(q))

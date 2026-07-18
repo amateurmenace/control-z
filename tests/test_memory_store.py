@@ -115,6 +115,21 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(self.c.search("rezoning"), [])
         self.assertFalse(self.c.forget("sel"))  # already gone
 
+    def test_forget_leaves_no_orphan_issue_links(self):
+        """Forgetting a meeting takes its issue links with it. Without that,
+        list_issues (LEFT JOIN) counts links whose segments are gone while
+        issue_appearances (INNER JOIN) hides them — one issue, two sizes."""
+        self.add("sel", SELECT, town="Brookline", date="2026-05-19")
+        seg_id = self.c.segments_of("sel")[0]["id"]
+        self.c.upsert_issue({"id": "i1", "town": "Brookline", "name": "rezoning",
+                             "status": "active"})
+        self.c.link_segments("i1", [(seg_id, "sel", 1.0, "alias")])
+        self.assertTrue(self.c.forget("sel"))
+        counted = self.c.list_issues(town="Brookline")[0]["n_segments"]
+        shown = sum(node["n"] for node in self.c.issue_appearances("i1"))
+        self.assertEqual(counted, 0)        # the rollup does not count ghosts
+        self.assertEqual(shown, 0)          # and the timeline agrees with it
+
     def test_empty_search(self):
         self.assertEqual(self.c.search(""), [])
 

@@ -412,7 +412,7 @@ def _assign(corpus, segs: List[dict], issues: List[dict]) -> Dict[str, int]:
         # cosine fallback: the nearest issue, only if the segment matched none of
         # them by word and the similarity is genuinely high
         if not hit_here and cen_mat is not None:
-            v = embed.from_bytes(s.get("emb"))
+            v = embed.as_vec(s.get("emb"))
             if v is not None:
                 sims = cen_mat @ v
                 b = int(sims.argmax())
@@ -588,10 +588,7 @@ def split_off_meeting(corpus, issue_id: str, meeting_id: str,
         "note": f"split from {src['name']}"})
     corpus.link_segments(new_id, [(b["seg_id"], meeting_id, b.get("score", 0.5),
                                    b.get("why", "steward")) for b in beads])
-    with corpus._con() as con:
-        con.execute("DELETE FROM issue_segments WHERE issue_id=? AND meeting_id=?",
-                    (issue_id, meeting_id))
-        con.commit()
+    corpus.unlink_meeting(issue_id, meeting_id)
     corpus.recompute_centroid(new_id)
     corpus.recompute_centroid(issue_id)
     return corpus.get_issue(new_id)
@@ -599,12 +596,7 @@ def split_off_meeting(corpus, issue_id: str, meeting_id: str,
 
 def _queue_candidates(corpus, meeting_id: str, town: str, segs: List[dict],
                       counts: dict) -> None:
-    assigned_segs = set()
-    with corpus._con() as con:
-        for r in con.execute(
-                "SELECT seg_id FROM issue_segments WHERE meeting_id=?",
-                (meeting_id,)):
-            assigned_segs.add(r["seg_id"])
+    assigned_segs = corpus.linked_seg_ids(meeting_id)
     left = [s for s in segs if s["id"] not in assigned_segs]
     if len(left) < 6:
         return
@@ -767,7 +759,7 @@ def mint_from_query(corpus, query: str, town: str = "") -> Optional[dict]:
                          "keywords": kws, "centroid": qvec,
                          "note": "minted from a search"})
     # seed it with the moments the query already finds
-    hits = corpus.search(query, limit=60)
+    hits = corpus.search(query, limit=60, town=town)
     links = [(h["seg_id"], h["meeting_id"], h.get("score", 0.5), "minted")
              for h in hits if h.get("seg_id")]
     if links:
