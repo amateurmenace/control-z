@@ -198,6 +198,69 @@ function go(name, arg) {
   if (page.onshow) page.onshow(arg);
 }
 
+/* ---------- czProgress: the house progress card ----------
+   One look for every download, conversion, render and export: an accent
+   bar that shimmers while indeterminate and fills when the job knows its
+   fraction, the stage message in mono, a live elapsed clock, green on
+   done, the error sentence on error. Attach to a job id; it cleans up
+   after itself.
+
+     const p = czProgress(container, { label: "fetching…", acc: "var(--grabber)" });
+     watchJob(job.id, j => p.update(j));
+     const done = await jobDone(job.id);  p.finish(done);
+*/
+function czProgress(container, opts = {}) {
+  const box = document.createElement("div");
+  box.className = "czprog";
+  if (opts.acc) box.style.setProperty("--acc", opts.acc);
+  box.innerHTML = `
+    <div class="czprog-top">
+      <span class="czprog-label">${esc(opts.label || "working…")}</span>
+      <span class="czprog-pct"></span>
+      <span class="czprog-clock">0s</span>
+    </div>
+    <div class="czprog-bar"><i class="indet"></i></div>
+    <div class="czprog-msg">queued…</div>`;
+  container.appendChild(box);
+  const bar = $(".czprog-bar i", box);
+  const pct = $(".czprog-pct", box);
+  const msg = $(".czprog-msg", box);
+  const clock = $(".czprog-clock", box);
+  const t0 = Date.now();
+  const tick = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    clock.textContent = s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+  }, 1000);
+  return {
+    el: box,
+    update(j) {
+      if (j.message) msg.textContent = j.message;
+      const has = j.progress != null && j.progress > 0;
+      bar.classList.toggle("indet", !has);
+      if (has) {
+        bar.style.width = `${Math.round(Math.min(1, j.progress) * 100)}%`;
+        pct.textContent = `${Math.round(Math.min(1, j.progress) * 100)}%`;
+      }
+    },
+    finish(done) {
+      clearInterval(tick);
+      bar.classList.remove("indet");
+      if (done.status === "done") {
+        box.classList.add("ok");
+        bar.style.width = "100%";
+        pct.textContent = "";
+        msg.textContent = done.message || "done";
+      } else {
+        box.classList.add("err");
+        msg.textContent = done.error || done.message || "stopped";
+      }
+      setTimeout(() => { box.classList.add("fade"); }, 4000);
+      setTimeout(() => { box.remove(); }, 5000);
+    },
+    remove() { clearInterval(tick); box.remove(); },
+  };
+}
+
 /* ---------- open-a-clip helpers: drop zones + the Browse dialog ----------
    The server opens files by PATH (local-only covenant — nothing uploads).
    In the app window pywebview stamps dragged Files with pywebviewFullPath;

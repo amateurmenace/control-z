@@ -211,11 +211,11 @@ const PublisherPage = (() => {
   async function renderJob() {
     try {
       const job = await api("/api/publisher/render", { source: S.source });
-      const stat = $("#pb-jobstat", el);
-      watchJob(job.id, j => { if (stat) stat.textContent = j.status === "running"
-        ? `${Math.round(Math.max(0, j.progress) * 100)}% — ${j.message || ""}` : j.status; });
-      toast("rendering the kit — watch the queue");
+      const p = czProgress($(".inspector", el), {
+        label: "rendering the kit", acc: "var(--publisher)" });
+      watchJob(job.id, j => p.update(j));
       const done = await jobDone(job.id);
+      p.finish(done);
       if (done.status === "done") { toast("kit rendered"); open(S.source); }
       else if (done.status === "error") toast(done.error, true);
     } catch (e) { toast(e.message, true); }
@@ -224,7 +224,11 @@ const PublisherPage = (() => {
   async function bundleJob() {
     try {
       const job = await api("/api/publisher/bundle", { source: S.source });
+      const p = czProgress($(".inspector", el), {
+        label: "exporting the bundle", acc: "var(--publisher)" });
+      watchJob(job.id, j => p.update(j));
       const done = await jobDone(job.id);
+      p.finish(done);
       if (done.status === "done") {
         const rep = $("#pb-report", el);
         rep.classList.add("show");

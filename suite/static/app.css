@@ -310,6 +310,48 @@ h2 { font-family: var(--head); font-size: 15px; font-weight: 600; letter-spacing
 .covenant-line { margin-top: 34px; font-family: var(--mono); font-size: 10px;
   color: var(--cream-faint); letter-spacing: .08em; }
 
+/* index browse */
+.ix-chips { display: flex; gap: 7px; align-items: baseline; margin: 2px 0 10px; }
+.ix-folderhead { margin: 16px 0 2px; display: flex; gap: 4px; align-items: baseline; }
+.ix-folderhead:first-of-type { margin-top: 6px; }
+
+/* czProgress — the house progress card (downloads, conversions, renders) */
+.czprog { background: rgba(255,255,255,.6); border: 1px solid var(--line-soft);
+  border-left: 2.5px solid var(--acc, var(--cream-faint));
+  border-radius: 8px; padding: 8px 12px 9px; margin-top: 8px;
+  transition: opacity .8s; }
+.czprog.fade { opacity: 0; }
+.czprog-top { display: flex; align-items: baseline; gap: 10px; }
+.czprog-label { font-family: var(--head); font-weight: 600; font-size: 12.5px;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.czprog-pct { font-family: var(--mono); font-size: 11px;
+  color: var(--acc, var(--cream-dim)); }
+.czprog-clock { font-family: var(--mono); font-size: 10px;
+  color: var(--cream-faint); }
+.czprog-bar { height: 5px; border-radius: 999px; margin-top: 7px;
+  background: color-mix(in srgb, var(--acc, var(--cream-faint)) 14%, transparent);
+  overflow: hidden; }
+.czprog-bar i { display: block; height: 100%; width: 0%; border-radius: 999px;
+  background: linear-gradient(90deg,
+    var(--acc, var(--cream-dim)),
+    color-mix(in srgb, var(--acc, var(--cream-dim)) 60%, #fff));
+  background-size: 200% 100%; transition: width .35s;
+  animation: czprog-sheen 1.6s linear infinite; }
+.czprog-bar i.indet { width: 34%;
+  animation: czprog-slide 1.3s ease-in-out infinite alternate,
+             czprog-sheen 1.6s linear infinite; }
+@keyframes czprog-slide { from { margin-left: 0; } to { margin-left: 66%; } }
+@keyframes czprog-sheen { to { background-position: -200% 0; } }
+.czprog-msg { font-family: var(--mono); font-size: 10.5px;
+  color: var(--cream-dim); margin-top: 6px; min-height: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.czprog.ok { border-left-color: var(--ok); }
+.czprog.ok .czprog-msg { color: var(--ok); }
+.czprog.err { border-left-color: var(--err); }
+.czprog.err .czprog-msg { color: var(--err); white-space: normal; }
+@media (prefers-reduced-motion: reduce) { .czprog-bar i { animation: none; } }
+
 /* grain — empty states only (the brand wink, never over footage) */
 .empty-grain { position: relative; }
 .empty-grain::before {
