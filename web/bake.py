@@ -198,6 +198,13 @@ class Bake:
             langs = [{"code": c, "name": LANG_NAMES.get(c, c)}
                      for c in sorted(tr["tracks"])]
             an = m.get("analysis") or {}
+            # the analyzer's read, computed at press time from the transcript
+            # itself — the desk's Highlighter analyzer, made static. Pure over
+            # segments (no wall-clock), so the edition stays byte-idempotent.
+            from highlighter import insight
+            framing = insight.framing(segs) if segs else {"lenses": [], "total": 0}
+            quests = insight.questions(segs) if segs else []
+            tension = insight.disagreements(segs) if segs else []
             mvotes = self.c.votes_of(m["id"])
             mdocs = [{"doc_id": d["id"], "kind": d.get("kind", ""),
                       "title": d.get("title", ""), "date": d.get("date", ""),
@@ -231,6 +238,27 @@ class Bake:
                                  for k in ("people", "places",
                                            "organizations", "money")},
                     "participation": (an.get("participation") or [])[:12],
+                    # the analyzer's read — the eight civic framing lenses (with
+                    # first/second-half drift + moments), the questions asked
+                    # typed by kind, and the moments of pushback
+                    "framing": {
+                        "total": framing.get("total", 0),
+                        "lenses": [{"lens": l["lens"], "color": l["color"],
+                                    "count": l["count"], "share": l["share"],
+                                    "drift": l["drift"],
+                                    "first_half": l["first_half"],
+                                    "second_half": l["second_half"],
+                                    "moments": [{"t": mo["t"], "text": mo["text"],
+                                                 "words": mo.get("words", [])}
+                                                for mo in l["moments"][:6]]}
+                                   for l in framing.get("lenses", [])
+                                   if l["count"] > 0],
+                    },
+                    "questions": [{"t": q["t"], "text": q["text"][:180],
+                                   "type": q["type"], "speaker": q.get("speaker")}
+                                  for q in quests[:24]],
+                    "tension": [{"t": d["t"], "text": d["text"],
+                                 "words": d.get("words", [])} for d in tension[:10]],
                 },
             }
             n = _json(self.out / "meetings" / f"{p}.json",
@@ -437,6 +465,92 @@ class Bake:
         self.note("officials.json", _gz_of(doc))
         return officials
 
+    # -- analytics: the record, drawn (the desk's Library, static) --------
+    def bake_analytics(self, meetings):
+        """Cross-meeting analytics — the picture the desk's Library draws, made
+        static: the eight civic framing lenses per meeting, the topics that
+        recur across the record, and the names that keep appearing. Every mark
+        traces to a meeting (its receipts). Aggregated from the per-meeting
+        analysis already baked, so it stays deterministic."""
+        from highlighter.insight import FRAMING_LENSES  # (name, color, words)
+        lens_order = [n for n, _c, _w in FRAMING_LENSES]
+        lens_color = {n: c for n, c, _w in FRAMING_LENSES}
+        # framing matrix: one row per meeting, the count under each lens
+        fmatrix = []
+        for m in sorted(meetings, key=lambda x: (x["date"] or "")):
+            lz = {l["lens"]: l["count"]
+                  for l in ((m["analysis"].get("framing") or {}).get("lenses") or [])}
+            fmatrix.append({
+                "pid": m["pid"], "title": m["title"], "date": m["date"],
+                "body": m["body"],
+                "lenses": {n: lz.get(n, 0) for n in lens_order},
+                "total": (m["analysis"].get("framing") or {}).get("total", 0)})
+        # topics that recur across meetings
+        topic_hits = {}
+        for m in meetings:
+            for t in (m["analysis"].get("topics") or []):
+                r = topic_hits.setdefault(t["topic"], {"topic": t["topic"],
+                                                       "count": 0, "meetings": []})
+                r["count"] += t.get("count", 0)
+                r["meetings"].append({"pid": m["pid"], "date": m["date"],
+                                      "t": t.get("t", 0)})
+        topics = sorted(topic_hits.values(),
+                        key=lambda r: (-len(r["meetings"]), -r["count"]))[:40]
+        # names (people/places/orgs) appearing across ≥2 meetings — officials
+        # + public bodies recur; a one-meeting mention doesn't make the record
+        name_hits = {}
+        for m in meetings:
+            ents = m["analysis"].get("entities") or {}
+            for kind in ("people", "places", "organizations"):
+                for e in (ents.get(kind) or []):
+                    key = (kind, e["name"].lower())
+                    r = name_hits.setdefault(key, {"name": e["name"], "kind": kind,
+                                                   "count": 0, "meetings": []})
+                    r["count"] += e.get("count", 0)
+                    r["meetings"].append({"pid": m["pid"], "date": m["date"],
+                                          "t": e.get("t", 0)})
+        names = sorted((r for r in name_hits.values() if len(r["meetings"]) >= 2),
+                       key=lambda r: (-len(r["meetings"]), -r["count"]))[:40]
+        doc = {"lens_order": lens_order, "lens_color": lens_color,
+               "framing": fmatrix, "topics": topics, "names": names,
+               "n_meetings": len(meetings)}
+        _json(self.out / "analytics.json", doc)
+        self.note("analytics.json", _gz_of(doc))
+        return doc
+
+    # -- the graph: issues that share a room (co-occurrence) --------------
+    def bake_graph(self, issues):
+        """The issue graph — issues that appear in the same meeting are tied,
+        the tie weighted by how many meetings they share. The town's concerns,
+        drawn as the network they actually are. Nodes carry reach; edges carry
+        their shared meetings (receipts)."""
+        # issue -> set of meeting pids it touches
+        touch = {}
+        for i in issues:
+            touch[i["slug"]] = {n["pid"] for n in i["timeline"]}
+        by_slug = {i["slug"]: i for i in issues}
+        slugs = [i["slug"] for i in issues if len(touch[i["slug"]]) >= 1]
+        edges = []
+        for a_i in range(len(slugs)):
+            for b_i in range(a_i + 1, len(slugs)):
+                a, b = slugs[a_i], slugs[b_i]
+                shared = touch[a] & touch[b]
+                if len(shared) >= 2:          # a single shared meeting is noise
+                    edges.append({"a": a, "b": b, "weight": len(shared),
+                                  "meetings": sorted(shared)})
+        edges.sort(key=lambda e: -e["weight"])
+        edges = edges[:120]
+        # keep only issues that connect to something (a graph, not a dust cloud)
+        used = sorted({s for e in edges for s in (e["a"], e["b"])})
+        nodes = [{"slug": s, "name": by_slug[s]["name"],
+                  "n_meetings": by_slug[s]["n_meetings"],
+                  "n_segments": by_slug[s]["n_segments"]}
+                 for s in used]
+        doc = {"nodes": nodes, "edges": edges}
+        _json(self.out / "graph.json", doc)
+        self.note("graph.json", _gz_of(doc))
+        return doc
+
     # -- urls.json (Add-a-meeting dedup) ---------------------------------
     def bake_urls(self, meetings):
         urls = {}
@@ -597,6 +711,8 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str) -> dict:
     issues = b.bake_issues(by_id)
     stats = b.bake_stats(meetings, issues)
     officials = b.bake_officials(meetings)
+    analytics = b.bake_analytics(meetings)
+    graph = b.bake_graph(issues)
     b.bake_urls(meetings)
     idx = b.bake_search(meetings)
     b.bake_feeds(meetings, issues, stats, site_base)
@@ -605,12 +721,13 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str) -> dict:
     # the reader (static assets) + the HTML stubs
     emit.emit_assets(out, version, manifest)
     emit.emit_stubs(out, meetings, issues, stats, manifest, site_base,
-                    officials=officials)
+                    officials=officials, analytics=analytics, graph=graph)
 
     print(f"  {len(meetings)} meetings · {len(issues)} issues · "
           f"{idx['segments']} segments indexed ({idx['terms']} terms) · "
           f"{stats['counts']['documents']} documents · "
-          f"{stats['counts']['votes']} roll calls · {len(officials)} officials")
+          f"{stats['counts']['votes']} roll calls · {len(officials)} officials · "
+          f"{len(graph['nodes'])} graph nodes")
     rep = b.report()
     print(f"edition pressed → {out}  (corpus {manifest['corpus_hash']})")
     return {"meetings": len(meetings), "issues": len(issues),

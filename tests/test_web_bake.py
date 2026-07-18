@@ -289,6 +289,40 @@ class TestBakeEdition(unittest.TestCase):
     def test_still_watching_page_present(self):
         self.assertTrue((self.out / "watching" / "index.html").exists())
 
+    # -- the analytical eye: framing, analytics, the graph (wave 3) --------
+
+    def test_meeting_carries_the_analyzer_read(self):
+        mj = self._read("meetings/vid1.json")
+        an = mj["analysis"]
+        # framing lenses + questions computed at press time from the transcript
+        self.assertIn("framing", an)
+        self.assertIn("questions", an)
+        self.assertIsInstance(an["framing"].get("lenses"), list)
+        stub = (self.out / "m" / "vid1" / "index.html").read_text()
+        self.assertIn("eight civic lenses", stub)   # JS-off readable
+
+    def test_analytics_plane_and_page(self):
+        a = self._read("analytics.json")
+        self.assertIn("framing", a)         # meetings × lenses matrix
+        self.assertIn("lens_order", a)
+        self.assertEqual(len(a["framing"]), 2)   # one row per live meeting
+        self.assertTrue((self.out / "analytics" / "index.html").exists())
+        page = (self.out / "analytics" / "index.html").read_text()
+        self.assertIn("The record, drawn", page)
+
+    def test_graph_plane_and_page(self):
+        g = self._read("graph.json")
+        self.assertIn("nodes", g)
+        self.assertIn("edges", g)
+        # our two seeded meetings share the budget-override issue, but a single
+        # shared issue across 2 meetings is real co-occurrence data
+        self.assertTrue((self.out / "graph" / "index.html").exists())
+        page = (self.out / "graph" / "index.html").read_text()
+        self.assertIn("The issue graph", page)
+        # the SVG is inline (no external lib — CSP holds) and has a table twin
+        self.assertIn("<svg", page)
+        self.assertIn("the same, as a table", page)
+
 
 class TestIdempotence(unittest.TestCase):
     def test_same_corpus_byte_identical(self):

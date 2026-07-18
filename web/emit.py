@@ -123,6 +123,10 @@ def rail(current=""):
     <span class="glyph">☆</span><span class="rlabel">Still watching</span></a>
   <a class="rail-item{' active' if current=='officials' else ''}" href="/app/officials">
     <span class="glyph">⬡</span><span class="rlabel">The votes</span></a>
+  <a class="rail-item{' active' if current=='analytics' else ''}" href="/app/analytics">
+    <span class="glyph">◧</span><span class="rlabel">The record drawn</span></a>
+  <a class="rail-item{' active' if current=='graph' else ''}" href="/app/graph">
+    <span class="glyph">❋</span><span class="rlabel">The issue graph</span></a>
   <div class="rail-sect">civic media suite</div>{civic}
   <div class="rail-sect">control-z</div>{bench}
 </nav>"""
@@ -292,6 +296,40 @@ def page_meeting(m, manifest, base):
             f'<div class="vledger">{"".join(vrows)}</div>'
             '<p class="hint">Read from the transcript; a name may be misheard — '
             'verify against the official minutes.</p></section>')
+    # the analyzer's read — framing lenses (with drift), questions, tension
+    an = m.get("analysis") or {}
+    framing = (an.get("framing") or {})
+    framing_html = ""
+    if framing.get("lenses"):
+        mx = max((l["count"] for l in framing["lenses"]), default=1) or 1
+        DRIFT = {"rising": "↑ rising", "fading": "↓ fading", "steady": "· steady"}
+        rows = "".join(
+            f'<div class="lensrow"><span class="lenslabel" style="color:{esc(l["color"])}">{esc(l["lens"])}</span>'
+            f'<span class="lensbar"><i style="width:{round(100*l["count"]/mx)}%;background:{esc(l["color"])}"></i></span>'
+            f'<span class="lensn">{l["count"]}</span>'
+            f'<span class="lensdrift">{DRIFT.get(l["drift"],"")}</span></div>'
+            for l in framing["lenses"])
+        framing_html = ('<section class="card"><span class="tag">how the meeting '
+                        'framed it — eight civic lenses, counted from its own '
+                        'words</span>'
+                        f'<div class="lenses">{rows}</div>'
+                        '<p class="hint">Counted, not modeled — each lens is a '
+                        'word list; drift compares the first half to the '
+                        'second.</p></section>')
+    questions_html = ""
+    if an.get("questions"):
+        byt = {}
+        for q in an["questions"]:
+            byt.setdefault(q.get("type", "information"), []).append(q)
+        blocks = "".join(
+            f'<div class="qgroup"><span class="qtype">{esc(t)}</span>'
+            + "".join(f'<a class="qrow" href="#t{int(q["t"])}">'
+                      f'<span class="ts">{hms(q["t"])}</span> {esc(q["text"])}</a>'
+                      for q in qs[:8]) + '</div>'
+            for t, qs in sorted(byt.items()))
+        questions_html = ('<section class="card"><span class="tag">the questions '
+                          'asked — typed by what they ask about</span>'
+                          f'<div class="qgroups">{blocks}</div></section>')
     # the town's paper for this meeting
     docs_html = ""
     if m.get("documents"):
@@ -328,6 +366,8 @@ def page_meeting(m, manifest, base):
     {summ}
     {votes_html}
     {docs_html}
+    {framing_html}
+    {questions_html}
     <div class="tbar">
       <span class="tag">transcript — select any line to Cite it, click a time to jump</span>
       <span class="dls">{tdl}{addl}
@@ -582,6 +622,146 @@ def page_officials(officials, manifest, base):
                  version=manifest["version"])
 
 
+def page_analytics(analytics, manifest, base):
+    """The record, drawn — the desk's Library made static: the eight civic
+    framing lenses per meeting, the topics that recur, the names that keep
+    appearing. Every mark links to its meeting. JS-off complete."""
+    order = analytics.get("lens_order", [])
+    color = analytics.get("lens_color", {})
+    fm = analytics.get("framing", [])
+    # framing heatmap: meetings × lenses, cell shade = share of that meeting
+    head = "".join(f'<th style="color:{esc(color.get(n,""))}">{esc(n)}</th>'
+                   for n in order)
+    body_rows = []
+    for r in fm:
+        tot = r.get("total", 0) or 1
+        cells = "".join(
+            (lambda cnt: f'<td style="background:{esc(color.get(n,"#888"))};'
+             f'opacity:{0.12 + 0.85*min(1, cnt/tot*4):.2f}" '
+             f'title="{esc(n)}: {cnt}">{cnt or ""}</td>')(r["lenses"].get(n, 0))
+            for n in order)
+        body_rows.append(
+            f'<tr><th class="fmlbl"><a href="/app/m/{r["pid"]}">'
+            f'{esc((r["date"] or "?")[:10])} · {esc((r["body"] or r["title"])[:26])}</a></th>{cells}</tr>')
+    heat = (f'<table class="heat"><thead><tr><th></th>{head}</tr></thead>'
+            f'<tbody>{"".join(body_rows)}</tbody></table>') if fm else \
+        '<p class="hint">the framing map needs a read meeting</p>'
+    # topics that recur across meetings
+    topics = "".join(
+        f'<a class="trow" href="/app/m/{t["meetings"][0]["pid"]}#t{int(t["meetings"][0].get("t") or 0)}">'
+        f'<b>{esc(t["topic"])}</b>'
+        f'<span class="lmeta">{len(t["meetings"])} meetings · {t["count"]} mentions</span></a>'
+        for t in analytics.get("topics", [])[:24])
+    # recurring names
+    names = "".join(
+        f'<a class="nrow" href="/app/m/{n["meetings"][0]["pid"]}#t{int(n["meetings"][0].get("t") or 0)}">'
+        f'<span class="nkind nk-{esc(n["kind"][:3])}"></span><b>{esc(n["name"])}</b>'
+        f'<span class="lmeta">{len(n["meetings"])} meetings · {n["count"]}×</span></a>'
+        for n in analytics.get("names", [])[:30])
+    body = f"""
+  <section class="analytics">
+    <a class="back" href="/app/">← the record</a>
+    <h1>The record, drawn</h1>
+    <p class="why">Every read meeting as one picture — how the town framed what
+      it discussed, the topics that keep returning, and the names that recur.
+      Counted from the record's own words; every mark opens its meeting.</p>
+    <section class="card"><span class="tag">civic framing — meetings down, lenses across</span>
+      <div class="heatwrap">{heat}</div>
+      <p class="hint">A darker cell is a bigger share of that meeting's framing.
+        Amber is measurement; these are measurements.</p></section>
+    <div class="grid2">
+      <section class="card"><span class="tag">topics that recur across the record</span>
+        <div class="trows">{topics or '<p class="hint">nothing recurs yet</p>'}</div></section>
+      <section class="card"><span class="tag">names across two or more meetings</span>
+        <div class="nrows">{names or '<p class="hint">no name recurs yet</p>'}</div></section>
+    </div>
+  </section>
+"""
+    return shell("The record, drawn — Community AI Project",
+                 "The town's meetings as one picture — framing, topics, and names "
+                 "counted across the record.",
+                 f"{base}/app/analytics", body, "analytics", manifest,
+                 version=manifest["version"])
+
+
+def page_graph(graph, manifest, base):
+    """The issue graph — issues that share meetings, drawn as the network they
+    are. A hand-laid ring of nodes with weighted chords; SVG, no libraries, so
+    the strict CSP holds. JS-off it's a readable ring; app.js adds hover."""
+    import math
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+    W = 760
+    R = 300
+    cx = cy = W / 2
+    n = len(nodes)
+    pos = []
+    for i in range(n):
+        a = -math.pi / 2 + 2 * math.pi * i / max(1, n)
+        pos.append((round(cx + R * math.cos(a), 1), round(cy + R * math.sin(a), 1)))
+    idx = {node["slug"]: i for i, node in enumerate(nodes)}
+    mxw = max((e["weight"] for e in edges), default=1) or 1
+    lines = "".join(
+        f'<line x1="{pos[idx[e["a"]]][0]}" y1="{pos[idx[e["a"]]][1]}" '
+        f'x2="{pos[idx[e["b"]]][0]}" y2="{pos[idx[e["b"]]][1]}" '
+        f'stroke="#8E4A55" stroke-opacity="{0.12 + 0.5*e["weight"]/mxw:.2f}" '
+        f'stroke-width="{0.5 + 2.5*e["weight"]/mxw:.1f}"/>'
+        for e in edges if e["a"] in idx and e["b"] in idx)
+    mxm = max((node["n_meetings"] for node in nodes), default=1) or 1
+    dots = ""
+    labels = ""
+    for i, node in enumerate(nodes):
+        x, y = pos[i]
+        r = 3 + 7 * node["n_meetings"] / mxm
+        dots += (f'<a href="/app/i/{esc(node["slug"])}">'
+                 f'<circle cx="{x}" cy="{y}" r="{r:.1f}" fill="#8E4A55" '
+                 f'fill-opacity=".82"><title>{esc(node["name"])} · '
+                 f'{node["n_meetings"]} meetings</title></circle></a>')
+        # label just outside the ring, anchored by side
+        lx = round(cx + (R + 14) * math.cos(-math.pi/2 + 2*math.pi*i/max(1, n)), 1)
+        ly = round(cy + (R + 14) * math.sin(-math.pi/2 + 2*math.pi*i/max(1, n)), 1)
+        anchor = "start" if lx >= cx else "end"
+        labels += (f'<text x="{lx}" y="{ly}" text-anchor="{anchor}" '
+                   f'font-size="10" fill="#5C5647" dominant-baseline="middle">'
+                   f'{esc(node["name"][:22])}</text>')
+    svg = (f'<svg viewBox="0 0 {W} {W}" class="graphsvg" '
+           f'xmlns="http://www.w3.org/2000/svg" role="img" '
+           f'aria-label="issue co-occurrence network">{lines}{dots}{labels}</svg>'
+           if nodes else '<p class="hint">the graph needs issues that share meetings</p>')
+    # a JS-off table twin (WCAG: every chart has a table twin)
+    twin = "".join(
+        f'<tr><td><a href="/app/i/{esc(e["a"])}">{esc(_gname(nodes, e["a"]))}</a></td>'
+        f'<td><a href="/app/i/{esc(e["b"])}">{esc(_gname(nodes, e["b"]))}</a></td>'
+        f'<td>{e["weight"]} shared</td></tr>' for e in edges[:60])
+    body = f"""
+  <section class="graphpage">
+    <a class="back" href="/app/">← the record</a>
+    <h1>The issue graph</h1>
+    <p class="why">The town's concerns as the network they are: two issues are
+      tied when they share meetings, and the tie thickens with every meeting
+      they share. A bigger dot appears on more of the record. Tap a node to walk
+      its long view.</p>
+    <section class="card graphcard">{svg}</section>
+    <details class="graphtwin"><summary>the same, as a table</summary>
+      <table class="twin"><thead><tr><th>issue</th><th>issue</th><th>tie</th></tr></thead>
+      <tbody>{twin or '<tr><td colspan="3">no ties yet</td></tr>'}</tbody></table>
+    </details>
+  </section>
+"""
+    return shell("The issue graph — Community AI Project",
+                 "The town's issues drawn as the network they are — tied when "
+                 "they share meetings.",
+                 f"{base}/app/graph", body, "graph", manifest,
+                 version=manifest["version"])
+
+
+def _gname(nodes, slug):
+    for n in nodes:
+        if n["slug"] == slug:
+            return n["name"]
+    return slug
+
+
 def page_still(manifest, base):
     """Still watching — the follows view. Follows live only in localStorage, so
     the body is a JS-rendered list with an honest noscript story."""
@@ -706,7 +886,11 @@ def _write_pwa(out: Path, manifest):
     # tell the page when a fresher pressing has been fetched. Cache name = the
     # corpus fingerprint, so a new edition's SW owns a new cache and sweeps the
     # old one on activate. No wall-clock anywhere (idempotence).
-    cache = f"cz-record-{manifest.get('corpus_hash','0')}"
+    # cache name keys on BOTH the version and the corpus fingerprint: a new
+    # pressing (corpus change) OR a new release (statics/pages change, which
+    # always bumps the version) supersedes the old cache, so a returning reader
+    # never sees a stale shell after an edition ships.
+    cache = f"cz-record-{manifest.get('version','0')}-{manifest.get('corpus_hash','0')}"
     v = esc(manifest.get("version", "0"))
     shell_urls = _json.dumps([
         "/app/", f"/app/app.css?v={manifest.get('version','0')}",
@@ -746,7 +930,8 @@ self.addEventListener('fetch', e => {{
     (out / "sw.js").write_text(sw, encoding="utf-8")
 
 
-def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None):
+def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
+               analytics=None, graph=None):
     v = manifest["version"]
     (out / "index.html").write_text(page_home(meetings, issues, stats, manifest, base), encoding="utf-8")
     (out / "s" / "index.html").parent.mkdir(parents=True, exist_ok=True)
@@ -760,6 +945,12 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None):
     (out / "officials" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "officials" / "index.html").write_text(
         page_officials(officials or [], manifest, base), encoding="utf-8")
+    (out / "analytics" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "analytics" / "index.html").write_text(
+        page_analytics(analytics or {}, manifest, base), encoding="utf-8")
+    (out / "graph" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "graph" / "index.html").write_text(
+        page_graph(graph or {}, manifest, base), encoding="utf-8")
     for m in meetings:
         d = out / "m" / m["pid"]
         d.mkdir(parents=True, exist_ok=True)
