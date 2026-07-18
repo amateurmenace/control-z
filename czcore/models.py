@@ -35,6 +35,9 @@ class ModelSpec:
     card: str  # one-line honest description
     hint: str = ""         # how to obtain when url is None
     archive_member: str = ""  # url is a .tar.*: keep this member as `filename`
+    archive_dir: str = ""  # url is a .tar.*: keep every file under this member
+    #                        directory; `filename` then names a DIRECTORY (a
+    #                        voice is model + tokens + lexicon, not one file)
 
 
 REGISTRY = {
@@ -106,6 +109,24 @@ REGISTRY = {
              "get names. The other half of Scribe's speaker labels. 38 MB, "
              "on-device.",
     ),
+    "vits-ljs": ModelSpec(
+        name="vits-ljs",
+        filename="vits-ljs",  # a directory: the voice is .onnx + tokens + lexicon
+        url=("https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+             "tts-models/vits-ljs.tar.bz2"),
+        archive_dir="vits-ljs",
+        # manifest hash (_sha256_dir): verified against both a fresh download
+        # of the release asset and the voice Narrator was proven with
+        sha256="a9adc2ae51e1307f63dad201f4bd4c3ebbf71517d659462637db4abbc8286556",
+        license="Apache-2.0 (k2-fsa sherpa-onnx export; VITS weights trained "
+                "on the public-domain LJSpeech corpus)",
+        card="vits-ljs — the Narrator's voice. One clear English speaker, "
+             "CMU-lexicon based, so no GPL espeak-ng data rides along. "
+             "112 MB, on-device.",
+        hint=("czcore.tts finds any sherpa VITS voice placed under the models "
+              "folder by shape; this entry just makes the tested one a "
+              "click."),
+    ),
     "yunet": ModelSpec(
         name="yunet",
         filename="face_detection_yunet_2023mar.onnx",
@@ -140,11 +161,23 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _sha256_dir(path: Path) -> str:
+    """One pin for a directory model: the sha256 of a manifest — one line per
+    regular file, ``relpath\\0sha256(file)``, sorted by path. Deterministic
+    across platforms, and auditable: print the same lines and compare."""
+    lines = []
+    for f in sorted(path.rglob("*")):
+        if f.is_file():
+            lines.append(f"{f.relative_to(path).as_posix()}\0{_sha256(f)}\n")
+    return hashlib.sha256("".join(lines).encode()).hexdigest()
+
+
 def model_path(name: str, auto_download: bool = True, quiet: bool = False) -> Path:
     spec = REGISTRY[name]
     dest = models_dir() / spec.filename
     if dest.exists():
-        if spec.sha256 and _sha256(dest) != spec.sha256:
+        pin = _sha256_dir(dest) if dest.is_dir() else _sha256(dest)
+        if spec.sha256 and pin != spec.sha256:
             if spec.url:
                 fix = ("Delete it and it downloads again on next use, or check "
                        "where it came from.")
@@ -167,11 +200,13 @@ def model_path(name: str, auto_download: bool = True, quiet: bool = False) -> Pa
         print(f"            from: {spec.url}")
     tmp = dest.with_suffix(".part")
     urllib.request.urlretrieve(spec.url, tmp)  # nosec - pinned URL, hash-verified below
-    if spec.archive_member:
+    if spec.archive_dir:
+        tmp = _extract_dir(tmp, spec, dest)
+    elif spec.archive_member:
         tmp = _extract(tmp, spec, dest)
-    got = _sha256(tmp)
+    got = _sha256_dir(tmp) if tmp.is_dir() else _sha256(tmp)
     if spec.sha256 and got != spec.sha256:
-        tmp.unlink(missing_ok=True)
+        shutil.rmtree(tmp) if tmp.is_dir() else tmp.unlink(missing_ok=True)
         raise RuntimeError(
             f"downloaded {spec.name} hash mismatch (got {got[:16]}…, "
             f"expected {spec.sha256[:16]}…) — refusing to use it."
@@ -209,6 +244,45 @@ def _extract(archive: Path, spec: ModelSpec, dest: Path) -> Path:
             src = tf.extractfile(member)
             with open(out, "wb") as f:
                 shutil.copyfileobj(src, f)
+    finally:
+        archive.unlink(missing_ok=True)
+    return out
+
+
+def _extract_dir(archive: Path, spec: ModelSpec, dest: Path) -> Path:
+    """Pull every regular file under spec.archive_dir out of a downloaded
+    tarball into a temp directory (manifest-hashed by the caller, exactly like
+    a single file). Member paths are vetted one component at a time — never an
+    extractall, and a name that tries to walk out of the prefix is skipped."""
+    import tarfile
+
+    prefix = spec.archive_dir.rstrip("/") + "/"
+    out = dest.with_suffix(".member")
+    if out.exists():
+        shutil.rmtree(out)
+    kept = 0
+    try:
+        with tarfile.open(archive) as tf:
+            for member in tf.getmembers():
+                if not member.isfile() or not member.name.startswith(prefix):
+                    continue
+                rel = member.name[len(prefix):]
+                parts = Path(rel).parts
+                if not parts or any(p in ("..", "") or "/" in p or "\\" in p
+                                    for p in parts) or Path(rel).is_absolute():
+                    continue
+                target = out.joinpath(*parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                src = tf.extractfile(member)
+                with open(target, "wb") as f:
+                    shutil.copyfileobj(src, f)
+                kept += 1
+        if not kept:
+            shutil.rmtree(out, ignore_errors=True)
+            raise RuntimeError(
+                f"{spec.name}: the download holds nothing under "
+                f"{spec.archive_dir!r}/ — upstream changed the archive's "
+                "layout, so this needs a code fix rather than a retry.")
     finally:
         archive.unlink(missing_ok=True)
     return out

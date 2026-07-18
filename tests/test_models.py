@@ -31,8 +31,8 @@ class TestRegistry(unittest.TestCase):
         for name, spec in models.REGISTRY.items():
             if spec.url and ".tar" in spec.url:
                 self.assertTrue(
-                    spec.archive_member,
-                    f"{name} downloads a tarball but names no member to keep")
+                    spec.archive_member or spec.archive_dir,
+                    f"{name} downloads a tarball but names nothing to keep")
 
     def test_diarization_pair_is_registered(self):
         """Scribe's speaker labels used to need two hand-placed files; the
@@ -93,6 +93,72 @@ class TestArchiveMember(unittest.TestCase):
         models._extract(self.archive, self._spec("pkg/model.onnx"), dest)
         self.assertFalse((self.dir / "pkg").exists())
         self.assertFalse((self.dir / "pkg" / "LICENSE").exists())
+
+
+class TestArchiveDir(unittest.TestCase):
+    """A voice is a directory — model + tokens + lexicon — so the store can
+    keep a whole member directory, manifest-hashed like a single file."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        src = self.dir / "src"
+        (src / "sub").mkdir(parents=True)
+        (src / "voice.onnx").write_bytes(b"pretend weights")
+        (src / "tokens.txt").write_bytes(b"a b c")
+        (src / "sub" / "lexicon.txt").write_bytes(b"HELLO HH")
+        junk = self.dir / "outside.txt"
+        junk.write_bytes(b"not part of the voice")
+        self.archive = self.dir / "bundle.tar.bz2"
+        with tarfile.open(self.archive, "w:bz2") as tf:
+            tf.add(src / "voice.onnx", arcname="pkg/voice.onnx")
+            tf.add(src / "tokens.txt", arcname="pkg/tokens.txt")
+            tf.add(src / "sub" / "lexicon.txt", arcname="pkg/sub/lexicon.txt")
+            tf.add(junk, arcname="elsewhere/outside.txt")
+            tf.add(junk, arcname="pkg/../escape.txt")
+        self.expected = models._sha256_dir(src)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _spec(self, member_dir="pkg"):
+        return models.ModelSpec(
+            name="t", filename="t", url="https://example/bundle.tar.bz2",
+            sha256=self.expected, license="MIT", card="test",
+            archive_dir=member_dir)
+
+    def test_keeps_the_directory_and_its_manifest_hash(self):
+        dest = self.dir / "kept"
+        out = models._extract_dir(self.archive, self._spec(), dest)
+        self.assertEqual((out / "voice.onnx").read_bytes(), b"pretend weights")
+        self.assertEqual((out / "sub" / "lexicon.txt").read_bytes(), b"HELLO HH")
+        self.assertEqual(models._sha256_dir(out), self.expected,
+                         "the manifest hash must reproduce from the extraction")
+
+    def test_leaves_everything_outside_the_prefix(self):
+        dest = self.dir / "kept"
+        out = models._extract_dir(self.archive, self._spec(), dest)
+        self.assertFalse((out / "outside.txt").exists())
+        self.assertFalse((self.dir / "elsewhere").exists())
+        self.assertFalse((self.dir / "escape.txt").exists(),
+                         "a ../ member name must never walk out")
+        self.assertFalse((out.parent / "escape.txt").exists())
+
+    def test_consumes_the_archive(self):
+        models._extract_dir(self.archive, self._spec(), self.dir / "kept")
+        self.assertFalse(self.archive.exists(), "the tarball should not linger")
+
+    def test_a_moved_layout_is_a_sentence(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            models._extract_dir(self.archive, self._spec("gone"),
+                                self.dir / "kept")
+        self.assertIn("code fix", str(ctx.exception))
+
+    def test_manifest_hash_names_paths_not_just_bytes(self):
+        """Same bytes under a different name is a different voice."""
+        a = self.dir / "a"; a.mkdir(); (a / "x.onnx").write_bytes(b"w")
+        b = self.dir / "b"; b.mkdir(); (b / "y.onnx").write_bytes(b"w")
+        self.assertNotEqual(models._sha256_dir(a), models._sha256_dir(b))
 
 
 if __name__ == "__main__":

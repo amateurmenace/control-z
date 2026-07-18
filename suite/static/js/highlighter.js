@@ -801,12 +801,25 @@ const HighlighterPage = (() => {
         .map(t => (t && (t.name || t.label)) || t)]
       .filter(x => typeof x === "string" && x);
     api("/api/memory/context", { texts }).then(r => {
-      const prior = r.prior || [];
-      box.innerHTML = prior.length
+      const prior = r.prior || [], issues = r.issues || [];
+      box.innerHTML = (prior.length
         ? `<b>${prior.length} prior appearance${prior.length > 1 ? "s" : ""}</b>
            in the record · ` + prior.slice(0, 3).map(p =>
             `<span class="tpill">${esc(String(p.text || "").slice(0, 56))}</span>`).join(" ")
-        : `first appearance of these topics in the record`;
+        : `first appearance of these topics in the record`)
+        // tonight's topics as tracked issues — each pill is a door into the
+        // issue's timeline on the Memory page
+        + (issues.length
+          ? `<div style="margin-top:4px">tracked in the long view: ` +
+            issues.slice(0, 4).map(i =>
+              `<span class="tpill" data-issue="${esc(i.id)}" style="cursor:pointer"
+                 title="${esc(i.name)} — ${i.n_segments} appearance${i.n_segments === 1 ? "" : "s"}
+                 across ${i.n_meetings} meeting${i.n_meetings === 1 ? "" : "s"}
+                 since ${esc(String(i.first_seen || "").slice(0, 4))} · open the timeline">${esc(i.name)}
+                 · ${i.n_meetings}×</span>`).join(" ") + `</div>`
+          : "");
+      $$("[data-issue]", box).forEach(p =>
+        p.onclick = () => go("memory", { openIssue: p.dataset.issue }));
     }).catch(e => {
       box.innerHTML = `<span class="hint">the record didn't answer — ${esc(e.message)}</span>`;
     });

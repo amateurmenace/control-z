@@ -9,18 +9,9 @@ supplements the official record; it never replaces it.
 from __future__ import annotations
 
 import re
-import sys
-from pathlib import Path
 
-# lane B owns memory/, but `[tool.setuptools] packages` is lane A's file — until
-# the HANDOFF ask lands there, make the sibling package importable by path so
-# the suite finds it no matter the working directory. Harmless once added.
-_ROOT = str(Path(__file__).resolve().parents[2])
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
-
-from memory import detect, embed, ingest, issues   # noqa: E402
-from memory.store import Corpus                    # noqa: E402
+from memory import detect, embed, ingest, issues
+from memory.store import Corpus
 
 
 def register_memory(app, jobs, frames):
