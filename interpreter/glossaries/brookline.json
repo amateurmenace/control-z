@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "town": "brookline",
+  "label": "Brookline, MA",
+  "keep": [
+    "Brookline", "Coolidge Corner", "Brookline Village", "Washington Square",
+    "Chestnut Hill", "Larz Anderson", "Muddy River", "Putterham",
+    "JFK Crossing", "Aspinwall", "Longwood", "Fisher Hill",
+    "Brookline High School", "Pierce School", "Driscoll School",
+    "Baker School", "Lawrence School", "Lincoln School", "Runkle School",
+    "Heath School", "Ruffin Ridley School", "Baldwin School",
+    "METCO", "MCAS", "Chapter 70", "Proposition 2½"
+  ],
+  "terms": {
+    "warrant article": {
+      "es": {"text": "artículo de la convocatoria (warrant article)", "status": "suggested"},
+      "simple": {"text": "warrant article (an item Town Meeting will vote on)", "status": "suggested"},
+      "zh": {"text": "议案（warrant article）", "status": "suggested"},
+      "pt": {"text": "artigo da convocação (warrant article)", "status": "suggested"},
+      "ht": {"text": "atik nan konvokasyon an (warrant article)", "status": "suggested"},
+      "vi": {"text": "mục nghị trình (warrant article)", "status": "suggested"},
+      "ru": {"text": "статья повестки (warrant article)", "status": "suggested"}
+    },
+    "override": {
+      "es": {"text": "anulación del límite fiscal (override)", "status": "suggested"},
+      "simple": {"text": "override (a vote to raise property taxes above the state limit)", "status": "suggested"},
+      "zh": {"text": "税收上限豁免（override）", "status": "suggested"},
+      "pt": {"text": "anulação do limite fiscal (override)", "status": "suggested"},
+      "ht": {"text": "depase limit taks la (override)", "status": "suggested"},
+      "vi": {"text": "vượt trần thuế (override)", "status": "suggested"},
+      "ru": {"text": "превышение налогового лимита (override)", "status": "suggested"}
+    },
+    "home rule petition": {
+      "es": {"text": "petición de autonomía local (home rule petition)", "status": "suggested"},
+      "simple": {"text": "home rule petition (a request for a special state law for this town)", "status": "suggested"},
+      "zh": {"text": "地方自治请愿（home rule petition）", "status": "suggested"},
+      "pt": {"text": "petição de autonomia local (home rule petition)", "status": "suggested"},
+      "ht": {"text": "petisyon otonomi lokal (home rule petition)", "status": "suggested"},
+      "vi": {"text": "kiến nghị tự quản địa phương (home rule petition)", "status": "suggested"},
+      "ru": {"text": "ходатайство о местном самоуправлении (home rule petition)", "status": "suggested"}
+    },
+    "Select Board": {
+      "es": {"text": "la Junta Selecta (Select Board)", "status": "suggested"},
+      "simple": {"text": "Select Board (the town's elected executive board)", "status": "suggested"},
+      "zh": {"text": "行政委员会（Select Board）", "status": "suggested"},
+      "pt": {"text": "o Conselho Municipal (Select Board)", "status": "suggested"},
+      "ht": {"text": "Konsèy Vil la (Select Board)", "status": "suggested"},
+      "vi": {"text": "Hội đồng Quản trị Thị trấn (Select Board)", "status": "suggested"},
+      "ru": {"text": "городской совет (Select Board)", "status": "suggested"}
+    },
+    "Town Meeting": {
+      "es": {"text": "la Asamblea Municipal (Town Meeting)", "status": "suggested"},
+      "simple": {"text": "Town Meeting (the town's legislature — elected members who vote on budgets and laws)", "status": "suggested"},
+      "zh": {"text": "镇民代表大会（Town Meeting）", "status": "suggested"},
+      "pt": {"text": "a Assembleia Municipal (Town Meeting)", "status": "suggested"},
+      "ht": {"text": "Asanble Vil la (Town Meeting)", "status": "suggested"},
+      "vi": {"text": "Đại hội Thị trấn (Town Meeting)", "status": "suggested"},
+      "ru": {"text": "городское собрание (Town Meeting)", "status": "suggested"}
+    },
+    "School Committee": {
+      "es": {"text": "el Comité Escolar (School Committee)", "status": "suggested"},
+      "simple": {"text": "School Committee (the elected board that runs the public schools)", "status": "suggested"},
+      "zh": {"text": "学校委员会（School Committee）", "status": "suggested"},
+      "pt": {"text": "o Comitê Escolar (School Committee)", "status": "suggested"},
+      "ht": {"text": "Komite Lekòl la (School Committee)", "status": "suggested"},
+      "vi": {"text": "Ủy ban Trường học (School Committee)", "status": "suggested"},
+      "ru": {"text": "школьный комитет (School Committee)", "status": "suggested"}
+    },
+    "public comment": {
+      "es": {"text": "comentario público", "status": "suggested"},
+      "simple": {"text": "public comment (time when any resident can speak)", "status": "suggested"},
+      "zh": {"text": "公众发言", "status": "suggested"},
+      "pt": {"text": "comentário público", "status": "suggested"},
+      "ht": {"text": "kòmantè piblik", "status": "suggested"},
+      "vi": {"text": "ý kiến công chúng", "status": "suggested"},
+      "ru": {"text": "общественные комментарии", "status": "suggested"}
+    },
+    "appropriation": {
+      "es": {"text": "asignación de fondos", "status": "suggested"},
+      "simple": {"text": "appropriation (money set aside for a purpose)", "status": "suggested"},
+      "zh": {"text": "拨款", "status": "suggested"},
+      "pt": {"text": "dotação orçamentária", "status": "suggested"},
+      "ht": {"text": "alokasyon lajan", "status": "suggested"},
+      "vi": {"text": "khoản phân bổ ngân sách", "status": "suggested"},
+      "ru": {"text": "ассигнование", "status": "suggested"}
+    },
+    "fiscal year": {
+      "es": {"text": "año fiscal", "status": "suggested"},
+      "simple": {"text": "fiscal year (the budget year, July to June)", "status": "suggested"},
+      "zh": {"text": "财政年度", "status": "suggested"},
+      "pt": {"text": "ano fiscal", "status": "suggested"},
+      "ht": {"text": "ane fiskal", "status": "suggested"},
+      "vi": {"text": "năm tài khóa", "status": "suggested"},
+      "ru": {"text": "финансовый год", "status": "suggested"}
+    },
+    "executive session": {
+      "es": {"text": "sesión ejecutiva (a puerta cerrada)", "status": "suggested"},
+      "simple": {"text": "executive session (a closed part of the meeting the public cannot watch)", "status": "suggested"},
+      "zh": {"text": "闭门会议（executive session）", "status": "suggested"},
+      "pt": {"text": "sessão executiva (portas fechadas)", "status": "suggested"},
+      "ht": {"text": "sesyon fèmen (executive session)", "status": "suggested"},
+      "vi": {"text": "phiên họp kín (executive session)", "status": "suggested"},
+      "ru": {"text": "закрытое заседание (executive session)", "status": "suggested"}
+    }
+  }
+}
