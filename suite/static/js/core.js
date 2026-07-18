@@ -51,7 +51,7 @@ const TOOLS = [
     ready: false, when: "1.6", group: "community", long: "Community Memory",
     verb: "keeps the record", one: "issues tracked across meetings and years" },
   { id: "interpreter", name: "Interpreter", acc: "var(--interpreter)",
-    ready: false, when: "1.7", group: "community", long: "Community Interpreter",
+    ready: true, when: "1.7", group: "community", long: "Community Interpreter",
     verb: "carries it across", one: "captions in seven languages + simple english" },
   { id: "narrator", name: "Narrator", acc: "var(--narrator)",
     ready: false, when: "1.7", group: "community", long: "Community Narrator",

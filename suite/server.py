@@ -239,6 +239,7 @@ def create_suite_app():
     from .tools.grabber import register_grabber
     from .tools.highlighter import register_highlighter
     from .tools.indexer import register_indexer
+    from .tools.interpreter import register_interpreter
     from .tools.kb import register_kb
     from .tools.modelstore import register_modelstore
     from .tools.ofx import register_ofx
@@ -256,6 +257,7 @@ def create_suite_app():
     register_grabber(app, jobs, frames)
     register_highlighter(app, jobs, frames)
     register_indexer(app, jobs, frames)
+    register_interpreter(app, jobs, frames)
     register_kb(app, jobs, frames)
     register_modelstore(app, jobs, frames)
     register_ofx(app, jobs, frames)
