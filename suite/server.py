@@ -269,7 +269,12 @@ def create_suite_app():
 
     @app.get("/")
     def index():
-        return FileResponse(STATIC / "index.html")
+        # {{v}} → app version on every static include: a new build busts the
+        # browser's cache by URL, so stale JS can't outlive a release (the
+        # "⌘R after relaunch" bug, retired). The HTML itself must revalidate.
+        from fastapi.responses import HTMLResponse
+        html = (STATIC / "index.html").read_text().replace("{{v}}", __version__)
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     return app
