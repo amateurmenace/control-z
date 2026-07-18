@@ -19,6 +19,29 @@ def _slug(text: str, fallback: str) -> str:
     return (s[:48] or fallback)
 
 
+def _brand_defaults() -> dict:
+    """The station brand as lower-third defaults — one brand, every lower
+    third. Publisher owns the brand kit (publisher/brand.py); Slate reads it
+    read-only and never writes it, so a station's accent, plate, style and
+    hold match across every tool without re-typing. `configured` is true only
+    once the station has actually set a brand, so a fresh install keeps
+    Slate's own defaults instead of silently going publisher-mint."""
+    try:
+        from czcore.paths import support_dir
+        from publisher.brand import get_brand
+        configured = (support_dir() / "publisher-brand.json").exists()
+        b = get_brand()
+    except Exception:
+        return {"configured": False}
+    style = b.get("style")
+    return {"configured": bool(configured),
+            "accent": b.get("accent"), "plate_color": b.get("plate"),
+            "style": style if style in ("bar", "block", "line", "clean")
+            else "bar",
+            "hold": b.get("lt_seconds"), "line2": b.get("line2") or "",
+            "station": b.get("station") or ""}
+
+
 def register_slate(app, jobs, frames):
     from fastapi import Body
     from fastapi.responses import JSONResponse, Response
@@ -30,7 +53,8 @@ def register_slate(app, jobs, frames):
 
     @app.get("/api/slate/status")
     def api_status():
-        return {"fonts": discover(), "out": str(out_dir)}
+        return {"fonts": discover(), "out": str(out_dir),
+                "brand": _brand_defaults()}
 
     @app.post("/api/slate/preview")
     def api_preview(body: dict = Body(...)):

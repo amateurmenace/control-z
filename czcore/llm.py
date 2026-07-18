@@ -41,11 +41,27 @@ def _file():
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 OPENAI_BASE = "https://api.openai.com"
 
+DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"     # fast + cheap, 1M window
+GEMINI_BASE = "https://generativelanguage.googleapis.com"
+
 
 def _provider_for(key: str) -> str:
-    """sk-ant-… is Anthropic; anything else OpenAI-shaped is OpenAI — the
-    same key the community-highlighter web app runs on."""
-    return "anthropic" if key.startswith("sk-ant-") else "openai"
+    """The key's own shape names its provider: ``sk-ant-…`` is Anthropic,
+    ``AIza…`` is Google Gemini, and anything else OpenAI-shaped is OpenAI (the
+    same key the community-highlighter web app runs on). BYO-key only — the
+    Studio's server bill is a separate world; this is the desk user's key."""
+    if key.startswith("sk-ant-"):
+        return "anthropic"
+    if key.startswith("AIza"):
+        return "gemini"
+    return "openai"
+
+
+# per-provider defaults, so env/file/status all read the same table
+_DEFAULT_MODEL = {"anthropic": DEFAULT_MODEL, "openai": DEFAULT_OPENAI_MODEL,
+                  "gemini": DEFAULT_GEMINI_MODEL}
+_DEFAULT_BASE = {"anthropic": DEFAULT_BASE, "openai": OPENAI_BASE,
+                 "gemini": GEMINI_BASE}
 
 
 def get_config() -> dict:
@@ -65,16 +81,21 @@ def get_config() -> dict:
                 "model": os.getenv("CONTROL_Z_LLM_MODEL",
                                    DEFAULT_OPENAI_MODEL),
                 "base_url": OPENAI_BASE, "source": "env"}
+    key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+    if key:
+        return {"api_key": key, "provider": "gemini",
+                "model": os.getenv("CONTROL_Z_LLM_MODEL",
+                                   DEFAULT_GEMINI_MODEL),
+                "base_url": GEMINI_BASE, "source": "env"}
     try:
         d = json.loads(_file().read_text())
         if d.get("api_key"):
             prov = str(d.get("provider") or _provider_for(str(d["api_key"])))
             return {"api_key": str(d["api_key"]), "provider": prov,
-                    "model": str(d.get("model") or (
-                        DEFAULT_MODEL if prov == "anthropic"
-                        else DEFAULT_OPENAI_MODEL)),
-                    "base_url": str(d.get("base_url") or (
-                        DEFAULT_BASE if prov == "anthropic" else OPENAI_BASE)),
+                    "model": str(d.get("model")
+                                 or _DEFAULT_MODEL.get(prov, DEFAULT_MODEL)),
+                    "base_url": str(d.get("base_url")
+                                    or _DEFAULT_BASE.get(prov, DEFAULT_BASE)),
                     "source": "file"}
     except (OSError, ValueError):
         pass
@@ -128,6 +149,9 @@ CONTEXT_WINDOWS = {
     "claude-haiku-4-5": 200_000, "claude-sonnet-4-5": 200_000,
     "claude-sonnet-4-6": 1_000_000, "claude-sonnet-5": 1_000_000,
     "claude-opus-4-8": 1_000_000,
+    "gemini-1.5-flash": 1_000_000, "gemini-1.5-pro": 2_000_000,
+    "gemini-2.0-flash": 1_000_000, "gemini-2.5-flash": 1_000_000,
+    "gemini-2.5-pro": 1_000_000,
 }
 _WINDOW_DEFAULT = 128_000
 
@@ -164,16 +188,31 @@ def _usage_from(data: dict, provider: str, prompt_len: int) -> tuple:
     """(tokens_in, tokens_out) from the response; a length/4 estimate only
     when the API didn't say (and then it's still labeled in the audit by
     being divisible-looking — the audit never invents precision)."""
-    u = data.get("usage") or {}
-    if provider == "openai":
-        tin, tout = u.get("prompt_tokens"), u.get("completion_tokens")
+    if provider == "gemini":
+        u = data.get("usageMetadata") or {}
+        tin, tout = u.get("promptTokenCount"), u.get("candidatesTokenCount")
     else:
-        tin, tout = u.get("input_tokens"), u.get("output_tokens")
+        u = data.get("usage") or {}
+        if provider == "openai":
+            tin, tout = u.get("prompt_tokens"), u.get("completion_tokens")
+        else:
+            tin, tout = u.get("input_tokens"), u.get("output_tokens")
     if tin is None:
         tin = prompt_len // 4
     if tout is None:
         tout = 0
     return int(tin), int(tout)
+
+
+def _gemini_text(data: dict) -> str:
+    """The text out of a Gemini generateContent response — the first
+    candidate's parts, joined. A response blocked or empty comes back ""
+    and the caller raises the honest 'no text' sentence."""
+    cands = data.get("candidates") or []
+    if not cands:
+        return ""
+    parts = (cands[0].get("content") or {}).get("parts") or []
+    return "".join(p.get("text", "") for p in parts)
 
 
 def last_usage() -> Optional[dict]:
@@ -227,6 +266,22 @@ def complete(prompt: str, system: str = "", max_tokens: int = 1200,
             headers={"Content-Type": "application/json",
                      "Authorization": f"Bearer {c['api_key']}",
                      "User-Agent": "control-z-suite"})
+    elif c.get("provider") == "gemini":
+        # Google Generative Language API. The key rides the x-goog-api-key
+        # header, never the URL query string — a credential in a URL leaks
+        # into logs, and the covenant keeps keys out of sight.
+        payload = {"contents": [{"role": "user",
+                                 "parts": [{"text": prompt}]}],
+                   "generationConfig": {"maxOutputTokens": max_tokens}}
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": system}]}
+        req = urllib.request.Request(
+            c["base_url"].rstrip("/")
+            + f"/v1beta/models/{c['model']}:generateContent",
+            data=json.dumps(payload).encode("utf-8"), method="POST",
+            headers={"Content-Type": "application/json",
+                     "x-goog-api-key": c["api_key"],
+                     "User-Agent": "control-z-suite"})
     else:
         body = json.dumps({
             "model": c["model"], "max_tokens": max_tokens,
@@ -262,6 +317,8 @@ def complete(prompt: str, system: str = "", max_tokens: int = 1200,
         if c.get("provider") == "openai":
             text = ((data.get("choices") or [{}])[0]
                     .get("message", {}).get("content") or "")
+        elif c.get("provider") == "gemini":
+            text = _gemini_text(data)
         else:
             text = "".join(b.get("text", "") for b in data.get("content", [])
                            if b.get("type") == "text")
@@ -279,8 +336,9 @@ def complete_vision(prompt: str, jpeg_b64: str, system: str = "",
                     max_tokens: int = 300, timeout: float = 60.0,
                     tool: str = "") -> str:
     """One message with a picture in it — the multimodal door Narrator
-    asked for (its request shape, moved in). Both providers take base64
-    JPEG; counted in the same ledger as every text call."""
+    asked for (its request shape, moved in). Each provider takes base64
+    JPEG (Anthropic source blocks, OpenAI data-URI, Gemini inline_data);
+    counted in the same ledger as every text call."""
     c = get_config()
     if not c["api_key"]:
         raise RuntimeError("no API key configured — Settings → AI")
@@ -297,6 +355,20 @@ def complete_vision(prompt: str, jpeg_b64: str, system: str = "",
             data=json.dumps(body).encode(), method="POST",
             headers={"Content-Type": "application/json",
                      "Authorization": f"Bearer {c['api_key']}",
+                     "User-Agent": "control-z-suite"})
+    elif c.get("provider") == "gemini":
+        payload = {"contents": [{"role": "user", "parts": [
+            {"inline_data": {"mime_type": "image/jpeg", "data": jpeg_b64}},
+            {"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": max_tokens}}
+        if system:
+            payload["systemInstruction"] = {"parts": [{"text": system}]}
+        req = urllib.request.Request(
+            c["base_url"].rstrip("/")
+            + f"/v1beta/models/{c['model']}:generateContent",
+            data=json.dumps(payload).encode(), method="POST",
+            headers={"Content-Type": "application/json",
+                     "x-goog-api-key": c["api_key"],
                      "User-Agent": "control-z-suite"})
     else:
         body = {"model": c["model"], "max_tokens": max_tokens,
@@ -322,6 +394,8 @@ def complete_vision(prompt: str, jpeg_b64: str, system: str = "",
     if c.get("provider") == "openai":
         text = ((data.get("choices") or [{}])[0]
                 .get("message", {}).get("content") or "")
+    elif c.get("provider") == "gemini":
+        text = _gemini_text(data)
     else:
         text = "".join(b.get("text", "") for b in data.get("content", [])
                        if b.get("type") == "text")

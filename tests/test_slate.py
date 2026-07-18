@@ -1,4 +1,8 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from slate.lowerthird import ANIMS, STYLES, LowerThird, phase_at
 
@@ -24,6 +28,44 @@ class TestParams(unittest.TestCase):
     def test_unknown_keys_ignored(self):
         p = LowerThird.from_dict({"line1": "A", "hacker": "field"})
         self.assertEqual(p.line1, "A")
+
+
+class TestBrandDefaults(unittest.TestCase):
+    """Slate reads the station brand (publisher/brand.py) as lower-third
+    defaults — one brand, every lower third — but only once a brand is set,
+    so a fresh install keeps Slate's own look."""
+
+    def _patch_support(self, root):
+        from czcore import paths
+        from publisher import brand
+        for mod in (paths, brand):
+            p = mock.patch.object(mod, "support_dir",
+                                  lambda sub="", _r=root: _r)
+            p.start(); self.addCleanup(p.stop)
+
+    def test_no_brand_file_is_not_configured(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._patch_support(Path(td))
+            from suite.tools.slate import _brand_defaults
+            self.assertFalse(_brand_defaults()["configured"])
+
+    def test_a_set_brand_becomes_the_defaults(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._patch_support(root)
+            (root / "publisher-brand.json").write_text(json.dumps({
+                "station": "Brookline Interactive Group", "accent": "#C24",
+                "plate": "#101014", "style": "block", "lt_seconds": 6.0,
+                "line2": "community media"}))
+            from suite.tools.slate import _brand_defaults
+            d = _brand_defaults()
+            self.assertTrue(d["configured"])
+            self.assertEqual(d["accent"], "#C24")
+            self.assertEqual(d["plate_color"], "#101014")
+            self.assertEqual(d["style"], "block")
+            self.assertEqual(d["hold"], 6.0)
+            self.assertEqual(d["line2"], "community media")
+            self.assertEqual(d["station"], "Brookline Interactive Group")
 
     def test_duration_and_frames(self):
         p = LowerThird.from_dict({"in_dur": 0.5, "hold": 2.0, "out_dur": 0.5,

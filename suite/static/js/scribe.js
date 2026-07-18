@@ -108,6 +108,21 @@ const ScribePage = (() => {
           <button class="btn primary" id="sc-selects" disabled>Export selects EDL</button>
         </div>
 
+        <div class="insp-sec" id="sc-tightensec" style="display:none">
+          <span class="tag">tighten — strip fillers, close silences</span>
+          <div class="chips" id="sc-ttopts" style="margin-bottom:8px">
+            <span class="chip on" data-tt="fillers">strip “um / uh”</span>
+            <span class="chip on" data-tt="silence">close long silences</span>
+          </div>
+          <div class="field"><label>silence longer than <span id="sc-ttgapv" class="mono-val">0.70s</span></label>
+            <input type="range" id="sc-ttgap" min="0.3" max="2" step="0.05" value="0.7" style="width:100%"></div>
+          <button class="btn" id="sc-ttfind">Find what to cut</button>
+          <div id="sc-ttlist" class="sc-ttlist"></div>
+          <button class="btn primary" id="sc-ttwrite" style="margin-top:8px;display:none">Write the cut list (EDL)</button>
+          <div class="hint" style="margin-top:5px">a proposal, not a cut — import the EDL
+            and relink; every removal is listed first and your source is never touched</div>
+        </div>
+
         <div class="report" id="sc-report"></div>
       </div>
     </div>
@@ -433,6 +448,9 @@ const ScribePage = (() => {
     S.t = t;
     $("#sc-exportsec", el).style.display = "";
     $("#sc-pullsec", el).style.display = "";
+    $("#sc-tightensec", el).style.display = "";
+    $("#sc-ttlist", el).innerHTML = "";
+    $("#sc-ttwrite", el).style.display = "none";
     renderTranscript(); renderPulls(); drawScopes();
   }
 
@@ -487,6 +505,57 @@ const ScribePage = (() => {
     } catch (e) { toast(e.message, true); }
   }
 
+  /* tighten — extractive cleanup, visible before commit. Find lists every
+     filler and long silence; Write leaves a CMX3600 cut list of what's left,
+     never touching the source. */
+  function tightenOpts() {
+    const on = $$("#sc-ttopts .chip.on", el).map(c => c.dataset.tt);
+    return { path: S.path, fillers: on.includes("fillers"),
+             silence: on.includes("silence"),
+             min_gap: parseFloat($("#sc-ttgap", el).value) || 0.7 };
+  }
+
+  async function tightenFind() {
+    const o = tightenOpts();
+    if (!o.fillers && !o.silence) { toast("pick fillers or silences to find", true); return; }
+    try {
+      renderTightenList(await api("/api/scribe/tighten", o));
+    } catch (e) { toast(e.message, true); }
+  }
+
+  function renderTightenList(r) {
+    const box = $("#sc-ttlist", el), write = $("#sc-ttwrite", el);
+    if (!r.removals || !r.removals.length) {
+      box.innerHTML = `<div class="hint" style="margin-top:8px">nothing to cut —
+        no fillers or long silences in this transcript</div>`;
+      write.style.display = "none";
+      return;
+    }
+    box.innerHTML = `<div class="sc-ttsum">removes <b>${r.removed_seconds}s</b> ·
+      keeps <b>${r.kept_seconds}s</b> · ${r.n_fillers} filler${r.n_fillers !== 1 ? "s" : ""},
+      ${r.n_silences} silence${r.n_silences !== 1 ? "s" : ""}</div>`
+      + r.removals.map(m => `
+      <button class="sc-ttrow" data-t="${m.start}" title="jump to this moment">
+        <span class="sc-ttkind ${m.kind}">${m.kind === "filler" ? esc(m.text || "um") : "silence"}</span>
+        <span class="sc-tttime">${fmtTime(m.start)}–${fmtTime(m.end)}</span>
+        <span class="sc-ttdur">−${(m.end - m.start).toFixed(1)}s</span>
+      </button>`).join("");
+    $$(".sc-ttrow", box).forEach(b => b.onclick = () => {
+      if (audio) { audio.currentTime = +b.dataset.t; tick(); }
+    });
+    write.style.display = "";
+  }
+
+  async function tightenWrite() {
+    try {
+      const r = await api("/api/scribe/tighten", { ...tightenOpts(), write: true });
+      const rep = $("#sc-report", el);
+      rep.classList.add("show");
+      rep.innerHTML += `<b>→</b> ${esc(r.out)}\n   ${r.keeps} keeps · removes ${r.removed_seconds}s · ${esc(r.note)}\n`;
+      toast(`cut list written — ${r.keeps} keeps, ${r.removed_seconds}s trimmed`);
+    } catch (e) { toast(e.message, true); }
+  }
+
   /* ---------- wire up ---------- */
   function init() {
     viewer = new Viewer($("#sc-viewer", el), { h: 360 });
@@ -522,6 +591,11 @@ const ScribePage = (() => {
     $("#sc-export", el).onclick = exportKinds;
     $("#sc-selects", el).onclick = exportSelects;
     $$("#sc-kinds .chip", el).forEach(c => c.onclick = () => c.classList.toggle("on"));
+    $("#sc-ttfind", el).onclick = tightenFind;
+    $("#sc-ttwrite", el).onclick = tightenWrite;
+    $$("#sc-ttopts .chip", el).forEach(c => c.onclick = () => c.classList.toggle("on"));
+    $("#sc-ttgap", el).oninput = () =>
+      $("#sc-ttgapv", el).textContent = (+$("#sc-ttgap", el).value).toFixed(2) + "s";
 
     const insp = $("#sc-insp", el);
     const dens = $$(".density button", insp);

@@ -87,12 +87,52 @@ Run `.venv/bin/python -m suite --serve` → `/#index`, right rail.
   here" reader. **510 green** (7 new road/preset/standing tests in
   `tests/test_index_desk.py`).
 
+## landed (wave 4 — craft depth)
+
+- **Gemini is the desk's third BYO key** (`czcore/llm.py`). A key's own shape
+  names its provider now: `sk-ant-…` Anthropic, `AIza…` Gemini, else OpenAI.
+  Chat and vision both speak Gemini's `generateContent` (contents +
+  systemInstruction; the key rides the `x-goog-api-key` header, never the URL
+  query), the candidate text is parsed, and the spend lands in the same audit
+  ledger (`usageMetadata`). Env is `GEMINI_API_KEY`/`GOOGLE_API_KEY`; defaults
+  `gemini-2.0-flash`, 1M window. **Proven** with a fake-server round-trip
+  (chat + vision, request shape, header auth, ledger) and live (saving an
+  `AIza…` key reports `provider: gemini`). *This is the desk user's key path
+  only — the Studio's server bill is a separate world (specs/17 §3).*
+- **Slate reads the station brand** (`publisher/brand.py`, read-only — one
+  brand, every lower third). `/api/slate/status` now carries `brand`: accent,
+  plate, style, hold, line2, station, and a `configured` flag so a fresh
+  install keeps Slate's own look until a brand is actually set. The page adopts
+  the visual defaults on load and offers "match station brand." **Proven
+  live:** the lower third came up mint (#3A9E8E), 4.5s hold, "community media"
+  on line 2 — the station's brand, not Slate's amber default.
+- **Scribe tighten — strip fillers, close silences** (`scribe/tighten.py`,
+  `POST /api/scribe/tighten`). Extractive and visible before commit: every
+  "um/uh/er…" and every silence longer than a threshold is listed with its
+  timecode first; only on Write does it leave a `<stem>.tighten.edl` — a
+  CMX3600 cut list of what survives, a proposal you import and relink. **The
+  source is never touched** (tested + proven live: a 4-filler, 1-silence
+  fixture → 5-keep EDL, the wav byte-identical after).
+- **530 green** (+20: Gemini round-trip + config, brand defaults, the whole
+  tighten module + route).
+
+## asks (A-owned / shell files — minimal, marked, low-conflict)
+
+- **`suite/static/js/services.js`** (the Settings/Services shell page, not one
+  of my eight): I made a small honest edit so the new Gemini key path is
+  visible and truthful — the AI-key blurb now names Anthropic/OpenAI/**Google
+  Gemini**, the placeholder accepts all three shapes (`sk-ant-… · sk-… ·
+  AIza…`), the status line shows the **provider** (`active — gemini (…key ·
+  model)`), and the audit's `LLM_PRICES` gained Gemini rows. Without this the
+  shipped feature was invisible/dishonest (covenant: provenance as UI). Flagged
+  here for transparency — reshape freely; `llm.status()` already returns
+  `provider`. No other shell file touched.
+
 ## next
 
 - The coherence pass (thrust 1): walk the eight production pages in the
   browser against the civic wing's bar; fix what the walk finds.
-- The local model cards (thrust 3), the drain client (thrust 5, gated), and
-  the craft-depth picks (thrust 4).
+- The local model cards (thrust 3) and the drain client (thrust 5, gated).
 
 ## asks (A-owned files; single lines, in your hands)
 
@@ -120,3 +160,15 @@ Run `.venv/bin/python -m suite --serve` → `/#index`, right rail.
   set a **standing order** and clips that land afterward wake up worked —
   overnight a dumped shoot is transcribed and rescued by morning, each
   standing order visible, pausable, and honest about its last run.
+- **The desk's own key learns a third shape.** Paste an Anthropic, OpenAI,
+  or now **Google Gemini** key and the suite reads the provider from the key
+  itself — Gemini's chat and vision both counted in the same AI audit, the
+  spend always in view. Still bring-your-own, still labeled, still an
+  extractive fallback underneath.
+- **One brand, every lower third.** Slate reads the station's brand kit as
+  its defaults — the accent, plate, style and hold you set once in Publisher
+  now dress every lower third, without re-typing.
+- **Scribe learns to tighten.** One read of the words finds every "um" and
+  every long silence, lists them with their timecodes first, and — only when
+  you say so — leaves a cut list of what's left. A proposal you import, never
+  a cut to your footage.

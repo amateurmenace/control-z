@@ -95,6 +95,10 @@ const SlatePage = (() => {
             <span style="flex:1"><label>text</label>
               <input type="color" id="sl-text" value="#F5F3EE" class="sl-color"></span>
           </div>
+          <div id="sl-brandrow" class="sl-brandrow" hidden>
+            <span class="hint" id="sl-brandnote"></span>
+            <button class="btn" id="sl-brandmatch" style="width:auto">match station brand</button>
+          </div>
           <div class="field studio-only"><label>plate opacity <span id="sl-opv" class="mono-val"></span></label>
             <input type="range" id="sl-opacity" min="0" max="1" step="0.02" value="0.82" style="width:100%"></div>
           <div class="field studio-only"><label>position (left / baseline)</label>
@@ -173,7 +177,28 @@ const SlatePage = (() => {
       in_dur: parseFloat($("#sl-in", el).value) || 0.6,
       hold: parseFloat($("#sl-hold", el).value) || 4,
       out_dur: parseFloat($("#sl-out", el).value) || 0.5,
+      // the station brand's plate colour rides along when a brand is set
+      // (there is no plate-colour knob; the brand is its source of truth)
+      ...(S.brandPlate ? { plate_color: S.brandPlate } : {}),
     };
+  }
+
+  /* the station brand as lower-third defaults — one brand, every lower third.
+     Publisher owns the brand; Slate honours it (read-only) so a station's
+     accent, plate, style and hold match everywhere without re-typing. */
+  function setChip(sel, v) {
+    $$(`${sel} .chip`, el).forEach(c => c.classList.toggle("on", c.dataset.v === v));
+  }
+  function applyBrand(force) {
+    const b = S.brand;
+    if (!b) return;
+    if (b.accent) $("#sl-accent", el).value = b.accent;
+    if (b.style) setChip("#sl-style", b.style);
+    if (b.hold != null) $("#sl-hold", el).value = String(b.hold);
+    const l2 = $("#sl-line2", el);
+    if (b.line2 && (force || l2.value === "Title, Organization")) l2.value = b.line2;
+    S.brandPlate = b.plate_color || null;
+    schedulePreview(true);
   }
 
   function dur(p) { return p.in_dur + p.hold + p.out_dur; }
@@ -268,6 +293,20 @@ const SlatePage = (() => {
         st.fonts.map(f => `<option value="${esc(f.name)}"
           ${prefer[0] === f.name ? "" : ""}>${esc(f.name)}</option>`).join("");
       sel.onchange = () => schedulePreview();
+      // the station brand: adopt it as defaults, once, when it exists
+      S.brand = st.brand || null;
+      if (S.brand && S.brand.configured) {
+        const row = $("#sl-brandrow", el);
+        row.hidden = false;
+        $("#sl-brandnote", el).textContent = S.brand.station
+          ? `following ${S.brand.station}'s brand — accent, style, hold`
+          : "following your station brand — accent, style, hold";
+        $("#sl-brandmatch", el).onclick = () => {
+          applyBrand(true);
+          toast("matched to the station brand");
+        };
+        applyBrand(false);   // adopt visual defaults without stomping typed text
+      }
     } catch (e) { toast(e.message, true); }
 
     $$("#sl-style .chip, #sl-anim .chip", el).forEach(c => c.onclick = () => {

@@ -1332,3 +1332,27 @@ button.ix-kind:disabled { opacity: .45; cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .ix-switch i, .ix-switch i::after, .ix-preset { transition: none; }
 }
+/* Slate: the station-brand row — one brand, every lower third */
+.sl-brandrow { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.sl-brandrow .hint { flex: 1; }
+.sl-brandrow .btn { flex: 0 0 auto; font-size: 11px; padding: 3px 10px; }
+
+/* Scribe: the tighten pull-list — every removal seen before anything is cut */
+.sc-ttsum { font-family: var(--mono); font-size: 10.5px; letter-spacing: .03em;
+  color: var(--cream-faint); margin: 8px 0 6px; line-height: 1.5; }
+.sc-ttsum b { color: var(--cream); }
+.sc-ttlist { max-height: 240px; overflow-y: auto; }
+.sc-ttrow { display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; background: none; border: 0;
+  border-bottom: 1px solid var(--line-soft); padding: 4px 2px; cursor: pointer;
+  font-size: 12px; color: var(--cream-dim); }
+.sc-ttrow:hover { color: var(--cream); }
+.sc-ttkind { flex: 0 0 auto; font-family: var(--mono); font-size: 9px;
+  letter-spacing: .06em; text-transform: uppercase; border-radius: 99px;
+  padding: 1px 7px; min-width: 54px; text-align: center; }
+.sc-ttkind.filler { color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line-soft)); }
+.sc-ttkind.silence { color: var(--cream-faint); border: 1px solid var(--line-soft); }
+.sc-tttime { flex: 1; font-family: var(--mono); font-size: 10.5px; }
+.sc-ttdur { flex: 0 0 auto; font-family: var(--mono); font-size: 10.5px;
+  color: var(--cream-faint); }

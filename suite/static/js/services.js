@@ -256,19 +256,22 @@ const SettingsPage = (() => {
       <div class="tag" style="margin-bottom:6px">AI — your own key, optional</div>
       <div class="hint" style="margin-bottom:8px;line-height:1.6">
         Every reading in the suite works locally and says what it is — the brief is
-        extractive, ask is retrieval. If you have your own
-        <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic API key</a>,
+        extractive, ask is retrieval. If you have your own key from
+        <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic</a>,
+        <a href="https://platform.openai.com/" target="_blank" rel="noopener">OpenAI</a>, or
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google Gemini</a>,
         Highlighter adds two <i>generative</i> buttons (narrative brief, AI answers), labeled
-        as such, sending only the transcript you're looking at, only when you click.
-        No key ships with the app; nothing here requires one.
+        as such, sending only the transcript you're looking at, only when you click. The
+        provider is read from the key's own shape. No key ships with the app; nothing
+        here requires one.
         Status: <b style="color:${s.enabled ? "var(--ok)" : "var(--cream-dim)"}">${
-          s.enabled ? `active (${esc(s.key_masked || "set")} · ${esc(s.model)}${envLocked ? ", via environment" : ""})`
+          s.enabled ? `active — ${esc(s.provider || "key")} (${esc(s.key_masked || "set")} · ${esc(s.model)}${envLocked ? ", via environment" : ""})`
                     : "not configured"}</b></div>
       ${envLocked ? "" : `
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input type="password" id="se-llmkey" placeholder="sk-ant-…" spellcheck="false"
+        <input type="password" id="se-llmkey" placeholder="sk-ant-… · sk-… · AIza…" spellcheck="false"
           style="flex:2;min-width:220px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
-        <input type="text" id="se-llmmodel" placeholder="claude-haiku-4-5 (default)" spellcheck="false"
+        <input type="text" id="se-llmmodel" placeholder="model (optional — a sensible default per provider)" spellcheck="false"
           style="flex:1;min-width:170px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
         <button class="btn" id="se-llmsave" style="width:auto">Save</button>
         ${s.enabled ? `<button class="btn" id="se-llmclear" style="width:auto">Remove</button>` : ""}
@@ -301,6 +304,9 @@ const SettingsPage = (() => {
     "claude-haiku-4-5": [1.00, 5.00], "claude-sonnet-4-5": [3.00, 15.00],
     "claude-sonnet-4-6": [3.00, 15.00], "claude-sonnet-5": [3.00, 15.00],
     "claude-opus-4-8": [5.00, 25.00],
+    "gemini-1.5-flash": [0.075, 0.30], "gemini-1.5-pro": [1.25, 5.00],
+    "gemini-2.0-flash": [0.10, 0.40], "gemini-2.5-flash": [0.30, 2.50],
+    "gemini-2.5-pro": [1.25, 10.00],
   };
   const llmPrice = model => {
     const k = Object.keys(LLM_PRICES).find(p => (model || "").startsWith(p));

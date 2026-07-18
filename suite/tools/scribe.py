@@ -181,6 +181,62 @@ def register_scribe(app, jobs, frames):
                 "note": "Resolve: File → Import → Timeline → EDL, then relink "
                         "to the source clip"}
 
+    @app.post("/api/scribe/tighten")
+    def api_tighten(body: dict = Body(...)):
+        """Extractive cleanup, visible before commit: propose the fillers and
+        the long silences to cut, and (on write) leave a CMX3600 cut list of
+        what's left. Nothing touches the source — the EDL is a proposal you
+        import and relink, exactly like the manual pull list."""
+        from scribe import tighten as tt
+        from scribe.exports import to_selects_edl
+
+        path = str(Path(body["path"]).expanduser())
+        sc = _sidecar(path)
+        if not sc.exists():
+            return JSONResponse({"error": "transcribe first — no transcript "
+                                          "sidecar to read"}, status_code=409)
+        t = Transcript.from_json(sc.read_text())
+        do_fillers = body.get("fillers", True)
+        do_silence = body.get("silence", True)
+        min_gap = max(0.2, float(body.get("min_gap", 0.7)))
+        extra = [str(x) for x in (body.get("extra_fillers") or [])]
+        removals = []
+        if do_fillers:
+            removals += tt.filler_removals(t, extra=extra)
+        if do_silence:
+            removals += tt.silence_removals(t, min_gap=min_gap)
+        removals.sort(key=lambda r: r.start)
+        summary = tt.summarize(t.duration, removals)
+        pull = [{"start": r.start, "end": r.end, "kind": r.kind,
+                 "text": r.text} for r in removals]
+        if not body.get("write"):
+            # the pull-list, visible — nothing written yet
+            return {"removals": pull, **summary, "duration": t.duration}
+        if not removals:
+            return JSONResponse({"error": "nothing to tighten — no fillers or "
+                                          "long silences found"},
+                                status_code=409)
+        p = Path(path)
+        info = None
+        try:
+            info = probe(path)
+        except Exception:
+            pass
+        fps = info.video.fps if info and info.video else 24.0
+        keeps = tt.keep_ranges(t.duration, removals)
+        edl = to_selects_edl(
+            keeps, fps, reel=p.stem[:8].upper() or "AX",
+            source_start_tc=(info.timecode if info and info.timecode
+                             else "00:00:00:00"),
+            clip_name=p.name)
+        out = p.with_name(p.stem + ".tighten.edl")
+        out.write_text(edl)
+        return {"out": str(out), "keeps": len(keeps), "removals": pull,
+                **summary,
+                "note": "Resolve: File → Import → Timeline → EDL, then relink "
+                        "to the source clip — the cut skips every filler and "
+                        "long pause, and the original is untouched"}
+
     @app.get("/api/scribe/audio")
     def api_audio(path: str):
         p = str(Path(path).expanduser())
