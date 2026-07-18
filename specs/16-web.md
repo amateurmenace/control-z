@@ -92,7 +92,7 @@ One page, one rail, one grammar — the suite's, responsive. Four kinds of surfa
 
 ### P2 — the wide door (architectural insurance)
 
-12. **Library analytics band** on Home (framing, names, topics across meetings) baked from the Library's cross-meeting queries — live band, desk drill-down.
+12. **Library analytics band** — ✅ **SHIPPED 1.9.0, and grown past a band into a whole page.** (framing, names, topics across meetings) baked from the Library's cross-meeting queries. *Built:* a full **"The record, drawn"** page (`/app/analytics` + `bake_analytics` → `analytics.json`) — a civic-framing heatmap (meetings × 8 lenses, shaded by share), recurring topics, and names across ≥2 meetings; **plus every meeting page grew the analyzer's read** (framing lenses with drift, questions typed by kind, tension moments, from `insight.framing`/`questions`/`disagreements` at press time); **plus the issue graph** (`/app/graph` + `bake_graph` → `graph.json`) — issue co-occurrence as inline SVG with a table twin. Every mark links to its meeting; JS-off complete; CSP-clean.
 13. **The desk beacon.** If a suite is serving on this same machine's loopback, offer "open at the desk" hand-offs (a probe against `127.0.0.1:8300/api/app`). Ships only if browser private-network rules allow it cleanly; otherwise the hand-off stays a downloaded sidecar the desk tools already speak.
 14. **Multi-town editions.** The bake takes N corpora; Home grows a town switch; issue IDs stay town-scoped but comparable (specs/14 §P2.15 alignment).
 

@@ -2,6 +2,62 @@
 
 ## unreleased
 
+### 1.9.0: the record, drawn — the desk's analytical eye, in public — 2026-07-18
+
+The public edition could read the record; now it can *see* it. What the desk's
+Highlighter analyzer and Library did for one editor's screen, the web edition
+now does for anyone with a browser — counted from the record's own words, every
+mark a link back to the meeting it came from. And the desk grew its own
+connective tissue: Index now knows what every clip carries, and one queue job
+walks ticked clips through the tools.
+
+- **Every meeting reads like the analyzer now.** A meeting page grew the desk's
+  full read: the **eight civic framing lenses** (financial, safety, community,
+  environmental, legal… counted, not modeled, each with a first-half/second-half
+  drift so a meeting that starts fiscal and ends legal says so), the
+  **questions asked** typed by what they ask about (budget, timeline,
+  accountability, rationale), and the moments of pushback — all computed at
+  press time from the transcript, all readable with JavaScript off.
+
+- **"The record, drawn" — a whole analytics page** (`/app/analytics`). The
+  desk's Library, made static: a civic-framing heatmap (meetings down, lenses
+  across, each cell shaded by its share), the topics that recur across the
+  record, and the names that appear in two or more meetings — every mark opening
+  its meeting.
+
+- **The issue graph** (`/app/graph`). The town's concerns drawn as the network
+  they are: two issues are tied when they share meetings, the tie thickening
+  with every meeting they share, a bigger dot for an issue on more of the
+  record. Hand-laid inline SVG — no library, so the strict CSP holds — with a
+  table twin for JavaScript-off and screen readers. Tap a node to walk its long
+  view.
+
+- **The desk gets what the record got — Index knows what every clip carries.**
+  What Memory did for the town's meetings, Index now does for your footage. A
+  new sidecar law (`czcore/sidecars.py`) is one table of every mark the tools
+  leave beside a source — words, captions, cut, moments, insight, kit, pivot,
+  rescue — and one reader, so any tool can ask "what does this clip already
+  have?" without re-learning eight naming conventions. The Index shelf opens
+  with the library counted in the dashboard grammar — clips, hours, per-kind
+  coverage in each owning tool's accent — and turns the one real gap into one
+  click, *"words for the N without,"* running Scribe's own engine over the
+  wordless as one queue job (silent clips honestly excluded; failures named).
+
+- **The road: ticked clips walk the tools, clip by clip.** Tick clips on the
+  Index shelf, pick stages — words (Scribe) · rescue (Clear at road defaults) ·
+  reframe 9:16 (Pivot) — and one queue job carries each clip through its stages
+  clip-major, so the first is fully finished while the last still waits. The
+  plan rules before any engine runs: no sound → no words, no picture → no
+  reframe, an unplugged drive → never joins, already made → skipped with the
+  reason said; run a finished road twice and the second run is a sentence, not
+  an empty queue. A time-coded search hit finally lands Scribe on the moment.
+
+- **Quiet fixes.** The offline service worker's cache is keyed on the release
+  version as well as the corpus fingerprint, so a new pressing never leaves a
+  returning reader on a stale shell. And a ~7% flake in the job queue's own
+  `test_listeners_fire` (pre-existing, unrelated) is gone — it waited on the
+  job's status, not the listener's own view. **500 tests green.**
+
 ### 1.8.0: the record grows teeth — the paper, the votes, and the loop that keeps it fresh — 2026-07-18
 
 The telescope had the meetings. Now it has what was *written* beside what was

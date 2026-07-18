@@ -147,7 +147,27 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-18 (latest) — **lane/desk merged: Index gets a data spine and
+- 2026-07-18 (latest) — **1.9.0: the record, drawn — the desk's
+  analytical eye goes public. 500 tests green; both version truths at
+  1.9.0.** The public edition (`web/`) grew the desk's Highlighter-analyzer
+  and Library reads, all baked (pure-view, deterministic, CSP-clean):
+  - **Meeting pages** now carry the eight civic **framing lenses** (with
+    first/second-half drift), the **questions** asked typed by kind, and
+    tension moments — computed at press time via `insight.framing`/
+    `questions`/`disagreements` (added to `bake_meetings`' analysis).
+  - **`/app/analytics` ("The record, drawn")** + `bake_analytics` →
+    `analytics.json`: cross-meeting framing heatmap, recurring topics,
+    recurring names.
+  - **`/app/graph` (the issue graph)** + `bake_graph` → `graph.json`:
+    issue co-occurrence as inline SVG (+ a table twin).
+  - The offline SW cache is now keyed on version+corpus_hash (a release
+    bump busts a returning reader's stale shell).
+  - 1.9.0 is the release to sign (1.7.1 was the last signed; 1.8.0 never
+    shipped). RELEASE-NOTES-1.9.0.md covers 1.7.1→1.9.0. **B/C: nothing in
+    your paths changed** — the web edition is a downstream reader of the
+    corpus + `highlighter/insight.py` (imported read-only at bake).
+
+- 2026-07-18 — **lane/desk merged: Index gets a data spine and
   the road. 497 tests green.** The desk lane folded into main (no squash,
   five house-voice commits kept) on top of 1.8.0 — zero conflicts. What it
   added, and where NOT to edit underneath it:
