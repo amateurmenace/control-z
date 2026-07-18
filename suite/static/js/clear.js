@@ -239,9 +239,21 @@ const ClearPage = (() => {
       $("#cl-remuxrow", el).style.display = ov.has_video ? "" : "none";
       const iso = $("#cl-isolate", el);
       iso.disabled = !ov.isolate_available;
-      $("#cl-isohint", el).textContent = ov.isolate_available
-        ? "DeepFilterNet3 with mix-back — 65% is the honest default; full-wet is rarely right"
-        : `not installed: ${ov.isolate_hint} (everything else works)`;
+      const isoHint = $("#cl-isohint", el);
+      if (ov.isolate_available) {
+        isoHint.textContent = "DeepFilterNet3 with mix-back — 65% is the honest default; full-wet is rarely right";
+      } else {
+        /* missing runtime gets a door, not a wall of hint — the install
+           lives in Settings, one click away (tooltip keeps the terminal way) */
+        isoHint.innerHTML = `needs the DeepFilterNet3 binary (~40 MB) — everything
+          else in Clear works without it.
+          <a href="#" id="cl-isoget" title="${esc(ov.isolate_hint)}">Install it
+          in Settings → optional runtimes</a>`;
+        $("#cl-isoget", el).onclick = e => {
+          e.preventDefault();
+          go("settings", { section: "runtimes" });
+        };
+      }
       $("#cl-play", el).disabled = false;
       $("#cl-process", el).disabled = false;
       $("#cl-roomtone", el).disabled = false;

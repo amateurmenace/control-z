@@ -55,8 +55,45 @@ def _first(d: dict, *names) -> Optional[str]:
     return None
 
 
-def parse_events(data: dict) -> List[dict]:
-    """API payload -> [{id, name, category, when, links:[{field,url,videoish}]}]."""
+def file_stream_url(tenant: str, file_id) -> str:
+    """The portal's own file-stream endpoint — answers a GET with the PDF
+    bytes (verified live against brooklinema; HEAD gets a 405, that's them)."""
+    tenant = re.sub(r"[^a-z0-9-]", "", (tenant or DEFAULT_TENANT).lower())
+    return (f"https://{tenant}.api.civicclerk.com/v1/Meetings/"
+            f"GetMeetingFileStream(fileId={int(file_id)},plainText=false)")
+
+
+def event_files(ev: dict, tenant: str = "") -> List[dict]:
+    """publishedFiles, read defensively: the portal's typed documents
+    (Agenda, Agenda Packet, Minutes…). Their `url` field is a relative
+    blob path — the real bytes come from file_stream_url when a tenant
+    is known."""
+    out = []
+    files = ev.get("publishedFiles") or []
+    if not isinstance(files, list):
+        return out
+    for f in files:
+        if not isinstance(f, dict):
+            continue
+        fid = f.get("fileId")
+        if not isinstance(fid, (int, float)) and not (
+                isinstance(fid, str) and fid.isdigit()):
+            continue
+        out.append({
+            "fileId": int(fid),
+            "type": str(f.get("type") or "Document"),
+            "name": str(f.get("name") or f.get("type") or "document"),
+            "published": str(f.get("publishOn") or ""),
+            "url": file_stream_url(tenant, fid) if tenant else "",
+        })
+    return out
+
+
+def parse_events(data: dict, tenant: str = "") -> List[dict]:
+    """API payload -> [{id, name, category, when, links:[…], files:[…]}].
+    `files` carries the typed publishedFiles (agendas, minutes) with real
+    stream URLs when a tenant is named; older callers that don't pass one
+    still get the link harvest unchanged."""
     rows = data.get("value") if isinstance(data, dict) else None
     if rows is None:
         rows = data if isinstance(data, list) else []
@@ -84,6 +121,7 @@ def parse_events(data: dict) -> List[dict]:
             "category": _first(ev, "categoryName", "category", "eventTypeName") or "",
             "when": _first(ev, "startDateTime", "eventDate", "date") or "",
             "links": uniq,
+            "files": event_files(ev, tenant),
         })
     return events
 
@@ -111,4 +149,4 @@ def search_events(tenant: str, date_from: str, date_to: str,
     except ValueError as e:
         raise RuntimeError("the portal answered, but not with JSON — "
                            "probably not a CivicClerk tenant") from e
-    return parse_events(data)
+    return parse_events(data, tenant=tenant)

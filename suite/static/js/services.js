@@ -383,10 +383,18 @@ const SettingsPage = (() => {
     });
   }
 
-  async function refresh() {
-    refreshProxy();
-    refreshRuntimes();
-    refreshLLM();
+  async function refresh(arg) {
+    const sections = Promise.all([refreshProxy(), refreshRuntimes(), refreshLLM()]);
+    /* another page can land here on a specific card: go("settings",
+       {section:"runtimes"}) — wait for the cards to exist, then walk there */
+    if (arg && arg.section) sections.then(() => {
+      const box = $(`#se-${arg.section}`, el);
+      if (!box) return;
+      box.scrollIntoView({ behavior: "smooth", block: "start" });
+      box.style.transition = "background .4s";
+      box.style.background = "rgba(229,168,53,.14)";
+      setTimeout(() => { box.style.background = ""; }, 1600);
+    });
     const d = await api("/api/settings/info");
     $("#se-caches", el).innerHTML =
       `<div class="tag" style="margin-bottom:6px">caches — all regenerable, nothing here can lose work</div>` +

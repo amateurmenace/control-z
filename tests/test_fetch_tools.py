@@ -1,7 +1,8 @@
 import unittest
 
 from czcore.ytdlp import _PROG, asset_name, newer
-from grabber.civicclerk import events_url, parse_events
+from grabber.civicclerk import (event_files, events_url, file_stream_url,
+                                parse_events)
 from grabber.zoomshare import SHARE_RE, _page_data, _safe_name, is_zoom_share
 
 
@@ -56,6 +57,28 @@ class TestCivicClerk(unittest.TestCase):
     def test_garbage_payload_yields_no_events(self):
         self.assertEqual(parse_events({"weird": True}), [])
         self.assertEqual(parse_events({"value": ["not-a-dict", 42]}), [])
+
+    def test_published_files_become_typed_documents(self):
+        ev = {**ZOOMGOV_EVENT, "publishedFiles": [
+            {"fileId": 30573, "type": "Agenda", "name": "Agenda v2",
+             "publishOn": "2026-03-13T08:07:19.51Z",
+             "url": "stream/BROOKLINEMA/2de610ef.pdf"},
+            {"fileId": "30574", "type": "Agenda Packet", "name": "Packet"},
+            {"no": "fileId here"}, "not-a-dict",
+        ]}
+        files = event_files(ev, "brooklinema")
+        self.assertEqual(len(files), 2)
+        self.assertEqual(files[0]["type"], "Agenda")
+        self.assertIn("GetMeetingFileStream(fileId=30573", files[0]["url"])
+        # the relative blob path never leaks as the download URL
+        self.assertTrue(files[0]["url"].startswith(
+            "https://brooklinema.api.civicclerk.com/"))
+        evs = parse_events({"value": [ev]}, tenant="brooklinema")
+        self.assertEqual(len(evs[0]["files"]), 2)
+
+    def test_file_stream_url_sanitizes_tenant(self):
+        u = file_stream_url("Brookline MA!", 7)
+        self.assertIn("https://brooklinema.api.civicclerk.com", u)
 
 
 class TestZoomShare(unittest.TestCase):

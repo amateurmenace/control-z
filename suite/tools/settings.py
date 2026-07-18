@@ -146,7 +146,7 @@ def register_settings(app, jobs, frames):
              "what": "PyTorch + Meta's SAM 2 — clicks become subject mattes",
              "size": "~1 GB", "installed": sam_ok,
              "command": f"{_sys.executable} -m pip install torch "
-                        "\"sam2 @ git+https://github.com/facebookresearch/sam2.git\""},
+                        "\"sam-2 @ git+https://github.com/facebookresearch/sam2.git\""},
             {"id": "clear-dfn", "label": "Clear voice isolation",
              "what": "the official DeepFilterNet3 binary (MIT/Apache) — "
                      "everything else in Clear works without it",
@@ -174,7 +174,9 @@ def register_settings(app, jobs, frames):
                 job.message = "pip installing torch + SAM 2 — ~1 GB…"
                 proc = subprocess.Popen(
                     [_sys.executable, "-m", "pip", "install", "torch",
-                     "sam2 @ git+https://github.com/facebookresearch/sam2.git"],
+                     # Meta's metadata says `sam-2` — name it or pip discards
+                     # the URL and goes looking for the PyPI stranger
+                     "sam-2 @ git+https://github.com/facebookresearch/sam2.git"],
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                     text=True, bufsize=1)
                 for line in proc.stdout:

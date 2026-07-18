@@ -516,6 +516,7 @@ const HighlighterPage = (() => {
       S.source = source;
       S.keep = new Set(); S.timeline = []; S.picks = []; S.lane = [];
       S.insight = null; S.curClip = -1; S.sectionFiles = [];
+      S.docs = null; S.docsBusy = false; S.xrPos = null;
       renderDlFiles();
       $("#hl-reportout", el).style.display = "none";
       $("#hl-reportout", el).innerHTML = "";
@@ -872,6 +873,17 @@ const HighlighterPage = (() => {
           `).join("") || `<div class="hint">nothing recurred enough to map</div>`}
         </div>
       </div>
+      <div class="hl-panel" style="grid-column:1 / -1"><span class="tag">framing — eight civic lenses, counted from the meeting's own words; click a lens for its moments</span>
+        ${(I.framing?.total) ? (I.framing.lenses || []).map((l, li) => `
+          <div class="hl-entrow hl-click hl-lensrow" data-lens="${li}" ${l.count ? "" : 'style="opacity:.45"'}>
+            <span style="flex:0 0 116px;display:flex;align-items:center;gap:7px">
+              <i style="width:9px;height:9px;border-radius:2px;background:${l.color};display:inline-block"></i>${l.lens}</span>
+            <span class="hl-bar" style="width:${Math.max(1, l.share * 100).toFixed(0)}%;background:${l.color}"></span>
+            <span class="cnt">×${l.count} · ${l.drift === "rising" ? "↑ rising" : l.drift === "fading" ? "↓ fading" : "steady"}</span>
+          </div>`).join("")
+        : `<div class="hint">no lens vocabulary detected — unusual for a public meeting</div>`}
+        <div class="hint" style="margin-top:5px">a sentence can carry more than one lens — that's how meetings talk; drift compares the meeting's halves</div>
+      </div>
       <div class="hl-panel"><span class="tag">question flow — ${(I.questions || []).length} asked; click a type</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px">
           ${Object.entries(qTypes).map(([k, n]) => `<button class="chip" data-qtype="${k}"
@@ -886,6 +898,24 @@ const HighlighterPage = (() => {
           ${pill(d.t)}<span style="flex:1">${d.speaker ? `<b>${esc(d.speaker)}:</b> ` : ""}${esc(d.text)}
           <span class="hint">${(d.words || []).join(" · ")}</span></span></div>`).join("")
         || `<div class="hint">no pushback vocabulary detected</div>`}
+      </div>
+      <div class="hl-panel" style="grid-column:1 / -1"><span class="tag">cross-reference network — names that share a sentence are connected; thicker line = more often; drag nodes, click a line for the moments together</span>
+        <div id="hl-xrwrap" style="position:relative"></div>
+        <div class="hint" style="display:flex;gap:14px;margin-top:4px">
+          <span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#1E7F63"></i> person</span>
+          <span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3E6C8E"></i> place</span>
+          <span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#7E5B8E"></i> organization</span>
+          <span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#A97A16"></i> keyword</span>
+        </div>
+      </div>
+      <div class="hl-panel" style="grid-column:1 / -1"><span class="tag">relevant documents — the town portal's own paper (CivicClerk, read by BIG Video Grabber's reader)</span>
+        <div style="display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap">
+          <input type="text" id="hl-doctenant" spellcheck="false" title="the part before .api.civicclerk.com"
+            style="width:150px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 9px;font-size:12.5px">
+          <button class="btn" id="hl-docfind" style="width:auto;padding:5px 14px">Find documents</button>
+          <span class="hint" id="hl-docmsg"></span>
+        </div>
+        <div id="hl-docs"></div>
       </div>
       <div class="hl-panel"><span class="tag">recurring topics</span>
         ${(I.topics || []).map(t => `<div class="hl-entrow hl-click" data-clips="${esc(t.topic)}">${pill(t.t)}
@@ -936,7 +966,165 @@ const HighlighterPage = (() => {
       const d = (S.insight.disagreements || [])[i];
       if (d) seek(d.t, true);
     });
+    $$(".hl-lensrow", box).forEach(r => r.onclick = () => {
+      const l = (S.insight.framing?.lenses || [])[+r.dataset.lens];
+      if (!l) return;
+      if (!l.count) { toast(`no ${l.lens} vocabulary in this meeting`); return; }
+      clipsModal(`${l.lens} framing — ${l.count} counted mention${l.count === 1 ? "" : "s"}`, l.moments);
+    });
+    renderCrossref();
+    const ten = $("#hl-doctenant", box);
+    ten.value = localStorage.getItem("cz-doc-tenant") || "brooklinema";
+    $("#hl-docfind", box).onclick = () => loadDocuments(true);
+    if (S.docs) renderDocuments();
+    else loadDocuments(false);
     drawCharts();
+  }
+
+  /* -- cross-reference network: an SVG you can rearrange, every line a
+        door into its moments. Static ring layout, no physics — the graph
+        holds still unless you move it. ---------------------------------- */
+  const XR_COLORS = { person: "#1E7F63", place: "#3E6C8E",
+                      org: "#7E5B8E", keyword: "#A97A16" };
+  function renderCrossref() {
+    const wrap = $("#hl-xrwrap", el);
+    if (!wrap) return;
+    const xr = S.insight?.crossref;
+    if (!xr || (xr.nodes || []).length < 3) {
+      wrap.innerHTML = `<div class="hint">not enough connected names to draw a network</div>`;
+      return;
+    }
+    const W = 700, H = 420, cx = W / 2, cy = H / 2 + 8;
+    if (!S.xrPos || S.xrPos.length !== xr.nodes.length) {
+      // most-connected nodes take the inner ring
+      const deg = xr.nodes.map((_, i) =>
+        xr.edges.reduce((n, e) => n + (e.a === i || e.b === i ? e.count : 0), 0));
+      const order = xr.nodes.map((_, i) => i).sort((a, b) => deg[b] - deg[a]);
+      S.xrPos = new Array(xr.nodes.length);
+      order.forEach((ni, rank) => {
+        const ring = rank < 5 ? 88 : 165;
+        const slot = rank < 5 ? rank / Math.min(5, order.length)
+                              : (rank - 5) / Math.max(1, order.length - 5);
+        const ang = slot * 2 * Math.PI - Math.PI / 2 + (rank < 5 ? 0 : 0.3);
+        S.xrPos[ni] = { x: cx + Math.cos(ang) * ring * 1.55,
+                        y: cy + Math.sin(ang) * ring };
+      });
+    }
+    const P = S.xrPos;
+    const maxC = Math.max(...xr.edges.map(e => e.count), 1);
+    wrap.innerHTML = `<svg id="hl-xref" viewBox="0 0 ${W} ${H}"
+        style="width:100%;max-height:440px;display:block">
+      ${xr.edges.map((e, i) => `<line data-edge="${i}"
+        x1="${P[e.a].x}" y1="${P[e.a].y}" x2="${P[e.b].x}" y2="${P[e.b].y}"
+        stroke="var(--line)" stroke-width="${(1 + 4 * e.count / maxC).toFixed(1)}"
+        style="cursor:pointer" />`).join("")}
+      ${xr.nodes.map((n, i) => `<g data-node="${i}" style="cursor:grab">
+        <circle cx="${P[i].x}" cy="${P[i].y}" r="${Math.min(11, 5 + n.count / 3).toFixed(1)}"
+          fill="${XR_COLORS[n.kind] || "#7E7D75"}" />
+        <text x="${P[i].x}" y="${P[i].y - Math.min(11, 5 + n.count / 3) - 4}"
+          text-anchor="middle" font-size="11" fill="var(--cream)"
+          style="pointer-events:none">${esc(n.name)}</text></g>`).join("")}
+    </svg>`;
+    const svg = $("#hl-xref", wrap);
+    const pt = ev => {
+      const p = svg.createSVGPoint();
+      p.x = ev.clientX; p.y = ev.clientY;
+      return p.matrixTransform(svg.getScreenCTM().inverse());
+    };
+    const lines = $$("line[data-edge]", svg);
+    let drag = -1, moved = false;
+    // drag moves attributes in place — the svg is never rebuilt mid-drag
+    const moveNode = i => {
+      const g = $(`g[data-node="${i}"]`, svg);
+      const c = $("circle", g), t = $("text", g);
+      c.setAttribute("cx", P[i].x); c.setAttribute("cy", P[i].y);
+      t.setAttribute("x", P[i].x);
+      t.setAttribute("y", P[i].y - (+c.getAttribute("r")) - 4);
+      lines.forEach((ln, li) => {
+        const e = xr.edges[li];
+        if (e.a === i) { ln.setAttribute("x1", P[i].x); ln.setAttribute("y1", P[i].y); }
+        if (e.b === i) { ln.setAttribute("x2", P[i].x); ln.setAttribute("y2", P[i].y); }
+      });
+    };
+    $$("g[data-node]", svg).forEach(g => {
+      g.onmousedown = ev => { drag = +g.dataset.node; moved = false; ev.preventDefault(); };
+      g.onmouseenter = () => lines.forEach((ln, i) => {
+        const e = xr.edges[i];
+        ln.setAttribute("stroke",
+          e.a === +g.dataset.node || e.b === +g.dataset.node ? "var(--amber)" : "var(--line)");
+      });
+      g.onmouseleave = () => lines.forEach(ln => ln.setAttribute("stroke", "var(--line)"));
+    });
+    svg.onmousemove = ev => {
+      if (drag < 0) return;
+      moved = true;
+      const p = pt(ev);
+      P[drag] = { x: Math.max(16, Math.min(W - 16, p.x)),
+                  y: Math.max(20, Math.min(H - 10, p.y)) };
+      moveNode(drag);
+    };
+    svg.onmouseup = () => {
+      if (drag >= 0 && !moved) {
+        const n = xr.nodes[drag];
+        clipsModal(`"${n.name}" — every mention`, segsWith(n.name));
+      }
+      drag = -1;
+    };
+    svg.onmouseleave = () => { drag = -1; };
+    $$("line[data-edge]", svg).forEach(ln => ln.onclick = () => {
+      const e = xr.edges[+ln.dataset.edge];
+      clipsModal(`${xr.nodes[e.a].name} + ${xr.nodes[e.b].name} — ${e.count} sentence${e.count === 1 ? "" : "s"} together`,
+        e.moments);
+    });
+  }
+
+  /* -- relevant documents: the town's own portal, read around this
+        meeting's date. Found by date + name match — no model involved. -- */
+  async function loadDocuments(fresh) {
+    const msg = $("#hl-docmsg", el);
+    if (!msg) return;
+    if (S.docsBusy || (S.docs && !fresh)) return;
+    S.docsBusy = true;
+    const tenant = ($("#hl-doctenant", el).value.trim() || "brooklinema").toLowerCase();
+    localStorage.setItem("cz-doc-tenant", tenant);
+    msg.textContent = `reading the ${tenant} portal…`;
+    try {
+      S.docs = await api("/api/highlighter/documents", { path: S.source, tenant });
+      msg.textContent = "";
+      renderDocuments();
+    } catch (e) {
+      msg.textContent = e.message;
+      $("#hl-docs", el).innerHTML = "";
+    } finally { S.docsBusy = false; }
+  }
+
+  const DOC_ICONS = { "agenda": "📋", "agenda packet": "🗂", "minutes": "📝",
+                      "agenda | html": "📋" };
+  function renderDocuments() {
+    const box = $("#hl-docs", el);
+    if (!box || !S.docs) return;
+    const evs = S.docs.events || [];
+    if (!evs.length) {
+      box.innerHTML = `<div class="hint">the ${esc(S.docs.tenant)} portal lists nothing
+        within ±${S.docs.window_days} days of ${esc(S.docs.around)} that matches this
+        meeting's name — try another tenant, or the meeting may not be a CivicClerk town</div>`;
+      return;
+    }
+    box.innerHTML = evs.map(ev => `
+      <div style="padding:7px 0;border-bottom:1px dashed var(--line)">
+        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+          <b>${esc(ev.name)}</b>
+          <span class="hint">${esc((ev.when || "").slice(0, 10))}${ev.category ? " · " + esc(ev.category) : ""}</span>
+          ${ev.score ? `<span class="cnt" title="title words in common">match ×${ev.score}</span>` : ""}
+        </div>
+        ${(ev.files || []).map(f => `
+          <a href="${esc(f.url)}" target="_blank" rel="noopener" class="hl-docrow"
+             style="display:flex;gap:8px;align-items:center;padding:3px 0 3px 12px;text-decoration:none;color:inherit">
+            <span>${DOC_ICONS[(f.type || "").toLowerCase()] || "📄"}</span>
+            <span style="flex:1">${esc(f.name)}</span>
+            <span class="hint">${esc(f.type)} · opens the portal's PDF ↗</span>
+          </a>`).join("") || `<div class="hint" style="padding-left:12px">no published files on this event</div>`}
+      </div>`).join("");
   }
 
   /* -- the shape of the meeting: two canvases, counted not modeled ----- */

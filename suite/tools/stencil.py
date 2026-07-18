@@ -117,7 +117,9 @@ def register_stencil(app, jobs, frames):
             job.message = "installing torch + SAM 2 — ~1 GB, minutes not seconds…"
             proc = subprocess.Popen(
                 [sys.executable, "-m", "pip", "install", "torch",
-                 "sam2 @ git+https://github.com/facebookresearch/sam2.git"],
+                 # Meta's metadata says `sam-2` — name it or pip discards
+                 # the URL and goes looking for the PyPI stranger
+                 "sam-2 @ git+https://github.com/facebookresearch/sam2.git"],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1)
             for line in proc.stdout:
@@ -168,7 +170,7 @@ def register_stencil(app, jobs, frames):
             return JSONResponse(
                 {"error": "click-to-matte needs the optional runtime — "
                           ".venv/bin/pip install torch "
-                          "'git+https://github.com/facebookresearch/sam2.git'"},
+                          "'sam-2 @ git+https://github.com/facebookresearch/sam2.git'"},
                 status_code=501)
         except Exception as e:
             return JSONResponse({"error": f"the preview pass failed "

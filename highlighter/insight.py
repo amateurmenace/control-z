@@ -46,6 +46,17 @@ def _sentences(text: str) -> List[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
 
 
+def _stopish(lw: str) -> bool:
+    """Stopwords, and contractions wearing an apostrophe over one —
+    "we're", "don't", "that's" are stopword stems, not vocabulary."""
+    if lw in STOPWORDS or len(lw) < 3:
+        return True
+    if "'" in lw:
+        base = lw.split("'")[0]
+        return base in STOPWORDS or len(base) < 4
+    return False
+
+
 def word_freq(segments: List[dict], top: int = 80) -> List[dict]:
     """The word cloud's data: civic stopwords out, counts + first mention."""
     counts: Counter = Counter()
@@ -53,7 +64,7 @@ def word_freq(segments: List[dict], top: int = 80) -> List[dict]:
     for s in segments:
         for w in _WORD.findall(str(s.get("text", ""))):
             lw = w.lower()
-            if lw in STOPWORDS or len(lw) < 3:
+            if _stopish(lw):
                 continue
             counts[lw] += 1
             first.setdefault(lw, float(s.get("start", 0)))
@@ -320,7 +331,7 @@ def topics(segments: List[dict], top: int = 8) -> List[dict]:
     for s in segments:
         words = [w.lower() for w in _WORD.findall(str(s.get("text", "")))]
         for a, b in zip(words, words[1:]):
-            if a in STOPWORDS or b in STOPWORDS or len(a) < 3 or len(b) < 3:
+            if _stopish(a) or _stopish(b):
                 continue
             key = f"{a} {b}"
             counts[key] += 1
@@ -402,3 +413,147 @@ def decisions(segments: List[dict], top: int = 12) -> List[dict]:
             continue
         dedup.append(d)
     return dedup[:top]
+
+
+# The web app's eight framing lenses, translated to counted vocabulary.
+# Word-boundary prefixes ("sustainab" reaches sustainability) — bare
+# substrings would let "street" answer for "tree". A sentence can carry
+# more than one lens; that's how meetings talk.
+FRAMING_LENSES = (
+    ("financial", "#A97A16", ("budget", "cost", "costs", "fund", "funding",
+                              "tax", "taxes", "dollar", "revenue", "expense",
+                              "afford", "appropriation", "fiscal", "grant",
+                              "salar", "bond", "million", "deficit")),
+    ("safety", "#B0542D", ("safety", "safe", "police", "fire", "emergency",
+                           "crash", "accident", "hazard", "danger", "crime",
+                           "enforce", "injur", "speeding", "pedestrian")),
+    ("community", "#3FA9D0", ("resident", "neighborhood", "community",
+                              "families", "family", "senior", "youth",
+                              "neighbor", "volunteer", "civic")),
+    ("environmental", "#1E7F63", ("climate", "environment", "tree", "trees",
+                                  "green", "emission", "energy", "sustainab",
+                                  "recycl", "stormwater", "solar", "carbon",
+                                  "pollut")),
+    ("legal", "#7E5B8E", ("legal", "statute", "bylaw", "ordinance",
+                          "regulation", "compliance", "attorney", "counsel",
+                          "liability", "charter", "litigation", "lawsuit")),
+    ("equity", "#C77BA6", ("equity", "equitable", "inclusion", "inclusive",
+                           "accessib", "disparity", "affordable",
+                           "discriminat", "marginalized", "diverse",
+                           "diversity", "low-income")),
+    ("infrastructure", "#B08968", ("road", "roads", "street", "sidewalk",
+                                   "sewer", "bridge", "construction",
+                                   "repair", "maintenance", "pavement",
+                                   "utility", "infrastructure", "paving")),
+    ("process", "#7E7D75", ("procedure", "procedural", "quorum", "amendment",
+                            "hearing", "referral", "warrant", "article",
+                            "subcommittee", "continuance", "postpone",
+                            "docket")),
+)
+
+
+def framing(segments: List[dict], moments_per_lens: int = 10) -> dict:
+    """How the meeting talks about what it talks about — eight civic lenses,
+    counted from the transcript's own words. Each lens carries its moments
+    (clickable receipts) and a first-half/second-half drift so a meeting
+    that starts fiscal and ends legal says so. Counted, not modeled."""
+    if not segments:
+        return {"lenses": [], "total": 0}
+    dur = max(float(s.get("end", 0)) for s in segments) or 1.0
+    lenses = []
+    total = 0
+    for name, color, words in FRAMING_LENSES:
+        rx = re.compile(r"\b(?:" + "|".join(map(re.escape, words)) + r")",
+                        re.I)
+        rows, halves = [], [0, 0]
+        for s in segments:
+            hits = rx.findall(str(s.get("text", "")))
+            if not hits:
+                continue
+            t = float(s.get("start", 0))
+            halves[int(t >= dur / 2)] += len(hits)
+            rows.append({"t": round(t, 1),
+                         "end": round(float(s.get("end", 0)), 1),
+                         "text": str(s.get("text", ""))[:160],
+                         "speaker": s.get("speaker"),
+                         "words": sorted({h.lower() for h in hits})[:4],
+                         "score": len(hits)})
+        count = halves[0] + halves[1]
+        total += count
+        rows.sort(key=lambda r: (-r["score"], r["t"]))
+        drift = halves[1] - halves[0]
+        lenses.append({"lens": name, "color": color, "count": count,
+                       "first_half": halves[0], "second_half": halves[1],
+                       "drift": ("rising" if drift >= 3 else
+                                 "fading" if drift <= -3 else "steady"),
+                       "moments": sorted(rows[:moments_per_lens],
+                                         key=lambda r: r["t"])})
+    for l in lenses:
+        l["share"] = round(l["count"] / total, 3) if total else 0.0
+    lenses.sort(key=lambda l: -l["count"])
+    return {"lenses": lenses, "total": total}
+
+
+def crossref(segments: List[dict], max_nodes: int = 16,
+             max_edges: int = 40) -> dict:
+    """The cross-reference network: entities and recurring keywords that
+    share a sentence get an edge, weighted by how often. Same pattern
+    harvest as the entity card — connections you can open, not a model's
+    opinion of who matters."""
+    ent = entities(segments, top=8)
+    nodes: List[dict] = []
+    seen = set()
+
+    def add(name: str, kind: str, count: int):
+        key = name.lower()
+        if key in seen or len(name) < 4:
+            return
+        # a keyword living inside an entity ("street" in "Beacon Street")
+        # would only draw self-evident edges — the entity keeps the seat
+        if any(key in n["name"].lower() or n["name"].lower() in key
+               for n in nodes):
+            return
+        seen.add(key)
+        nodes.append({"name": name, "kind": kind, "count": count})
+
+    for row in ent.get("people", [])[:6]:
+        add(row["name"], "person", row["count"])
+    for row in ent.get("places", [])[:5]:
+        add(row["name"], "place", row["count"])
+    for row in ent.get("organizations", [])[:5]:
+        add(row["name"], "org", row["count"])
+    for row in word_freq(segments, top=30):
+        if len(nodes) >= max_nodes + 4:
+            break
+        if len(row["word"]) >= 5:
+            add(row["word"], "keyword", row["count"])
+
+    if len(nodes) < 3:
+        return {"nodes": [], "edges": []}
+    rxs = [re.compile(r"\b" + re.escape(n["name"]), re.I) for n in nodes]
+    pair: Dict[tuple, dict] = {}
+    for s in segments:
+        for sent in _sentences(str(s.get("text", ""))):
+            present = [i for i, rx in enumerate(rxs) if rx.search(sent)]
+            for a_i in range(len(present)):
+                for b_i in range(a_i + 1, len(present)):
+                    key = (present[a_i], present[b_i])
+                    e = pair.setdefault(key, {"count": 0, "moments": []})
+                    e["count"] += 1
+                    if len(e["moments"]) < 3:
+                        e["moments"].append(
+                            {"t": round(float(s.get("start", 0)), 1),
+                             "end": round(float(s.get("end", 0)), 1),
+                             "text": sent[:160]})
+    edges = [{"a": a, "b": b, **e} for (a, b), e in pair.items()]
+    edges.sort(key=lambda e: -e["count"])
+    edges = edges[:max_edges]
+    # keep only nodes that connect to something (capped), re-index the edges
+    used = sorted({i for e in edges for i in (e["a"], e["b"])})[:max_nodes]
+    if len(used) < 3:
+        return {"nodes": [], "edges": []}
+    remap = {old: new for new, old in enumerate(used)}
+    return {"nodes": [nodes[i] for i in used],
+            "edges": [{**e, "a": remap[e["a"]], "b": remap[e["b"]]}
+                      for e in edges
+                      if e["a"] in remap and e["b"] in remap]}

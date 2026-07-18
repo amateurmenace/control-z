@@ -1,7 +1,8 @@
 import unittest
 
-from highlighter.insight import (ask, brief, decisions, entities,
-                                 participation, questions, topics, word_freq)
+from highlighter.insight import (ask, brief, crossref, decisions, entities,
+                                 framing, participation, questions, topics,
+                                 word_freq)
 
 
 def seg(start, end, text, speaker=None):
@@ -102,6 +103,58 @@ class TestAsk(unittest.TestCase):
         r = ask(MEETING, "helicopter zoning xylophone")
         self.assertEqual(r["passages"], [])
         self.assertTrue(r["note"])
+
+
+class TestFraming(unittest.TestCase):
+    def test_lenses_counted_with_receipts(self):
+        f = framing(MEETING)
+        by = {l["lens"]: l for l in f["lenses"]}
+        # "cost", "budget", "million" — the money talk registers
+        self.assertGreaterEqual(by["financial"]["count"], 3)
+        # "safety" on Harvard Street registers
+        self.assertGreaterEqual(by["safety"]["count"], 1)
+        # every counted lens carries clickable receipts with its words
+        top = f["lenses"][0]
+        self.assertTrue(top["moments"])
+        self.assertIn("t", top["moments"][0])
+        self.assertTrue(top["moments"][0]["words"])
+
+    def test_shares_sum_to_one_when_counted(self):
+        f = framing(MEETING)
+        self.assertAlmostEqual(
+            sum(l["share"] for l in f["lenses"]), 1.0, places=2)
+
+    def test_street_does_not_answer_for_tree(self):
+        f = framing([seg(0, 4, "Repaving Harvard Street this fall.")])
+        by = {l["lens"]: l for l in f["lenses"]}
+        self.assertEqual(by["environmental"]["count"], 0)
+        self.assertGreaterEqual(by["infrastructure"]["count"], 1)
+
+    def test_empty_meeting(self):
+        self.assertEqual(framing([]), {"lenses": [], "total": 0})
+
+
+class TestCrossref(unittest.TestCase):
+    def test_same_sentence_names_connect(self):
+        x = crossref(MEETING)
+        names = [n["name"].lower() for n in x["nodes"]]
+        self.assertIn("crosswalk", names)
+        # every edge points at real nodes and carries its moments
+        for e in x["edges"]:
+            self.assertLess(e["a"], len(x["nodes"]))
+            self.assertLess(e["b"], len(x["nodes"]))
+            self.assertTrue(e["moments"])
+
+    def test_keyword_inside_an_entity_yields_its_seat(self):
+        x = crossref(MEETING)
+        names = [n["name"].lower() for n in x["nodes"]]
+        if "harvard street" in names:
+            self.assertNotIn("street", names)
+            self.assertNotIn("harvard", names)
+
+    def test_too_thin_to_draw(self):
+        x = crossref([seg(0, 3, "Good evening.")])
+        self.assertEqual(x, {"nodes": [], "edges": []})
 
 
 if __name__ == "__main__":

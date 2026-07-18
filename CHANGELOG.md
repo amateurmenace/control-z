@@ -2,6 +2,103 @@
 
 ## unreleased
 
+### 1.5.0: the meeting answers back, and the heavies install themselves — 2026-07-17
+- **The summary writes itself.** Pasting a URL opens a terminal in the
+  hero — the commands named as they run, every job message a line, the
+  cursor blinking until the meeting opens. With a key configured the
+  executive brief is generative on arrival: written on load, cited to
+  the second, every [MM:SS] a clickable pill, cached beside the
+  transcript so one meeting costs one spend. The extractive read stands
+  in until it lands, and stands alone without a key. And the key stays:
+  it persists in app support, and an **OpenAI key now works everywhere
+  an Anthropic one does** — the key's shape picks the provider.
+- **The timeline became an editor.** Every clip on the reel has an edit
+  row: nudge in/out by half-seconds, set playback speed (0.5–2×, atempo
+  keeps the audio honest), check fade for 0.35s in/out — and every
+  choice renders into the export, on both paths (local cut and
+  download-and-stitch). The three sections stopped hiding: Meeting
+  Highlighter, Highlight Video Editor and Meeting Analyzer stack on one
+  page and the anchor pills scroll to them.
+- **Exports let go of your hands.** Queued work gets a toast card in the
+  corner — label, live percent, the message as it changes, green when
+  done — and clicking one opens the Queue, where finished jobs finally
+  show WHERE they landed (every output path, click to Reveal) and the
+  default output folder is yours to change, right there in Settings.
+- **The analyzer reached the web app — and every chart is a door.**
+  People, Places & Things is one clickable card: "clips" opens every
+  mention as a modal (play each, add any or all to the reel), and 🔍
+  Investigate looks a name up in the world — live Google News fetched
+  server-side, Wikipedia inline, maps out to the browser, and a "Your
+  library" tab that searches every other meeting on this machine for
+  the same name. The topic coverage map is a clickable heatmap (topics
+  × twelve slices of the meeting), moments of disagreement list the
+  tension vocabulary with a red edge, question flow gets type chips
+  that open into their questions, speakers open into their own moments,
+  and the transcript can Investigate any selection.
+- **Generate Full Report** writes the AI narrative plus the counted
+  record (decisions, entities, participation, questions) beside the
+  meeting as markdown AND a real PDF — czcore/pdfout, a zero-dependency
+  writer whose text stays selectable. **Translate** ships both ways on
+  your key: the summary inline (and saved), the whole transcript
+  chunked into timed .srt/.txt, ten languages.
+- **Scrubbing stopped waiting.** The 10-second far seek was the frame
+  service JPEG-encoding every frame it walked past on a long-GOP seek;
+  passed frames now cache only within a dozen of the target. A cold far
+  seek on the 5,223-frame test clip answers in 0.07–0.29s.
+- **Stencil answers the click.** A click-preview endpoint runs SAM 2.1's
+  image predictor on the one frame being clicked and the plum matte
+  appears the moment the subject is chosen — ~3s for the first click
+  while the model loads, ~0.7s after. Propagation stays the
+  follow-through, not the reveal. And when torch + SAM 2 are absent,
+  Stencil gates itself center-page: the card names the ~1 GB one-time
+  install and carries the button that performs it (frozen builds get
+  the honest sentence instead of a dead button).
+- **Every optional heavy has a door now.** Settings grew an "optional
+  runtimes" card: Stencil's torch + SAM 2 (pip, Meta's own URL — never
+  the PyPI stranger) and Clear's DeepFilterNet3 voice-isolation binary
+  (downloaded against its published sha256, refused on mismatch), each
+  with installed/missing status, a one-click Install that runs as a
+  queue job with live progress, and a copyable terminal command.
+  Whisper models stay out on purpose: they download themselves in-app.
+- **And the install buttons were then run for real**, in a venv that had
+  neither heavy — which caught the SAM 2 one broken: Meta renamed their
+  package metadata to `sam-2`, so pip discarded our URL pin
+  ("inconsistent name") and went looking for the PyPI stranger instead.
+  Every written copy of the requirement now pins
+  `sam-2 @ git+…` (the import stays `sam2`). Verified end-to-end through
+  the buttons themselves: DFN → sha-matched download → `deep_filter
+  0.5.6` answering; SAM 2 → pip → `import torch, sam2` clean.
+- **Clear's slider grew its own door.** When the DeepFilterNet3 binary
+  is missing, the voice-isolation hint is no longer a wall of install
+  text — it's one sentence and a link that lands on Settings → optional
+  runtimes, scrolled to and lit up. (The old terminal line survives as
+  the link's tooltip.)
+- **The analyzer finished the web app's set** — the three cards that
+  were still deferred, each local and labeled:
+  - **Framing** — eight civic lenses (financial · safety · community ·
+    environmental · legal · equity · infrastructure · process), counted
+    from the meeting's own words with word-boundary vocabularies, each
+    lens carrying its moments (click → play or add to the reel) and a
+    first-half/second-half drift. Live on the March 10 Select Board:
+    financial ×460 rising, community ×137 fading.
+  - **Cross-Reference Network** — entities and recurring keywords that
+    share a sentence get a weighted edge; drag the nodes, hover a name
+    to light its connections, click a line for the moments the two share,
+    click a node for every mention. Honest empty when fewer than three
+    names connect.
+  - **Relevant Documents** — the town's own CivicClerk portal, read
+    around the meeting's date through the Grabber's reader (the title's
+    own date wins over upload date; two half-window queries so a busy
+    civic calendar can't page the nearest days away; shared word-pairs
+    outrank single words so "Select Board" beats half a town of boards).
+    Agendas, packets and minutes arrive as typed rows opening the
+    portal's real PDFs. Verified live: the March 10 session found its
+    own event — Select Board Regular Meeting, 0 days off, agenda +
+    packet + minutes — with the same-day committees beneath it.
+- The word cloud, recurring topics, and the network stopped counting
+  contractions ("we're", "that's") as vocabulary — stopword stems
+  wearing an apostrophe.
+
 ### 1.4.0: the web app's three rooms, the two doors out — 2026-07-17
 - **Highlighter wears the web app's exact shape now**: the three sections
   are **Meeting Highlighter · Highlight Video Editor · Meeting Analyzer**,

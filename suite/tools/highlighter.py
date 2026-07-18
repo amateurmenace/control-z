@@ -405,10 +405,10 @@ def register_highlighter(app, jobs, frames):
         if cache.exists() and not body.get("fresh"):
             try:
                 data = json.loads(cache.read_text())
-                # "topic_map" gates the cache: caches from before the
+                # "framing" gates the cache: caches from before the
                 # analyzer grew rebuild once instead of shipping half
                 if data.get("n_segments") == len(t["segments"]) \
-                        and "topic_map" in data:
+                        and "framing" in data:
                     return data
             except ValueError:
                 pass
@@ -434,6 +434,9 @@ def register_highlighter(app, jobs, frames):
             # the analyzer's map and its friction points
             "topic_map": insight.topic_map(segs),
             "disagreements": insight.disagreements(segs),
+            # how the meeting talks, and who appears beside whom
+            "framing": insight.framing(segs),
+            "crossref": insight.crossref(segs),
         }
         cache.write_text(json.dumps(data))
         return data
@@ -680,6 +683,102 @@ def register_highlighter(app, jobs, frames):
             if len(rows) >= 10:
                 break
         return {"q": q, "rows": rows}
+
+    @app.post("/api/highlighter/documents")
+    def api_documents(body: dict = Body(...)):
+        """The meeting's paper trail: the town's own CivicClerk portal,
+        searched around the meeting's date through the Grabber's reader.
+        Agendas and minutes come back as typed rows with real file URLs —
+        found by date and name match, not by a model."""
+        import datetime as dt
+
+        from grabber import civicclerk
+
+        source = str(body.get("path", ""))
+        tenant = str(body.get("tenant") or civicclerk.DEFAULT_TENANT)
+        window = min(30, max(1, int(body.get("window_days") or 10)))
+        title = str(body.get("title", ""))
+        raw_date = str(body.get("date", ""))
+        if source and not title:
+            p = Path(source)
+            title = (_session_meta(p)["title"] if _is_session(source)
+                     else p.stem)
+        if source and not raw_date:
+            raw_date = str(_info_for(source).get("upload_date") or "")
+        day = None
+        # the title's own date is the meeting's day ("… - March 10, 2026");
+        # upload_date only says when the video landed, so it goes second
+        months = ("january february march april may june july august "
+                  "september october november december").split()
+        m = re.search(r"(" + "|".join(months) + r")\s+(\d{1,2}),?\s+(\d{4})",
+                      title.lower())
+        if m:
+            try:
+                day = dt.date(int(m.group(3)), months.index(m.group(1)) + 1,
+                              int(m.group(2)))
+            except ValueError:
+                pass
+        if day is None:
+            m = re.search(r"(\d{4})-?(\d{2})-?(\d{2})", raw_date)
+            if m:
+                try:
+                    day = dt.date(int(m.group(1)), int(m.group(2)),
+                                  int(m.group(3)))
+                except ValueError:
+                    pass
+        if day is None:
+            # no date on record — read the recent window and let the
+            # name match do the work
+            day, window = dt.date.today(), 30
+        try:
+            # two half-windows, each ordered newest-first by the portal: a
+            # busy civic calendar can out-count the page cap, and one wide
+            # query would keep only its far edge — the nearest days lose
+            before = civicclerk.search_events(
+                tenant, (day - dt.timedelta(days=window)).isoformat(),
+                day.isoformat())
+            after = civicclerk.search_events(
+                tenant, day.isoformat(),
+                (day + dt.timedelta(days=window)).isoformat())
+        except RuntimeError as e:
+            return JSONResponse({"error": str(e)}, status_code=502)
+        events, seen_ids = [], set()
+        for ev in before + after:
+            if ev["id"] in seen_ids:
+                continue
+            seen_ids.add(ev["id"])
+            events.append(ev)
+        # score: shared word pairs first ("select board" names the body;
+        # single words tie half the calendar), then civic-boilerplate-free
+        # single words, then date distance
+        low_title = title.lower()
+        months = ("january february march april may june july august "
+                  "september october november december").split()
+        drop = {"meeting", "the", "of", "and", "town", "session", "work",
+                "special", "regular", "committee", "board", *months}
+        drop |= {w for w in re.findall(r"[a-z]+", low_title)
+                 if tenant.startswith(w)}
+        tw = [w for w in re.findall(r"[a-z]+", low_title) if len(w) > 2]
+        tpairs = {f"{a} {b}" for a, b in zip(tw, tw[1:])}
+        twords = {w for w in tw if w not in drop}
+        rows = []
+        for ev in events:
+            elow = f"{ev['name']} {ev['category']}".lower()
+            ewords = set(re.findall(r"[a-z]+", elow))
+            overlap = (2 * sum(1 for p in tpairs if p in elow)
+                       + len(twords & ewords))
+            ev_day = None
+            m2 = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(ev.get("when", "")))
+            if m2:
+                ev_day = dt.date(*map(int, m2.groups()))
+            dist = abs((ev_day - day).days) if ev_day else window
+            if not ev["files"] and not overlap:
+                continue
+            rows.append({**ev, "score": overlap, "days_off": dist})
+        rows.sort(key=lambda r: (-r["score"], r["days_off"]))
+        return {"tenant": tenant, "around": day.isoformat(),
+                "window_days": window, "matched_words": sorted(twords),
+                "events": rows[:12]}
 
     @app.post("/api/highlighter/mentions")
     def api_mentions(body: dict = Body(...)):
