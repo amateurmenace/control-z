@@ -236,6 +236,7 @@ def create_suite_app():
     from .tools.clear import register_clear
     from .tools.davinci import register_davinci
     from .tools.depth import register_depth
+    from .tools.drain import register_drain
     from .tools.grabber import register_grabber
     from .tools.highlighter import register_highlighter
     from .tools.indexer import register_indexer
@@ -256,6 +257,7 @@ def create_suite_app():
     register_clear(app, jobs, frames)
     register_davinci(app, jobs, frames)
     register_depth(app, jobs, frames)
+    register_drain(app, jobs, frames)
     register_grabber(app, jobs, frames)
     register_highlighter(app, jobs, frames)
     register_indexer(app, jobs, frames)

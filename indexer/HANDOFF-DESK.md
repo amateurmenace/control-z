@@ -172,10 +172,55 @@ pretends. Grouped:
 wave 4 are the only moving parts). Verified live: no console errors on the
 reloaded pages; the reset + keyboard proven in the browser.
 
+## landed (wave 6 — the drain client, gated, thrust 5)
+
+The desk side of specs/17 §6.4 — a desk that volunteers to transcribe the
+Studio's caption-less meetings on its own hardware. Built and tested; **dormant
+until the Studio exists.**
+
+- **`czcore/drain.py`** — config (0600 key, env override), a `DrainClient`
+  (stdlib urllib, key in the `X-Studio-Key` header) with `poll`/`claim`/
+  `post_transcript`, `run_once(client, transcribe)` (poll → claim → transcribe
+  → post, honest about the empty-queue and lost-claim cases), and
+  `desk_transcribe` (the real path: `czcore.ytdlp.download` + the vendored
+  ffmpeg + Scribe's engine — ASR stays Scribe's, never reimplemented).
+- **`suite/tools/drain.py`** — `/api/drain/{status, config, run-once}` and a
+  poller that **sleeps first and does nothing until configured + enabled** (so
+  tests and a fresh launch never trip it).
+- **Settings section "Studio · lend this desk"** — reads *"waiting for the
+  Studio to exist"* until a steward sets a URL + key and switches it on; the
+  enable toggle is disabled until then. Proven live.
+- **7 tests** (`tests/test_drain.py`) drive the whole flow against a **fake
+  Studio** (poll/claim/post, steward-key check) — no real Studio, no network,
+  no whisper. Config masking + the "waiting" surface pinned. **537 green.**
+
+## asks (A-owned / shell + the Studio session)
+
+- **Shared single-slot (server.py):** one import + one `register_drain(...)`
+  line, alphabetical between depth and grabber. Standard slot; flagged for
+  transparency.
+- **`suite/static/js/services.js`** (shell Settings page): the Gemini status
+  edit (wave 4) **and** the new "Studio · lend this desk" section live here —
+  the drain's UI belongs in Settings by the brief. Marked, low-conflict;
+  reshape freely.
+- **THE STUDIO CONTRACT (for the specs/17 session) — this is a PROPOSAL, not a
+  spec.** specs/17 §5's `AsrTask` names the object without fields, so the desk
+  built to the smallest shape the flow needs. **Confirm or revise, then tell me
+  in "state of main":**
+  - `GET  {base}/api/asr/next?desk={desk}` → 200 `AsrTask` | 204 empty
+  - `POST {base}/api/asr/{id}/claim {desk}` → 200 `{ok:true}` | 409 `{ok:false}`
+  - `POST {base}/api/asr/{id}/transcript {desk, model, transcript}` → 200 `{ok:true}`
+  - auth header `X-Studio-Key: {key}` on every call
+  - `AsrTask := {id, meeting_id, town, source_url, title?, duration_hint?}` —
+    `source_url` is the media the desk fetches itself (no video hosting, §3);
+    `transcript` is Scribe's `Transcript.to_json()`.
+  - **Objection/ask:** the spec is silent on the desk's *identity + trust* — is
+    `desk_id` (hostname) enough, or does a drain need a registered token per
+    desk? And is a *lease TTL* on claim wanted (a desk that dies mid-transcribe
+    shouldn't strand a task)? Both feel like real gaps; deferred to you.
+
 ## next
 
-- The drain client (thrust 5, gated — build to a proposed AsrTask contract,
-  flag every field for the Studio session).
 - The local model cards (thrust 3 — scaffold + conversion recipe; hosting is
   an external human step).
 
@@ -222,3 +267,8 @@ reloaded pages; the reset + keyboard proven in the browser.
   name a remedy instead of going quiet, transport keys (space, arrows) on the
   players that lacked them, a fresh clip that never wears the last clip's UI,
   and a handful of contrast and affordance fixes. No control that pretends.
+- **A desk can lend itself to the record.** When the Community AI Studio
+  exists, a meeting that arrives without captions can be transcribed by any
+  desk running the suite — on its own hardware, with Scribe's engine, no cloud
+  GPU and no bill — and posted back. The wiring is here and tested against a
+  stand-in Studio; until the real one exists, Settings says so plainly.

@@ -243,6 +243,7 @@ const SettingsPage = (() => {
     <div id="se-runtimes" style="margin-top:22px"></div>
     <div id="se-llm" style="margin-top:22px"></div>
     <div id="se-llmaudit" style="margin-top:22px"></div>
+    <div id="se-drain" style="margin-top:22px"></div>
     <div id="se-caches" style="margin-top:22px"></div>
     <div id="se-about" style="margin-top:22px"></div>
   </div>`;
@@ -318,6 +319,69 @@ const SettingsPage = (() => {
   };
   const fmtTok = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M"
     : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+
+  /* Studio · lend this desk — the drain's Settings surface (specs/17 §6.4).
+     Dormant until a steward points it at a Studio; the Studio doesn't exist
+     yet, so by default this reads "waiting for the Studio to exist." */
+  async function refreshDrain() {
+    const box = $("#se-drain", el);
+    let s = { configured: false, enabled: false, sentence: "", studio_url: "",
+              key_masked: null, last: null };
+    try { s = await api("/api/drain/status"); } catch (e) { return; }
+    box.innerHTML = `
+      <div class="tag" style="margin-bottom:6px">Studio · lend this desk</div>
+      <div class="hint" style="margin-bottom:8px;line-height:1.6">
+        The Community AI Studio (coming) will host the civic record on its own.
+        Meetings that arrive without captions still need transcribing — and a desk
+        running this suite can volunteer its own hardware for that, with no cloud GPU
+        and no bill. This desk would transcribe with Scribe's engine and post the
+        transcript back. Nothing runs until you point it at a Studio and switch it on.
+        Status: <b style="color:${s.enabled ? "var(--ok)" : "var(--cream-dim)"}">${esc(s.sentence)}</b>
+        ${s.last ? `<br><span style="font-family:var(--mono);font-size:10.5px;color:var(--cream-faint)">last: ${esc(s.last.note || s.last.did || "")}${s.last.at ? " · " + esc(s.last.at) : ""}</span>` : ""}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="text" id="se-studiourl" placeholder="https://communityai.studio (once it exists)" value="${esc(s.studio_url || "")}" spellcheck="false"
+          style="flex:2;min-width:240px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+        <input type="password" id="se-studiokey" placeholder="steward key${s.key_masked ? " (" + esc(s.key_masked) + ")" : ""}" spellcheck="false"
+          style="flex:1;min-width:160px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+        <button class="btn" id="se-studiosave" style="width:auto">Save</button>
+      </div>
+      <div class="checkrow" style="margin-top:10px"><input type="checkbox" id="se-studioon" ${s.enabled ? "checked" : ""} ${s.configured ? "" : "disabled"}>
+        <span>lend this desk — poll the Studio and transcribe its caption-less meetings${s.configured ? "" : ` <span class="hint">(set a URL and key first)</span>`}</span></div>
+      ${s.configured ? `<div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn" id="se-studiorun" style="width:auto">Run one cycle now</button>
+        <button class="btn" id="se-studiooff" style="width:auto">Stop lending</button></div>` : ""}`;
+    $("#se-studiosave", box).onclick = async () => {
+      const url = $("#se-studiourl", box).value.trim();
+      if (!url) { toast("point it at a Studio URL first", true); return; }
+      try {
+        await api("/api/drain/config", { studio_url: url, key: $("#se-studiokey", box).value.trim() });
+        toast("saved — lending stays off until you switch it on");
+        refreshDrain();
+      } catch (e) { toast(e.message, true); }
+    };
+    const on = $("#se-studioon", box);
+    if (on) on.onchange = async () => {
+      try { await api("/api/drain/config", { studio_url: s.studio_url, enabled: on.checked }); refreshDrain(); }
+      catch (e) { toast(e.message, true); refreshDrain(); }
+    };
+    const run = $("#se-studiorun", box);
+    if (run) run.onclick = async () => {
+      run.disabled = true;
+      try {
+        const job = await api("/api/drain/run-once", {});
+        const done = await jobDone(job.id);
+        toast(done.status === "done" ? (done.result?.note || "cycle done") : (done.error || "stopped"),
+              done.status !== "done");
+      } catch (e) { toast(e.message, true); }
+      refreshDrain();
+    };
+    const off = $("#se-studiooff", box);
+    if (off) off.onclick = async () => {
+      await api("/api/drain/config", { studio_url: "" });
+      toast("stopped lending — the desk keeps everything else it does");
+      refreshDrain();
+    };
+  }
 
   async function refreshAudit() {
     const box = $("#se-llmaudit", el);
@@ -470,7 +534,7 @@ const SettingsPage = (() => {
 
   async function refresh(arg) {
     const sections = Promise.all([refreshProxy(), refreshRuntimes(),
-                                  refreshLLM(), refreshAudit()]);
+                                  refreshLLM(), refreshAudit(), refreshDrain()]);
     /* another page can land here on a specific card: go("settings",
        {section:"runtimes"}) — wait for the cards to exist, then walk there */
     if (arg && arg.section) sections.then(() => {
