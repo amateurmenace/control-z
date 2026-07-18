@@ -82,8 +82,10 @@ def _render_cards(cards: List[dict], w: int, h: int, title: str,
     paths = []
     for k, c in enumerate(cards):
         p = str(Path(tmpdir) / f"card{k}.png")
-        _card_png(p, w, h, title, str(c.get("label", "")),
-                  _fmt_t(float(c.get("t", 0))))
+        # a card may name its own meeting (the montage path, where every
+        # clip can come from a different one); title is the shared default
+        _card_png(p, w, h, str(c.get("title") or title),
+                  str(c.get("label", "")), _fmt_t(float(c.get("t", 0))))
         paths.append(p)
     return paths
 
@@ -198,6 +200,14 @@ def stitch_files(files: List[str], out_path: str, preset: str = "h264",
     n = len(files)
     v0 = next((i.video for i in infos if i.video), None)
     use_cards = bool(cards) and v0 is not None
+    # clips from different meetings arrive in different sizes (the montage
+    # path) — concat refuses a mixed graph, so everything scales into the
+    # first clip's frame, letterboxed, never stretched
+    tw = ((v0.width // 2) * 2 or 1920) if v0 else 0
+    th = ((v0.height // 2) * 2 or 1080) if v0 else 0
+    mixed = v0 is not None and any(
+        i.video and (i.video.width != v0.width or i.video.height != v0.height)
+        for i in infos)
 
     with tempfile.TemporaryDirectory(prefix="hl-cards-") as td:
         args = []
@@ -213,7 +223,9 @@ def stitch_files(files: List[str], out_path: str, preset: str = "h264",
                     args += ["-f", "lavfi", "-t", f"{CARD_SECONDS}", "-i",
                              "anullsrc=channel_layout=stereo:sample_rate=48000"]
         parts, maps = [], []
-        vnorm = ",setsar=1,format=yuv420p" if use_cards else ""
+        vnorm = ",setsar=1,format=yuv420p" if (use_cards or mixed) else ""
+        vfit = (f",scale={tw}:{th}:force_original_aspect_ratio=decrease,"
+                f"pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2") if mixed else ""
         for k in range(n):
             e = (fx[k] if fx and k < len(fx) else {}) or {}
             speed = min(2.0, max(0.5, float(e.get("speed") or 1.0)))
@@ -225,7 +237,7 @@ def stitch_files(files: List[str], out_path: str, preset: str = "h264",
                         f",fade=t=out:st={max(0.0, span - 0.35):.3f}:d=0.35")
                 afx += (f",afade=t=in:st=0:d=0.35"
                         f",afade=t=out:st={max(0.0, span - 0.35):.3f}:d=0.35")
-            parts.append(f"[{k}:v]setpts=PTS-STARTPTS{vfx},fps=30{vnorm}[v{k}]")
+            parts.append(f"[{k}:v]setpts=PTS-STARTPTS{vfx},fps=30{vfit}{vnorm}[v{k}]")
             if has_audio:
                 parts.append(f"[{k}:a]asetpts=PTS-STARTPTS{afx}"
                              + ("," + _ANORM if use_cards else "") + f"[a{k}]")

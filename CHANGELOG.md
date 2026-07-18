@@ -124,6 +124,18 @@
   meetings: "override" traced ×49 across 3 of 6 — surging in the March
   10 Select Board (×45, 0.85/1k words), echoing in the June School
   Committee.
+- **And the Montage Maker** — a reel cut ACROSS meetings. Every ➕ on a
+  traced moment or a framing cell's list lands in the montage tray;
+  Render stages the work honestly: local meetings cut in place, URL
+  sessions download only the picked seconds (a span already on disk is
+  reused — nothing re-downloads), then one stitch where every clip wears
+  a title card naming its own meeting. Clips from different meetings
+  arrive in different sizes, so the stitch graph now scales everything
+  into the first clip's frame, letterboxed, never stretched (this also
+  hardens the single-meeting path). Verified: a Select Board moment
+  (1080p, fetched by URL) + a School Committee moment (720p, reused from
+  disk) → one 19.28s montage, frame-checked — each card carrying its own
+  meeting's name and the moment's own clock.
 
 ### 1.4.0: the web app's three rooms, the two doors out — 2026-07-17
 - **Highlighter wears the web app's exact shape now**: the three sections

@@ -22,7 +22,10 @@ Everything since 1.1.0 ships here. Tag `v1.5.0`. Highlights since 1.1.0:
   transcript (timed .srt) in ten languages. And a new room: the
   **Meeting Library** reads every meeting on the machine together —
   framing across meetings, entity tracking, meeting comparison,
-  discourse tracing — all counted locally from the sidecars.
+  discourse tracing, and a **Montage Maker** that cuts one reel across
+  meetings (URL sessions fetch only the picked seconds; every clip wears
+  a card naming its own meeting) — all counted locally from the
+  sidecars.
 - **The timeline is an editor**: per-clip nudge / speed (0.5–2×) /
   fades, rendered on both export paths. **Export Video, two doors**: a
   share link the deployed web player opens (clips encoded in the URL,

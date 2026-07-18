@@ -19,10 +19,10 @@ from .highlighter import (VIDEO_EXTS, _info_for, _is_session, _lib,
                           insight_payload)
 
 # a library file named "…[3923-3927].mp4" is a downloaded SPAN of a
-# meeting, and "reel-YYYYMMDD-HHMMSS.mp4" (or "….reel.mp4") is a reel the
-# Highlighter RENDERED — outputs, not meetings
+# meeting, and "reel-…"/"montage-…" (or "….reel.mp4") is something the
+# suite RENDERED — outputs, not meetings
 _SPAN_CLIP = re.compile(r"\[\d+(?:\.\d+)?-\d+(?:\.\d+)?\]$")
-_REEL_OUT = re.compile(r"(?:^reel-\d{8}-\d{6}$)|(?:\.reel$)")
+_REEL_OUT = re.compile(r"(?:^(?:reel|montage)-\d{8}-\d{6}$)|(?:\.reel$)")
 
 
 def is_span_clip(p: Path) -> bool:
@@ -135,6 +135,129 @@ def register_kb(app, jobs, frames):
                 "disagreements": len(data.get("disagreements") or []),
             })
         return {"rows": rows, "skipped": skipped}
+
+    @app.post("/api/kb/montage")
+    def api_montage(body: dict = Body(...)):
+        """A reel cut across meetings. Local sources are trimmed in place;
+        URL sessions download ONLY the picked seconds (a span already on
+        disk is reused, nothing re-downloads); then one stitch, each clip
+        wearing a card that names its own meeting. Sequential and staged —
+        the job narrates every step."""
+        import tempfile
+        import time as _time
+
+        picks = body.get("picks") or []
+        want_cards = bool(body.get("cards", True))
+        preset = str(body.get("preset", "h264"))
+        if not picks:
+            return JSONResponse({"error": "pick at least one moment first"},
+                                status_code=422)
+        try:
+            picks = [{"source": str(p["source"]),
+                      "start": float(p["start"]),
+                      "end": float(p.get("end") or float(p["start"]) + 12.0),
+                      "label": str(p.get("label", ""))[:80],
+                      "title": str(p.get("title", ""))[:60]}
+                     for p in picks]
+        except (KeyError, TypeError, ValueError):
+            return JSONResponse({"error": "each pick needs a source and a "
+                                          "start (seconds)"}, status_code=422)
+        for p in picks:
+            if p["end"] <= p["start"]:
+                p["end"] = p["start"] + 12.0
+
+        def _local_video(src: Path):
+            """The full local file for a source: itself, or a session's
+            downloaded twin in the library (span clips don't count)."""
+            if src.is_file():
+                return src
+            for f in _lib().iterdir():
+                if (f.suffix.lower() in VIDEO_EXTS
+                        and f"[{src.name}]" in f.name
+                        and not is_span_clip(f)):
+                    return f
+            return None
+
+        def _span_on_disk(sid: str, a: float, b: float):
+            tag = f"[{int(a)}-{int(b)}]"
+            for f in _lib().iterdir():
+                if (f.suffix.lower() in VIDEO_EXTS and tag in f.name
+                        and f"[{sid}]" in f.name):
+                    return f
+            return None
+
+        def work(job):
+            from czcore import ytdlp
+            from highlighter.reel import render_reel, stitch_files
+
+            n = len(picks)
+            with tempfile.TemporaryDirectory(prefix="kb-montage-") as td:
+                clips, cards = [], []
+                for i, p in enumerate(picks):
+                    job.check_cancel()
+                    src = Path(p["source"])
+                    where = p["title"] or src.stem
+                    local = _local_video(src)
+                    if local is not None:
+                        job.message = (f"{i + 1}/{n} · cutting "
+                                       f"{p['start']:.0f}s from {where}…")
+                        rep = render_reel(
+                            str(local),
+                            [{"start": p["start"], "end": p["end"]}],
+                            str(Path(td) / f"cut{i}"), preset=preset,
+                            cancelled=lambda: job.cancel_requested)
+                        clips.append(rep["out"])
+                    else:
+                        meta = _session_meta(src) if src.is_dir() else {}
+                        url = meta.get("url")
+                        if not url:
+                            raise RuntimeError(
+                                f"{where} has no local video and no URL on "
+                                "record — open it in the Highlighter once")
+                        have = _span_on_disk(src.name, p["start"], p["end"])
+                        if have is not None:
+                            job.message = (f"{i + 1}/{n} · {have.name} is "
+                                           "already on disk — nothing "
+                                           "re-downloads")
+                            clips.append(str(have))
+                        else:
+                            job.message = (f"{i + 1}/{n} · downloading "
+                                           f"{p['end'] - p['start']:.0f}s "
+                                           f"of {where} from its URL…")
+                            got = ytdlp.download(
+                                url, _lib(),
+                                sections=[(p["start"], p["end"])],
+                                cancelled=lambda: job.cancel_requested)
+                            clips.append(got.get("paths", [got["path"]])[0])
+                    cards.append({"title": where, "label": p["label"],
+                                  "t": p["start"]})
+
+                job.message = f"stitching {len(clips)} clips into the montage…"
+                out = str(_lib() / ("montage-"
+                                    + _time.strftime("%Y%m%d-%H%M%S")))
+
+                def prog(frac, m):
+                    job.progress = frac
+                    if m:
+                        job.message = m
+
+                rep = stitch_files(clips, out, preset=preset, progress=prog,
+                                   cancelled=lambda: job.cancel_requested,
+                                   cards=cards if want_cards else None,
+                                   title="Meeting Montage")
+                srcs = len({p["source"] for p in picks})
+                job.message = (f"montage: {rep['clips']} moments from "
+                               f"{srcs} meeting{'s' if srcs > 1 else ''}"
+                               + (f" · {rep['cards']} cards"
+                                  if rep.get("cards") else "")
+                               + f" · {rep['duration']}s")
+                return rep
+
+        srcs = len({p["source"] for p in picks})
+        return jobs.start(
+            "montage", work, tool="kb",
+            label=f"montage — {len(picks)} moments from {srcs} "
+                  f"meeting{'s' if srcs > 1 else ''}").to_dict()
 
     @app.post("/api/kb/discourse")
     def api_discourse(body: dict = Body(...)):

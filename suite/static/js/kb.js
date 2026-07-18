@@ -43,7 +43,7 @@ const KBPage = (() => {
       </div>
       <div id="kb-compare"></div>
     </div>
-    <div class="hl-panel">
+    <div class="hl-panel" style="margin-bottom:14px">
       <span class="tag">discourse analysis — trace one topic or name through every meeting, oldest first</span>
       <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap">
         <input type="text" id="kb-q" placeholder="override · Harvard Street · superintendent…" spellcheck="false"
@@ -51,6 +51,19 @@ const KBPage = (() => {
         <button class="btn cta" id="kb-trace" style="width:auto;padding:6px 16px">Trace it</button>
       </div>
       <div id="kb-discourse"></div>
+    </div>
+    <div class="hl-panel">
+      <span class="tag">meeting montage — moments picked across meetings, cut into one reel</span>
+      <div class="hint" style="margin:6px 0">every ➕ on a traced moment or a framing cell's list lands here.
+        Local meetings cut in place; URL sessions download only the picked seconds. Each clip
+        wears a title card naming its own meeting.</div>
+      <div id="kb-tray" style="margin:8px 0"></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <label class="hint" style="display:flex;align-items:center;gap:5px">
+          <input type="checkbox" id="kb-mcards" checked> title cards</label>
+        <button class="btn cta" id="kb-render" style="width:auto;padding:6px 16px" disabled>Render montage</button>
+        <span class="hint" id="kb-mmsg"></span>
+      </div>
     </div>
     <div id="kb-modal" style="display:none;position:fixed;inset:0;background:rgba(20,20,16,.45);z-index:60;align-items:center;justify-content:center">
       <div style="background:var(--ink);border:1px solid var(--line);border-radius:12px;max-width:640px;width:92%;max-height:76vh;display:flex;flex-direction:column;padding:16px 18px">
@@ -64,7 +77,8 @@ const KBPage = (() => {
     </div>
   </div>`;
 
-  const K = { rows: null, over: null, busy: false, modalSource: null };
+  const K = { rows: null, over: null, busy: false, modalSource: null,
+              picks: [], traceRows: [], modalMoments: null };
   const LENS_ORDER = ["financial", "safety", "community", "environmental",
                       "legal", "equity", "infrastructure", "process"];
   const dayLabel = d => d ? d.slice(5) : "—";
@@ -75,6 +89,48 @@ const KBPage = (() => {
   };
 
   function openMeeting(source) { go("highlighter", { openPath: source }); }
+
+  /* ---------- montage tray ---------- */
+  function addPick(p) {
+    K.picks.push(p);
+    renderTray();
+    toast(`on the montage — ${fmtTime(p.start)} from ${p.title}`);
+  }
+
+  function renderTray() {
+    const box = $("#kb-tray", el);
+    $("#kb-render", el).disabled = !K.picks.length;
+    box.innerHTML = K.picks.map((p, i) => `
+      <div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-bottom:1px dashed var(--line);font-size:12.5px">
+        <span class="tpill">${fmtTime(p.start)}</span>
+        <b style="flex:0 0 auto">${esc(p.title)}</b>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--cream-dim)">${esc(p.label)}</span>
+        <button class="btn" data-unpick="${i}" style="width:auto;padding:1px 8px">✕</button>
+      </div>`).join("")
+      || `<div class="hint">nothing picked yet</div>`;
+    $$("button[data-unpick]", box).forEach(b => b.onclick = () => {
+      K.picks.splice(+b.dataset.unpick, 1);
+      renderTray();
+    });
+  }
+
+  async function renderMontage() {
+    const btn = $("#kb-render", el), msg = $("#kb-mmsg", el);
+    btn.disabled = true;
+    try {
+      const job = await api("/api/kb/montage",
+        { picks: K.picks, cards: $("#kb-mcards", el).checked });
+      msg.textContent = "queued — the corner card follows it";
+      watchJob(job.id, j => { msg.textContent = j.message || j.status; });
+      const done = await jobDone(job.id);
+      btn.disabled = !K.picks.length;
+      if (done.status !== "done") { msg.textContent = done.error || "stopped"; return; }
+      msg.textContent = done.result?.out
+        ? `done — ${done.result.out.split("/").pop()} (the Queue can reveal it)`
+        : "done";
+      toast("montage rendered — the Queue shows where it landed");
+    } catch (e) { btn.disabled = !K.picks.length; msg.textContent = e.message; }
+  }
 
   function modal(title, source, bodyHTML) {
     K.modalSource = source;
@@ -147,10 +203,17 @@ const KBPage = (() => {
       const [ri, name] = c.dataset.cell.split(":");
       const r = rows[+ri], l = lensOf(r, name);
       if (!l || !l.count) { toast(`no ${name} vocabulary in that meeting`); return; }
+      K.modalMoments = { source: r.source, title: shortTitle(r.title), rows: l.moments || [] };
       modal(`${name} framing — ${esc(shortTitle(r.title))} (${l.count} mentions)`, r.source,
-        (l.moments || []).map(m => `<div style="padding:4px 0;border-bottom:1px dashed var(--line)">
-          <span class="tpill">${fmtTime(m.t)}</span> ${esc(m.text)}</div>`).join("")
+        (l.moments || []).map((m, mi) => `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px dashed var(--line)">
+          <span class="tpill">${fmtTime(m.t)}</span><span style="flex:1">${esc(m.text)}</span>
+          <button class="btn" data-mpick="${mi}" title="add to the montage" style="width:auto;padding:1px 8px">➕</button></div>`).join("")
         || `<div class="hint">moments not cached — open the meeting</div>`);
+      $$("button[data-mpick]", $("#kb-modal-body", el)).forEach(b => b.onclick = () => {
+        const m = K.modalMoments.rows[+b.dataset.mpick];
+        addPick({ source: K.modalMoments.source, title: K.modalMoments.title,
+                  start: m.t, end: m.end || m.t + 12, label: m.text || "" });
+      });
     });
   }
 
@@ -274,14 +337,23 @@ const KBPage = (() => {
         </div>
         <div style="display:flex;gap:6px">${rows.map(x =>
           `<span style="flex:1;min-width:22px;text-align:center;font-size:10.5px;color:var(--cream-dim)">${dayLabel(x.day)}</span>`).join("")}</div>
-        <div style="margin-top:10px">${rows.filter(x => x.count).map(x => `
+        <div style="margin-top:10px">${rows.filter(x => x.count).map((x, xi) => `
           <div style="padding:6px 0;border-bottom:1px dashed var(--line)">
             <button class="chip" data-src="${esc(x.source)}"><b>${esc(shortTitle(x.title))}</b>&nbsp;· ${x.day || "no date"} · ×${x.count} · ${x.rate}/1k words</button>
-            ${(x.moments || []).map(m => `<div style="font-size:12.5px;padding:2px 0 0 12px;color:var(--cream-dim)">
-              <span class="tpill">${fmtTime(m.t)}</span> ${esc(m.text)}</div>`).join("")}
+            ${(x.moments || []).map((m, mi) => `<div style="display:flex;gap:8px;align-items:baseline;font-size:12.5px;padding:2px 0 0 12px;color:var(--cream-dim)">
+              <span class="tpill">${fmtTime(m.t)}</span><span style="flex:1">${esc(m.text)}</span>
+              <button class="btn" data-tpick="${xi}:${mi}" title="add to the montage" style="width:auto;padding:1px 8px">➕</button></div>`).join("")}
           </div>`).join("")}</div>
         <div class="hint" style="margin-top:6px">×${total} across ${rows.filter(x => x.count).length} of ${rows.length} read meetings — counted, per-1k-word rate so long meetings can't out-shout short ones</div>`;
+      K.traceRows = rows.filter(x => x.count);
       $$("[data-src]", box).forEach(b => b.onclick = () => openMeeting(b.dataset.src));
+      $$("button[data-tpick]", box).forEach(b => b.onclick = e => {
+        e.stopPropagation();
+        const [xi, mi] = b.dataset.tpick.split(":").map(Number);
+        const x = K.traceRows[xi], m = x.moments[mi];
+        addPick({ source: x.source, title: shortTitle(x.title),
+                  start: m.t, end: m.t + 12, label: m.text || "" });
+      });
     } catch (e) { box.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
   }
 
@@ -309,6 +381,8 @@ const KBPage = (() => {
 
   function init() {
     $("#kb-trace", el).onclick = trace;
+    $("#kb-render", el).onclick = renderMontage;
+    renderTray();
     $("#kb-q", el).addEventListener("keydown", e => { if (e.key === "Enter") trace(); });
     $("#kb-modal-close", el).onclick = () => { $("#kb-modal", el).style.display = "none"; };
     $("#kb-modal", el).onclick = e => { if (e.target === $("#kb-modal", el)) $("#kb-modal", el).style.display = "none"; };
