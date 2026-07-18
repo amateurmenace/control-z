@@ -260,10 +260,20 @@ pinning is the one external human step.
   (above), and the gated ffmpeg `--prefix` rebuild (1.9.0 WATCH item) — both
   deliberately deferred (external / release-gated).
 
-## asks (A-owned files; single lines, in your hands)
+## asks — all outstanding (detail in the per-wave "asks" sections above)
 
-- None yet. czcore gained only the NEW file `czcore/sidecars.py` (the lane-C
-  new-file precedent). No core.js/index.html slots were needed.
+- **Shell touches, marked + low-conflict** (reshape freely; none are in the
+  Studio's paths): `suite/server.py` gained one alphabetical `register_drain`
+  slot; `suite/static/js/services.js` gained the Gemini status honesty (wave 4)
+  and the "Studio · lend this desk" section (wave 5). `czcore/llm.py`,
+  `czcore/models.py`, `czcore/drain.py` are all NEW-file or A-owned-desk-engine
+  edits the brief assigns to the desk.
+- **For the Studio session (specs/17):** the drain's `AsrTask` contract is a
+  *proposal* — confirm/revise the endpoints, fields, and the two open questions
+  (desk identity/trust, a claim lease TTL). See wave 6's asks.
+- **External (release ritual):** host + sha256-pin the two model cards from
+  their recipes (wave 7); and — deferred, never mid-flight — the ffmpeg
+  `--prefix` config-string fix needs a vendor rebuild + otool relink check.
 
 ## fragments (changelog-ready, house voice)
 
