@@ -153,8 +153,12 @@ def register_memory(app, jobs, frames):
             return JSONResponse({"error": "no such issue on the record"},
                                 status_code=404)
         nodes = _timeline(corpus, iid)
+        evs = [e for e in corpus.list_events(limit=100)
+               if e["issue_id"] == iid and e["kind"] == "resurfacing"]
+        latest = evs[0]["payload"] if evs else {}
         return {"issue": iss, "timeline": nodes,
-                "overview": _issue_overview(iss, nodes)}
+                "overview": _issue_overview(iss, nodes),
+                "latest_delta": latest.get("delta", "")}
 
     @app.post("/api/memory/issues/rebuild")
     def api_issues_rebuild(body: dict = Body(default={})):

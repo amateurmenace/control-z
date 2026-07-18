@@ -20,6 +20,8 @@ const MemoryPage = (() => {
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <h1 style="margin:0">Community Memory</h1>
           <span class="badge synth">beta</span>
+          <button class="btn" id="mem-bell" title="resurfacings on your threads"
+            style="margin-left:auto;display:none">🔔 <span id="mem-bell-n">0</span></button>
         </div>
         <p class="why" style="margin-top:6px;max-width:70ch">
           The record across meetings and years — search every meeting, jump to the
@@ -35,6 +37,29 @@ const MemoryPage = (() => {
       </div>
 
       <div id="mem-results" style="display:none;margin-top:16px"></div>
+
+      <!-- the long view: issues tracked across the record, and the threads
+           following them (the telescope's landing) -->
+      <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-top:16px;align-items:start">
+        <div class="hl-panel" id="mem-issuepanel">
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span class="tag">the long view — issues across the record</span>
+            <button class="btn" id="mem-rebuild" style="margin-left:auto;font-size:11px;padding:3px 8px"
+              title="re-cluster the whole record into issues">↻ rebuild</button>
+          </div>
+          <div id="mem-issuelist"></div>
+          <div id="mem-candidates" style="margin-top:8px"></div>
+        </div>
+        <div class="hl-panel" id="mem-threadpanel">
+          <span class="tag">still watching</span>
+          <div id="mem-threads"></div>
+          <div id="mem-digestwrap" style="display:none;margin-top:8px">
+            <button class="btn" id="mem-digest" style="font-size:11px;padding:4px 9px">⧉ copy the digest</button>
+            <p class="hint" style="margin-top:6px">A plain roundup of your threads —
+              nothing sent anywhere, yours to paste where you like.</p>
+          </div>
+        </div>
+      </div>
 
       <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-top:16px;align-items:start">
         <div class="hl-panel" id="mem-listpanel">
@@ -88,11 +113,32 @@ const MemoryPage = (() => {
         <div id="mem-reading"></div>
       </div>
     </div>
+
+    <!-- ============ ONE ISSUE (the long view across meetings) ============ -->
+    <div id="mem-issue" style="display:none">
+      <button class="btn" id="mem-ibackbtn" style="margin-bottom:10px">← the record</button>
+      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+        <h1 id="mem-iname" style="margin:0;font-size:22px"></h1>
+        <span class="badge synth">beta</span>
+        <button class="btn primary" id="mem-followbtn" style="margin-left:auto">☆ follow this issue</button>
+      </div>
+      <div id="mem-ioverview" class="progmsg" style="margin-top:4px"></div>
+      <div id="mem-idisclose" class="lmeta" style="color:var(--cream-faint);margin-top:2px"></div>
+      <div id="mem-ialiases" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
+      <div id="mem-idelta"></div>
+
+      <div class="hl-panel" style="margin-top:14px">
+        <span class="tag">the timeline — every meeting this issue touched</span>
+        <div id="mem-timeline" style="overflow-x:auto;padding:10px 2px 4px"></div>
+      </div>
+      <div id="mem-iappearances"></div>
+    </div>
   </div>`;
 
   /* ------------------------------------------------------------------ */
   const S = { view: "record", id: null, m: null, segs: [], session: false,
-              clip: null, sessionTime: 0, ytPlaying: false, pendingSeek: null };
+              clip: null, sessionTime: 0, ytPlaying: false, pendingSeek: null,
+              iid: null, issue: null };
   let viewer = null, raf = 0, inited = false, refreshTimer = 0;
   const audio = () => $("#mem-audio", el);
 
@@ -195,8 +241,13 @@ const MemoryPage = (() => {
           <p class="hint">Nothing in the record yet for “${esc(q)}”.</p></div>`;
         return;
       }
-      box.innerHTML = `<div class="hl-panel"><span class="tag">across the record —
-        ${d.hits.length} moment${d.hits.length > 1 ? "s" : ""}</span>
+      box.innerHTML = `<div class="hl-panel">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <span class="tag">across the record —
+            ${d.hits.length} moment${d.hits.length > 1 ? "s" : ""}</span>
+          <button class="btn" id="mem-mint" style="margin-left:auto;font-size:11px;padding:3px 9px"
+            title="follow this as an issue — you'll be told when it resurfaces">☆ follow this</button>
+        </div>
         ${d.hits.map(h => `
           <div class="hl-seg hl-click" data-open="${esc(h.meeting_id)}" data-t="${h.t}"
                style="display:flex;gap:9px;align-items:flex-start;padding:7px 4px">
@@ -211,6 +262,18 @@ const MemoryPage = (() => {
       </div>`;
       $$("[data-open]", box).forEach(r => r.onclick = () =>
         openMeeting(r.dataset.open, parseFloat(r.dataset.t)));
+      const mint = $("#mem-mint", box);
+      if (mint) mint.onclick = () => mintFromSearch(q);
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async function mintFromSearch(q) {
+    try {
+      const r = await api("/api/memory/thread/mint", { q });
+      toast(r.attached
+        ? `following “${r.name}” — it was already on the record`
+        : `following “${r.name}” — a new thread from your search`);
+      openIssue(r.issue_id);
     } catch (e) { toast(e.message, true); }
   }
 
@@ -266,7 +329,7 @@ const MemoryPage = (() => {
     try {
       const d = await api("/api/memory/meeting", { id });
       S.view = "meeting"; S.id = id; S.m = d.meeting; S.segs = d.transcript.segments;
-      $("#mem-record", el).style.display = "none";
+      hideAllViews();
       $("#mem-meeting", el).style.display = "";
       const m = d.meeting;
       $("#mem-title", el).textContent = m.title || id;
@@ -531,16 +594,236 @@ const MemoryPage = (() => {
       r.onclick = () => seek(parseFloat(r.dataset.t), true));
   }
 
+  /* ---------------- the long view: issues + threads ---------------- */
+
+  async function loadIssues() {
+    try {
+      const d = await api("/api/memory/issues");
+      renderIssues(d.issues || [], d.candidates || []);
+    } catch (e) { /* the panel stays empty; search & the record still work */ }
+  }
+
+  function issueRow(i, cand) {
+    const span = [i.first_seen, i.last_seen].filter(Boolean);
+    const spanTxt = span.length === 2 && span[0] !== span[1]
+      ? `${span[0]} → ${span[1]}` : (span[0] || "");
+    return `<div class="batchrow hl-click" data-issue="${esc(i.id)}" style="align-items:center">
+      <div>
+        <div class="bname" style="font-size:12.5px;color:var(--cream)">${esc(i.name)}
+          ${cand ? '<span class="stat-chip stat-cancelled" style="margin-left:6px">candidate</span>' : ""}</div>
+        <div class="lmeta">${i.n_meetings} meeting${i.n_meetings !== 1 ? "s" : ""} ·
+          ${i.n_segments} moment${i.n_segments !== 1 ? "s" : ""}${spanTxt ? " · " + esc(spanTxt) : ""}</div>
+      </div>
+      ${cand ? "" : `<button data-follow="${esc(i.id)}" data-on="${i.following ? 1 : 0}"
+        title="${i.following ? "following" : "follow this issue"}"
+        style="background:none;border:none;cursor:pointer;font-size:15px;line-height:1;
+        color:${i.following ? "var(--memory)" : "var(--cream-dim)"}">${i.following ? "★" : "☆"}</button>`}
+    </div>`;
+  }
+
+  function renderIssues(list, candidates) {
+    const box = $("#mem-issuelist", el);
+    if (!list.length) {
+      box.innerHTML = `<p class="hint" style="padding:6px 0">No issues drawn yet.
+        Once a couple of meetings are in the record, press <b>↻ rebuild</b> to draw
+        the long view — or “follow this” on any search to start a thread.</p>`;
+    } else {
+      box.innerHTML = list.map(i => issueRow(i)).join("");
+      $$("[data-issue]", box).forEach(r => r.onclick = e => {
+        if (e.target.dataset.follow !== undefined) return;
+        openIssue(r.dataset.issue);
+      });
+      $$("[data-follow]", box).forEach(b => b.onclick = async e => {
+        e.stopPropagation();
+        await toggleFollow(b.dataset.follow, b.dataset.on !== "1");
+        loadIssues(); loadThreads();
+      });
+    }
+    const cbox = $("#mem-candidates", el);
+    if (candidates && candidates.length) {
+      cbox.innerHTML = `<details><summary class="hint" style="cursor:pointer">
+        ${candidates.length} candidate issue${candidates.length > 1 ? "s" : ""} — new
+        topics a steward can promote, rename, or discard</summary>
+        <div style="margin-top:6px">${candidates.map(i => issueRow(i, true)).join("")}</div></details>`;
+      $$("[data-issue]", cbox).forEach(r => r.onclick = () => openIssue(r.dataset.issue));
+    } else cbox.innerHTML = "";
+  }
+
+  async function toggleFollow(iid, on) {
+    try { await api("/api/memory/thread", { issue_id: iid, follow: on }); }
+    catch (e) { toast(e.message, true); }
+  }
+
+  async function loadThreads() {
+    try {
+      const d = await api("/api/memory/threads");
+      renderThreads(d.threads || [], d.unseen || 0);
+    } catch (e) { /* threads are additive — silence is fine */ }
+  }
+
+  function renderThreads(threads, unseen) {
+    const bell = $("#mem-bell", el);
+    if (unseen > 0) { bell.style.display = ""; $("#mem-bell-n", el).textContent = unseen; }
+    else bell.style.display = "none";
+    $("#mem-digestwrap", el).style.display = threads.length ? "" : "none";
+    const box = $("#mem-threads", el);
+    if (!threads.length) {
+      box.innerHTML = `<p class="hint" style="padding:6px 0">Not following anything yet.
+        Tap ☆ on an issue, or “follow this” on a search — Memory will note it when the
+        issue resurfaces on a new agenda.</p>`;
+      return;
+    }
+    box.innerHTML = threads.map(t => `
+      <div class="batchrow hl-click" data-issue="${esc(t.issue_id)}" style="align-items:center">
+        <div>
+          <div class="bname" style="font-size:12.5px">${esc(t.name)}</div>
+          <div class="lmeta">${t.n_meetings} appearance${t.n_meetings !== 1 ? "s" : ""}${
+            t.last_seen ? " · last " + esc(t.last_seen) : ""}</div>
+        </div>
+        ${t.unseen ? `<span class="stat-chip stat-running">${t.unseen} new</span>`
+          : `<span class="lmeta">watching</span>`}
+      </div>`).join("");
+    $$("[data-issue]", box).forEach(r => r.onclick = () => openIssue(r.dataset.issue));
+  }
+
+  async function ackNotifications() {
+    try { await api("/api/memory/thread/ack", {}); loadThreads(); } catch (e) {}
+  }
+
+  async function rebuildIssues() {
+    const btn = $("#mem-rebuild", el);
+    btn.disabled = true; const was = btn.textContent; btn.textContent = "↻ drawing…";
+    try {
+      const r = await api("/api/memory/issues/rebuild", {});
+      watchJob(r.job.id, j => { if (j.message) btn.textContent = "↻ " + j.message.slice(0, 22); });
+      await jobDone(r.job.id);
+      loadIssues();
+      toast("the long view is redrawn");
+    } catch (e) { toast(e.message, true); }
+    btn.disabled = false; btn.textContent = was;
+  }
+
+  async function copyDigest() {
+    try {
+      const d = await api("/api/memory/digest");
+      await navigator.clipboard.writeText(d.markdown || "");
+      toast("the digest is on your clipboard — paste it anywhere");
+    } catch (e) { toast("couldn't copy — " + e.message, true); }
+  }
+
+  /* ---------------- one issue (the long view across meetings) ---------------- */
+
+  async function openIssue(id) {
+    try {
+      const d = await api("/api/memory/issue", { id });
+      stop(); $("#mem-ytframe", el).src = "";       // leave any playing meeting
+      S.view = "issue"; S.iid = id; S.issue = d.issue; S.session = false;
+      hideAllViews();
+      $("#mem-issue", el).style.display = "";
+      const i = d.issue;
+      $("#mem-iname", el).textContent = i.name;
+      $("#mem-ioverview", el).textContent = d.overview || "";
+      $("#mem-idisclose", el).textContent =
+        ((i.name_origin || "").startsWith("ai:")
+          ? "Issue named by " + i.name_origin.slice(3) + " · "
+          : "Named from the record's own words · ")
+        + "officials-only aggregation — residents stay within their meeting · "
+        + "supplements the official record, never replaces it.";
+      renderFollow(i.following);
+      const chips = [];
+      (i.aliases || []).slice(0, 10).forEach(a =>
+        chips.push(`<span class="tpill" style="background:var(--ink-3);color:var(--cream-dim)">${esc(a)}</span>`));
+      (i.related || []).slice(0, 8).forEach(a =>
+        chips.push(`<span class="tpill" style="background:var(--ink-2);color:var(--cream-faint)" title="in this issue's vocabulary">${esc(a)}</span>`));
+      $("#mem-ialiases", el).innerHTML = chips.join("");
+      $("#mem-idelta", el).innerHTML = d.latest_delta
+        ? `<div class="hl-panel" style="margin-top:12px;border-color:var(--memory)">
+            <span class="tag">what changed, last time</span>
+            <p style="font-size:13px;line-height:1.6">${esc(d.latest_delta)}</p>
+            <p class="hint">The delta on a resurfacing — generative with your key, extractive otherwise. Verify against the official record.</p></div>`
+        : "";
+      renderTimeline(d.timeline || []);
+      renderAppearances(d.timeline || []);
+      try { el.querySelector(".page-pad").scrollTop = 0; } catch (e) {}
+    } catch (e) { toast(e.message, true); }
+  }
+
+  function renderFollow(on) {
+    const b = $("#mem-followbtn", el);
+    b.textContent = on ? "★ following" : "☆ follow this issue";
+    b.classList.toggle("primary", !on);
+    b.onclick = async () => { await toggleFollow(S.iid, !on); renderFollow(!on); loadThreads(); };
+  }
+
+  function renderTimeline(nodes) {
+    const box = $("#mem-timeline", el);
+    if (!nodes.length) { box.innerHTML = `<p class="hint">No appearances yet.</p>`; return; }
+    box.innerHTML = `<div style="display:flex;align-items:stretch;min-width:min-content">
+      ${nodes.map((n, idx) => timelineNode(n, idx, nodes.length)).join("")}</div>`;
+    $$("[data-open]", box).forEach(r => r.onclick = () =>
+      openMeeting(r.dataset.open, parseFloat(r.dataset.t || 0)));
+  }
+
+  function timelineNode(n, idx, total) {
+    const beads = (n.beads || []).slice(0, 5);
+    const miles = (n.milestones || []);
+    return `<div style="min-width:210px;max-width:240px;flex:0 0 auto;padding:0 12px;position:relative">
+      <div style="position:absolute;top:8px;left:0;right:0;height:2px;background:var(--line)"></div>
+      ${idx === 0 ? `<div style="position:absolute;top:8px;left:0;width:50%;height:2px;background:var(--ink-2)"></div>` : ""}
+      ${idx === total - 1 ? `<div style="position:absolute;top:8px;right:0;width:50%;height:2px;background:var(--ink-2)"></div>` : ""}
+      <div style="text-align:center;position:relative">
+        <span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:var(--memory);border:3px solid var(--ink);position:relative;z-index:1"></span>
+      </div>
+      <div style="text-align:center;margin-top:6px">
+        <div class="lmeta" style="color:var(--cream)">${esc(n.date || "undated")}</div>
+        <div style="font-size:11.5px;color:var(--cream-dim);margin-top:2px">${esc((n.body || n.title || "").slice(0, 42))}</div>
+        <div class="lmeta">${n.n} moment${n.n !== 1 ? "s" : ""}${miles.length ? ` · <span style="color:var(--memory)">${miles.length} ◆ vote${miles.length > 1 ? "s" : ""}</span>` : ""}</div>
+      </div>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+        ${beads.map(b => `<div class="hl-seg hl-click" data-open="${esc(n.meeting_id)}" data-t="${b.t}"
+            style="padding:4px 6px;border-radius:6px;background:var(--ink-2);font-size:11px">
+            <span class="tpill" style="margin-right:5px">${hms(b.t)}</span>${esc((b.text || "").slice(0, 52))}</div>`).join("")}
+        ${miles.map(m => `<div class="hl-seg hl-click" data-open="${esc(n.meeting_id)}" data-t="${m.t}"
+            style="padding:4px 6px;border-radius:6px;background:var(--ink-3);font-size:11px;border-left:2px solid var(--memory)">
+            ◆ <span class="tpill" style="margin-right:5px">${hms(m.t)}</span>${esc((m.text || "").slice(0, 46))}
+            ${m.outcome ? ` <span class="hl-kind hl-kind-money">${esc(m.outcome)}</span>` : ""}</div>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  function renderAppearances(nodes) {
+    const box = $("#mem-iappearances", el);
+    box.innerHTML = nodes.map(n => `
+      <div class="hl-panel" style="margin-top:12px">
+        <span class="tag">${esc(n.date || "undated")} — ${esc(n.title || n.meeting_id)} ·
+          ${n.n} moment${n.n !== 1 ? "s" : ""}</span>
+        ${(n.beads || []).map(b => `
+          <div class="hl-seg hl-click" data-open="${esc(n.meeting_id)}" data-t="${b.t}" style="padding:5px 4px">
+            <span class="tpill" style="margin-right:7px">${hms(b.t)}</span>
+            ${b.speaker ? `<b style="font-size:11px;color:var(--cream-dim)">${esc(b.speaker)}:</b> ` : ""}
+            <span style="font-size:12.5px">${esc(b.text)}</span>
+            ${b.why === "related" ? ` <span class="lmeta" style="color:var(--cream-faint)">· related language</span>` : ""}
+          </div>`).join("")}
+      </div>`).join("");
+    $$("[data-open]", box).forEach(r => r.onclick = () =>
+      openMeeting(r.dataset.open, parseFloat(r.dataset.t)));
+  }
+
   /* ---------------- view switching ---------------- */
 
   function showMeeting() { S.view = "meeting"; }
+  function hideAllViews() {
+    $("#mem-record", el).style.display = "none";
+    $("#mem-meeting", el).style.display = "none";
+    $("#mem-issue", el).style.display = "none";
+  }
   function backToRecord() {
     stop();
     $("#mem-ytframe", el).src = "";
     S.view = "record"; S.session = false; S.clip = null;
-    $("#mem-meeting", el).style.display = "none";
+    hideAllViews();
     $("#mem-record", el).style.display = "";
-    loadCorpus();
+    loadCorpus(); loadIssues(); loadThreads();
   }
 
   /* ---------------- init / mount ---------------- */
@@ -553,6 +836,10 @@ const MemoryPage = (() => {
     $("#mem-add", el).addEventListener("keydown", e => { if (e.key === "Enter") addToRecord(); });
     $("#mem-addbtn", el).onclick = addToRecord;
     $("#mem-back", el).onclick = backToRecord;
+    $("#mem-ibackbtn", el).onclick = backToRecord;
+    $("#mem-rebuild", el).onclick = rebuildIssues;
+    $("#mem-bell", el).onclick = ackNotifications;
+    $("#mem-digest", el).onclick = copyDigest;
     $("#mem-play", el).onclick = playPause;
     audio().addEventListener("play", () => { $("#mem-play", el).textContent = "⏸ pause"; raf = requestAnimationFrame(tick); });
     audio().addEventListener("pause", () => { $("#mem-play", el).textContent = "▶ play"; if (raf) cancelAnimationFrame(raf); tick(); });
@@ -569,13 +856,14 @@ const MemoryPage = (() => {
     if (!inited) { init(); inited = true; }
     Viewer.active = null;
     if (arg && arg.openMeeting) { openMeeting(arg.openMeeting, arg.seek); return; }
+    if (arg && arg.openIssue) { openIssue(arg.openIssue); return; }
     backToRecordSilently();
-    loadCorpus();
+    loadCorpus(); loadIssues(); loadThreads();
     if (arg && arg.q) { $("#mem-q", el).value = arg.q; doSearch(); }
   }
   function backToRecordSilently() {
     S.view = "record";
-    $("#mem-meeting", el).style.display = "none";
+    hideAllViews();
     $("#mem-record", el).style.display = "";
   }
 
