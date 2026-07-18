@@ -76,6 +76,7 @@ runs several times larger.
 | `slate/` | **Slate** — station graphics kit: lower-third maker (ProRes 4444/PNG/GIF), bars+tone, countdown, program slate | CLI + Suite UI working |
 | `highlighter/` | **Community Highlighter** — meeting video → transcript → scored moments → reel/EDL (community-highlighter reborn) | CLI + Suite UI working |
 | `grabber/` | **BIG Video Grabber** — CivicClerk search, Zoom/zoomgov + yt-dlp fetch, broadcast conform (BIG Video Grabber reborn) | CLI + Suite UI working |
+| `publisher/` | **Community Publisher** (beta) — program in → clips in three frames, copy, thumbnails, bundle out | CLI + Suite UI working |
 | `site/` | control-z.org (bake: `python3 site/build.py`) | built, undeployed |
 
 Working = verified end-to-end on real footage this side of packaging. Not yet:
@@ -98,7 +99,11 @@ meeting as text, scored moments with reasons, cut to a reel or selects EDL),
 Index (the archive searched in plain words, out as an FCPXML stringout),
 Slate (lower thirds, slates, bars and countdowns, broadcast-ready). **Finish**
 is the cut on its way back *out* — Pivot (reframed to 9:16 or 1:1), Scribe
-(captions and subtitles), Rise (pushed up to delivery resolution). Tools
+(captions and subtitles), Rise (pushed up to delivery resolution), and
+Community Publisher (the publish kit: clips, copy and posts). Above the
+doors, **the wire** draws the hand-offs: the meeting fetched, cut to its
+moments, made into a kit, kept in the record — with the coming tools
+riding the chain honestly, dated. Tools
 don't police the door you came through: Scribe will paper-edit raw interviews
 into a selects EDL, and Rise will take a tape master, both long before
 picture lock. The Queue runs one job at a time across all ten and survives
@@ -133,7 +138,8 @@ python3 -m unittest discover -s tests -t .   # core algorithm tests, no deps nee
 Each tool also has a CLI — every UI control mirrors a flag, so stations can
 script what the app does by hand. `pip install -e .` is what puts `pivot-cli`,
 `rise-cli`, `clear-cli`, `scribe-cli`, `depth-cli`, `stencil-cli`,
-`highlighter-cli`, `grabber-cli`, `index-cli`, `slate-cli` and `suite` on
+`highlighter-cli`, `grabber-cli`, `index-cli`, `slate-cli`,
+`publisher-cli` and `suite` on
 your PATH; without it they don't exist, and every one of them also runs as
 `.venv/bin/python -m pivot.cli` (and so on) straight from a checkout.
 

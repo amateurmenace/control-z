@@ -168,6 +168,73 @@ h2 { font-family: var(--head); font-size: 15px; font-weight: 600; letter-spacing
 .door-tool .soon { margin-left: auto; font-family: var(--mono); font-size: 9px; color: var(--cream-faint); }
 .door-tool.community { border-left: 2px solid var(--acc); }
 
+/* the chains — hand-offs drawn as pills on one wire (NOT .wire: that's the
+   rail's active-indicator node) */
+.chains { margin-top: 22px; display: grid; gap: 12px; }
+.chains > .tag { margin-bottom: -2px; }
+.chain {
+  background: rgba(255,255,255,.44); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 14px 18px 15px;
+}
+.chain-head { display: flex; align-items: baseline; gap: 12px; }
+.chain-live { margin-left: auto; font-family: var(--mono); font-size: 9.5px;
+  color: var(--cream-faint); letter-spacing: .06em; white-space: nowrap; }
+.chain .why { color: var(--cream-dim); font-size: 12.5px; margin-top: 2px; }
+.chain-rail { display: flex; align-items: center; flex-wrap: wrap;
+  gap: 6px 0; margin-top: 11px; }
+.chain-step {
+  display: flex; align-items: center; gap: 9px; text-align: left;
+  background: rgba(255,255,255,.66); border: 1px solid var(--line-soft);
+  border-radius: 8px; padding: 8px 12px;
+}
+.chain-step:hover { border-color: var(--acc, var(--cream-faint)); }
+.chain-step .glyph { width: 17px; height: 17px; flex: 0 0 17px; }
+.chain-step .glyph svg { width: 100%; height: 100%; }
+.chain-step .name { font-family: var(--head); font-weight: 600; font-size: 13px; }
+.chain-step .micro { display: block; color: var(--cream-dim); font-size: 11px; }
+.chain-step.soon-step { border-style: dashed; background: rgba(255,255,255,.3); }
+.chain-step.soon-step .name { color: var(--cream-dim); }
+.chain-step .soon { font-family: var(--mono); font-size: 9px;
+  color: var(--cream-faint); align-self: flex-start; margin-left: 2px; }
+.chain-wire { width: 26px; flex: 0 0 26px; height: 0;
+  border-top: 1.6px solid var(--line); position: relative; margin: 0 2px; }
+.chain-wire::after { content: ""; position: absolute; right: -1px; top: -4.6px;
+  border-top: 3.8px solid transparent; border-bottom: 3.8px solid transparent;
+  border-left: 6px solid var(--line); }
+
+/* publisher — the review queue around the kit */
+.beta-chip { font-family: var(--mono); font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
+  border-radius: 5px; padding: 2px 7px; }
+.pb-clip { display: flex; gap: 10px; background: rgba(255,255,255,.55);
+  border: 1px solid var(--line-soft); border-radius: 9px;
+  padding: 10px 12px; margin-top: 8px; }
+.pb-clip.off { opacity: .55; }
+.pb-cliplabel { font-family: var(--head); font-weight: 600; font-size: 13px; }
+.pb-cliptime { display: flex; gap: 14px; align-items: center;
+  color: var(--cream-dim); font-size: 11.5px; font-family: var(--mono);
+  margin-top: 3px; flex-wrap: wrap; }
+.pb-nudge button { border: 1px solid var(--line); background: #fff;
+  border-radius: 5px; width: 20px; height: 18px; font-size: 11px;
+  line-height: 1; margin: 0 1px; }
+.pb-ratios { display: flex; gap: 6px; align-items: center; margin-top: 7px;
+  flex-wrap: wrap; }
+.pb-pill { font-family: var(--mono); font-size: 10.5px; padding: 3px 10px;
+  border-radius: 999px; border: 1px solid var(--line); background: #fff;
+  color: var(--cream-dim); }
+.pb-pill.on { background: var(--publisher); border-color: var(--publisher);
+  color: #fff; }
+.pb-off { display: inline-flex; gap: 6px; align-items: center;
+  font-size: 10.5px; color: var(--cream-faint); font-family: var(--mono); }
+.pb-off input[type="range"] { width: 110px; }
+.pb-why { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.pb-why span { font-size: 10px; font-family: var(--mono);
+  color: var(--cream-faint); border: 1px solid var(--line-soft);
+  border-radius: 5px; padding: 1px 6px; }
+.pb-keep input { width: 15px; height: 15px; accent-color: var(--publisher); }
+.pb-copy .field input[type="text"], .pb-copy .field textarea { width: 100%; }
+
 .recents { margin-top: 26px; }
 .recent-row {
   display: flex; gap: 10px; align-items: baseline; width: 100%; text-align: left;

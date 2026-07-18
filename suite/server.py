@@ -244,6 +244,7 @@ def create_suite_app():
     from .tools.modelstore import register_modelstore
     from .tools.ofx import register_ofx
     from .tools.pivot import register_pivot
+    from .tools.publisher import register_publisher
     from .tools.rise import register_rise
     from .tools.scribe import register_scribe
     from .tools.settings import register_settings
@@ -261,6 +262,7 @@ def create_suite_app():
     register_modelstore(app, jobs, frames)
     register_ofx(app, jobs, frames)
     register_pivot(app, jobs, frames)
+    register_publisher(app, jobs, frames)
     register_rise(app, jobs, frames)
     register_scribe(app, jobs, frames)
     register_settings(app, jobs, frames)
@@ -271,7 +273,12 @@ def create_suite_app():
 
     @app.get("/")
     def index():
-        return FileResponse(STATIC / "index.html")
+        # {{v}} → app version on every static include: a new build busts the
+        # browser's cache by URL, so stale JS can't outlive a release (the
+        # "⌘R after relaunch" bug, retired). The HTML itself must revalidate.
+        from fastapi.responses import HTMLResponse
+        html = (STATIC / "index.html").read_text().replace("{{v}}", __version__)
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     return app
