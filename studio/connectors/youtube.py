@@ -386,12 +386,26 @@ def captions_probe(video_id: str, timeout: float = 20.0) -> dict:
             f"{t['lang'] or '?'}{'/auto' if t['kind'] == 'asr' else ''}"
             for t in out["tracks"])
         return out
-    if details:
-        # A real watch page that lists no tracks is a real answer.
+    if details and "captionTracks" not in html:
+        # A real watch page that names no caption blob at all is a real answer.
         out["captions"] = False
         out["note"] = ("no published captions — this meeting needs a "
                        "transcript before it can join the record (the desk "
                        "drain, specs/17 §6.4)")
+        return out
+    if details:
+        # The page *does* carry a caption blob and the parser came back empty,
+        # which is a parser limit rather than an absence — `czcore.captions`'
+        # `_TRACKS` pattern is non-greedy and truncates on a runs-style track
+        # name (`"name":{"runs":[{"text":"English"}]}`), whose inner `]` ends
+        # the match early. Reporting that as "no captions" is the one mistake
+        # this function is built to avoid: it would send a meeting with
+        # perfectly good words to the ASR drain, and nothing downstream would
+        # ever question it. So it stays "could not tell".
+        out["note"] = ("captions could not be read — the page lists caption "
+                       "tracks but they did not parse, so this is a parser "
+                       "limit, not an absence. Left for a steward rather than "
+                       "sent to the drain.")
         return out
     out["note"] = ("captions were not checked — the watch page named neither "
                    "captions nor video details, so its shape changed or the "

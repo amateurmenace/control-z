@@ -187,6 +187,52 @@ class ApiTest(unittest.TestCase):
         self.assertIn("available", j["neural"])
         self.assertNotIn("studio:studio@", j["store"])     # never the password
 
+
+    # -- what the adversarial review found ---------------------------------
+
+    def test_health_never_publishes_a_password_in_any_dsn_shape(self):
+        """`redacted()` used to return the string verbatim for anything that
+        was not clean URI form — and libpq also accepts keyword/value and a
+        password in the query string. Both fell straight onto this anonymous
+        endpoint. A redactor whose failure mode is "publish it" is worse than
+        none."""
+        from studio.settings import Settings
+        for dsn in (
+            "postgresql://studio:hunter2@localhost:5432/studio",
+            "host=localhost port=5432 dbname=studio user=studio password=hunter2",
+            "postgresql://localhost/studio?user=studio&password=hunter2",
+            "postgres://u:hunter2@h/db",
+        ):
+            out = Settings(dsn=dsn).redacted()
+            self.assertNotIn("hunter2", out, f"leaked from {dsn!r} -> {out!r}")
+
+    def test_search_reports_the_space_it_actually_searched(self):
+        """`available()` sees a key and an importable SDK — it cannot see that
+        the corpus was never embedded. Reporting `space: "neural"` over a
+        purely lexical result is the exact dishonesty the note exists to
+        prevent."""
+        from unittest import mock
+
+        from studio import embed_neural
+        with mock.patch.object(embed_neural, "available", lambda: True), \
+             mock.patch.object(embed_neural, "embed_query", lambda *a, **k: None):
+            j = self.client.get("/api/search",
+                                params={"q": "rezoning", "space": "neural"}).json()
+        self.assertEqual(j["space"], "lexical")     # nothing was embedded
+        self.assertIn("words still work", j["note"])
+        self.assertGreater(j["count"], 0)
+
+    def test_public_search_withholds_a_meeting_that_is_not_live(self):
+        """An un-approved submission's transcript was readable by anyone."""
+        self.c.upsert_meeting({"id": "priv", "town": "Brookline",
+                               "status": "queued", "title": "Executive Session"})
+        self.c.replace_segments("priv", [
+            {"start": 0.0, "end": 4.0, "text": "the rezoning article, privately"}])
+        j = self.client.get("/api/search", params={"q": "rezoning"}).json()
+        self.assertNotIn("priv", {h["meeting_id"] for h in j["hits"]})
+        self.assertNotIn("Executive Session",
+                         {h["title"] for h in j["hits"]})
+
     # -- the steward console fails closed ----------------------------------
 
     def test_every_steward_route_is_shut_when_auth_is_unconfigured(self):

@@ -43,6 +43,7 @@ import random
 import sqlite3
 import sys
 import time
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from memory import embed
@@ -87,142 +88,164 @@ def import_corpus(src_path: str, corpus, verbose: bool = True) -> Dict[str, int]
     counts: Dict[str, int] = {}
     say = print if verbose else (lambda *a, **k: None)
     src = _open_source(src_path)
+    # The whole import is one unit. Meetings used to commit on their own
+    # connection before the segments block opened its own, so a failure in the
+    # middle left a `status='live'` meeting with n_segments set and no segments
+    # at all — a record that reads as complete and is not, which a re-run did
+    # not clear either.
     try:
-        tables = {r["name"] for r in src.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")}
+      with corpus.unit():
+          tables = {r["name"] for r in src.execute(
+              "SELECT name FROM sqlite_master WHERE type='table'")}
 
-        # -- meetings ---------------------------------------------------
-        meetings = _rows(src, "SELECT * FROM meetings")
-        town_of: Dict[str, str] = {}
-        for m in meetings:
-            m.pop("rowid", None)
-            town_of[m["id"]] = m.get("town") or ""
-            corpus.upsert_meeting(m)
-        counts["meetings"] = len(meetings)
-        say(f"  meetings   {len(meetings):>7,}")
+          # -- meetings ---------------------------------------------------
+          meetings = _rows(src, "SELECT * FROM meetings")
+          town_of: Dict[str, str] = {}
+          for m in meetings:
+              m.pop("rowid", None)
+              town_of[m["id"]] = m.get("town") or ""
+              corpus.upsert_meeting(m)
+          counts["meetings"] = len(meetings)
+          say(f"  meetings   {len(meetings):>7,}")
 
-        # -- segments ---------------------------------------------------
-        # Written directly rather than through replace_segments, which would
-        # re-embed every one of them. The vectors are the audited artifact.
-        total = src.execute("SELECT COUNT(*) FROM segments").fetchone()[0]
-        done = blanks = 0
-        with corpus._con() as con:
-            # The desk's ids come across verbatim, because issue_segments
-            # points at them — so a re-run has to clear the meeting's segments
-            # first, exactly as replace_segments does. Without this, importing
-            # twice is a primary-key collision rather than a no-op, and a
-            # command nobody dares re-run after a partial failure is a command
-            # nobody runs against the real corpus at all.
-            for mid in town_of:
-                con.execute("DELETE FROM segments WHERE meeting_id=%s", (mid,))
-            for off in range(0, total, PAGE):
-                page = _rows(src, "SELECT * FROM segments ORDER BY id "
-                                  "LIMIT ? OFFSET ?", (PAGE, off))
-                for s in page:
-                    vec = _vec_or_none(s["emb"])
-                    blanks += (vec is None)
-                    con.execute(
-                        "INSERT INTO segments (id, meeting_id, town, idx, start, "
-                        "end_s, text, speaker, emb) "
-                        "OVERRIDING SYSTEM VALUE VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                        (s["id"], s["meeting_id"], town_of.get(s["meeting_id"], ""),
-                         s["idx"], s["start"], s["end"], s["text"] or "",
-                         s["speaker"] or "", vec))
-                done += len(page)
-                say(f"  segments   {done:>7,} / {total:,}", end="\r")
-            # The desk's ids are carried across verbatim (issue_segments points
-            # at them), so the identity sequence has to be told where they got to.
-            con.execute("SELECT setval(pg_get_serial_sequence('segments','id'), "
-                        "COALESCE((SELECT MAX(id) FROM segments), 1))")
-        counts["segments"] = total
-        say(f"  segments   {total:>7,}          ({blanks:,} with no vector)")
+          # -- segments ---------------------------------------------------
+          # Written directly rather than through replace_segments, which would
+          # re-embed every one of them. The vectors are the audited artifact.
+          total = src.execute("SELECT COUNT(*) FROM segments").fetchone()[0]
+          done = blanks = 0
+          with corpus._con() as con:
+              # The desk's ids come across verbatim, because issue_segments
+              # points at them — so a re-run has to clear the meeting's segments
+              # first, exactly as replace_segments does. Without this, importing
+              # twice is a primary-key collision rather than a no-op, and a
+              # command nobody dares re-run after a partial failure is a command
+              # nobody runs against the real corpus at all.
+              for mid in town_of:
+                  con.execute("DELETE FROM segments WHERE meeting_id=%s", (mid,))
+              for off in range(0, total, PAGE):
+                  page = _rows(src, "SELECT * FROM segments ORDER BY id "
+                                    "LIMIT ? OFFSET ?", (PAGE, off))
+                  for s in page:
+                      vec = _vec_or_none(s["emb"])
+                      blanks += (vec is None)
+                      con.execute(
+                          "INSERT INTO segments (id, meeting_id, town, idx, start, "
+                          "end_s, text, speaker, emb) "
+                          "OVERRIDING SYSTEM VALUE VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                          (s["id"], s["meeting_id"], town_of.get(s["meeting_id"], ""),
+                           s["idx"], s["start"], s["end"], s["text"] or "",
+                           s["speaker"] or "", vec))
+                  done += len(page)
+                  say(f"  segments   {done:>7,} / {total:,}", end="\r")
+              # The desk's ids are carried across verbatim (issue_segments points
+              # at them), so the identity sequence has to be told where they got to.
+              con.execute("SELECT setval(pg_get_serial_sequence('segments','id'), "
+                          "COALESCE((SELECT MAX(id) FROM segments), 1))")
+          counts["segments"] = total
+          say(f"  segments   {total:>7,}          ({blanks:,} with no vector)")
 
-        # -- issues and their links -------------------------------------
-        issues = _rows(src, "SELECT * FROM issues")
-        for i in issues:
-            i["centroid"] = _vec_or_none(i["centroid"])
-            corpus.upsert_issue(i)
-        counts["issues"] = len(issues)
-        say(f"  issues     {len(issues):>7,}")
+          # -- issues and their links -------------------------------------
+          issues = _rows(src, "SELECT * FROM issues")
+          for i in issues:
+              i["centroid"] = _vec_or_none(i["centroid"])
+              corpus.upsert_issue(i)
+          counts["issues"] = len(issues)
+          say(f"  issues     {len(issues):>7,}")
 
-        links = _rows(src, "SELECT * FROM issue_segments")
-        by_issue: Dict[str, list] = {}
-        for g in links:
-            by_issue.setdefault(g["issue_id"], []).append(
-                (g["seg_id"], g["meeting_id"], g["score"], g["why"] or ""))
-        for iid, ls in by_issue.items():
-            corpus.link_segments(iid, ls)
-        counts["issue_segments"] = len(links)
-        say(f"  links      {len(links):>7,}")
+          links = _rows(src, "SELECT * FROM issue_segments")
+          by_issue: Dict[str, list] = {}
+          for g in links:
+              by_issue.setdefault(g["issue_id"], []).append(
+                  (g["seg_id"], g["meeting_id"], g["score"], g["why"] or ""))
+          for iid, ls in by_issue.items():
+              corpus.link_segments(iid, ls)
+          counts["issue_segments"] = len(links)
+          say(f"  links      {len(links):>7,}")
 
-        # -- threads, events, paper, votes ------------------------------
-        threads = _rows(src, "SELECT * FROM threads")
-        with corpus._con() as con:
-            for t in threads:
-                con.execute(
-                    "INSERT INTO threads (id, issue_id, last_seen_date, added_at, "
-                    "updated_at) VALUES (%s,%s,%s,%s,%s) "
-                    "ON CONFLICT (issue_id) DO NOTHING",
-                    (t["id"], t["issue_id"], t["last_seen_date"] or "",
-                     t["added_at"], t["updated_at"]))
-        counts["threads"] = len(threads)
+          # -- threads, events, paper, votes ------------------------------
+          threads = _rows(src, "SELECT * FROM threads")
+          with corpus._con() as con:
+              for t in threads:
+                  con.execute(
+                      "INSERT INTO threads (id, issue_id, last_seen_date, added_at, "
+                      "updated_at) VALUES (%s,%s,%s,%s,%s) "
+                      "ON CONFLICT (issue_id) DO NOTHING",
+                      (t["id"], t["issue_id"], t["last_seen_date"] or "",
+                       t["added_at"], t["updated_at"]))
+          counts["threads"] = len(threads)
 
-        events = _rows(src, "SELECT * FROM events") if "events" in tables else []
-        for e in events:
-            corpus.add_event(e["kind"], e["issue_id"] or "", e["meeting_id"] or "",
-                             e["thread_id"] or "", None)
-        counts["events"] = len(events)
+          events = _rows(src, "SELECT * FROM events") if "events" in tables else []
+          if events:
+              # Written directly rather than through add_event, which would stamp
+              # a fresh time, drop the payload and reset `seen`. An event is the
+              # record noticing something on a particular day, and a resurfacing
+              # carries the delta the reader is shown — re-creating it as an
+              # empty dict on today's clock is not carrying it across. Ids come
+              # too, so a re-import replaces rather than duplicates.
+              with corpus._con() as con:
+                  for e in events:
+                      con.execute("DELETE FROM events WHERE id=%s", (e["id"],))
+                      con.execute(
+                          "INSERT INTO events (id, kind, issue_id, meeting_id, "
+                          "thread_id, seen, payload, added_at) OVERRIDING SYSTEM "
+                          "VALUE VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                          (e["id"], e["kind"], e["issue_id"] or "",
+                           e["meeting_id"] or "", e["thread_id"] or "",
+                           int(e["seen"] or 0), e["payload"] or "", e["added_at"]))
+                  con.execute("SELECT setval(pg_get_serial_sequence('events','id'), "
+                              "COALESCE((SELECT MAX(id) FROM events), 1))")
+          counts["events"] = len(events)
 
-        docs = _rows(src, "SELECT * FROM documents") if "documents" in tables else []
-        for d in docs:
-            d.pop("rowid", None)
-            corpus.upsert_document(d)
-        counts["documents"] = len(docs)
+          docs = _rows(src, "SELECT * FROM documents") if "documents" in tables else []
+          for d in docs:
+              d.pop("rowid", None)
+              corpus.upsert_document(d)
+          counts["documents"] = len(docs)
 
-        chunks = _rows(src, "SELECT * FROM doc_chunks") if "doc_chunks" in tables else []
-        if chunks:
-            with corpus._con() as con:
-                for d in docs:
-                    con.execute("DELETE FROM doc_chunks WHERE doc_id=%s", (d["id"],))
-                for c in chunks:
-                    con.execute(
-                        "INSERT INTO doc_chunks (id, doc_id, meeting_id, town, idx, "
-                        "page, text, emb) OVERRIDING SYSTEM VALUE "
-                        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                        (c["id"], c["doc_id"], c["meeting_id"] or "",
-                         town_of.get(c["meeting_id"] or "", ""), c["idx"],
-                         c["page"], c["text"] or "", _vec_or_none(c["emb"])))
-                con.execute("SELECT setval(pg_get_serial_sequence('doc_chunks','id'), "
-                            "COALESCE((SELECT MAX(id) FROM doc_chunks), 1))")
-        counts["doc_chunks"] = len(chunks)
+          chunks = _rows(src, "SELECT * FROM doc_chunks") if "doc_chunks" in tables else []
+          if chunks:
+              with corpus._con() as con:
+                  for d in docs:
+                      con.execute("DELETE FROM doc_chunks WHERE doc_id=%s", (d["id"],))
+                  for c in chunks:
+                      con.execute(
+                          "INSERT INTO doc_chunks (id, doc_id, meeting_id, town, idx, "
+                          "page, text, emb) OVERRIDING SYSTEM VALUE "
+                          "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                          (c["id"], c["doc_id"], c["meeting_id"] or "",
+                           town_of.get(c["meeting_id"] or "", ""), c["idx"],
+                           c["page"], c["text"] or "", _vec_or_none(c["emb"])))
+                  con.execute("SELECT setval(pg_get_serial_sequence('doc_chunks','id'), "
+                              "COALESCE((SELECT MAX(id) FROM doc_chunks), 1))")
+          counts["doc_chunks"] = len(chunks)
 
-        dlinks = (_rows(src, "SELECT * FROM issue_documents")
-                  if "issue_documents" in tables else [])
-        by_doc: Dict[str, list] = {}
-        for g in dlinks:
-            by_doc.setdefault(g["issue_id"], []).append(
-                (g["chunk_id"], g["doc_id"], g["score"], g["why"] or ""))
-        for iid, ls in by_doc.items():
-            corpus.link_doc_chunks(iid, ls)
-        counts["issue_documents"] = len(dlinks)
+          dlinks = (_rows(src, "SELECT * FROM issue_documents")
+                    if "issue_documents" in tables else [])
+          by_doc: Dict[str, list] = {}
+          for g in dlinks:
+              by_doc.setdefault(g["issue_id"], []).append(
+                  (g["chunk_id"], g["doc_id"], g["score"], g["why"] or ""))
+          for iid, ls in by_doc.items():
+              corpus.link_doc_chunks(iid, ls)
+          counts["issue_documents"] = len(dlinks)
 
-        votes = _rows(src, "SELECT * FROM votes") if "votes" in tables else []
-        by_meeting: Dict[str, list] = {}
-        for v in votes:
-            by_meeting.setdefault(v["meeting_id"], []).append(v)
-        for mid, vs in by_meeting.items():
-            corpus.replace_votes(mid, vs)
-        counts["votes"] = len(votes)
+          votes = _rows(src, "SELECT * FROM votes") if "votes" in tables else []
+          by_meeting: Dict[str, list] = {}
+          for v in votes:
+              by_meeting.setdefault(v["meeting_id"], []).append(v)
+          for mid, vs in by_meeting.items():
+              corpus.replace_votes(mid, vs)
+          counts["votes"] = len(votes)
 
-        # -- the town becomes a row -------------------------------------
-        now = time.time()
-        with corpus._con() as con:
-            for slug in sorted({t for t in town_of.values() if t}):
-                con.execute(
-                    "INSERT INTO towns (slug, name, status, added_at, updated_at) "
-                    "VALUES (%s,%s,'live',%s,%s) ON CONFLICT (slug) DO NOTHING",
-                    (slug, slug, now, now))
-        counts["towns"] = len({t for t in town_of.values() if t})
+          # -- the town becomes a row -------------------------------------
+          now = time.time()
+          with corpus._con() as con:
+              for slug in sorted({t for t in town_of.values() if t}):
+                  con.execute(
+                      "INSERT INTO towns (slug, name, status, added_at, updated_at) "
+                      "VALUES (%s,%s,'live',%s,%s) ON CONFLICT (slug) DO NOTHING",
+                      (slug, slug, now, now))
+          counts["towns"] = len({t for t in town_of.values() if t})
     finally:
         src.close()
     return counts
@@ -240,7 +263,8 @@ def verify(src_path: str, corpus, sample: int = 200,
         pairs = [("meetings", "meetings"), ("segments", "segments"),
                  ("issues", "issues"), ("issue_segments", "issue_segments"),
                  ("threads", "threads"), ("documents", "documents"),
-                 ("doc_chunks", "doc_chunks"), ("votes", "votes")]
+                 ("doc_chunks", "doc_chunks"), ("votes", "votes"),
+                 ("events", "events")]
         with corpus._con() as con:
             for name, table in pairs:
                 try:
@@ -298,10 +322,28 @@ def verify(src_path: str, corpus, sample: int = 200,
             say(f"  vectors          {same:>7,} / {len(picked) - blanked:,} "
                 f"bit-identical  ({blanked} zero-norm → NULL, as intended)")
 
-        # the rollups both stores compute independently
+        # The rollups both stores compute independently.
+        #
+        # This used to be `Corpus(db_path=src_path)`, which opens the file
+        # read-WRITE and runs `executescript(_SCHEMA)` plus CREATE VIRTUAL
+        # TABLE on it — DDL against somebody's live record, from a command
+        # whose --verify-only mode promises to write nothing. The corpus is
+        # copied to a scratch file first; comparing rollups is a read, and it
+        # should behave like one.
+        import shutil
+        import tempfile
         from memory.store import Corpus
-        desk = Corpus(db_path=src_path)
-        for town in desk.live_towns():
+        scratch = tempfile.TemporaryDirectory(prefix="cz-verify-")
+        try:
+            copy = str(Path(scratch.name) / "corpus.db")
+            shutil.copyfile(src_path, copy)
+            desk = Corpus(db_path=copy)
+            towns = desk.live_towns()
+        except Exception as exc:
+            out["ok"] = False
+            out["problems"].append(f"could not read the source for comparison: {exc}")
+            towns = []
+        for town in towns:
             a = {i["id"]: (i["n_meetings"], i["n_segments"])
                  for i in desk.list_issues(town=town, limit=1000)}
             b = {i["id"]: (i["n_meetings"], i["n_segments"])
@@ -313,6 +355,7 @@ def verify(src_path: str, corpus, sample: int = 200,
                     f"{town}: {len(diff)} issue rollup(s) disagree: {diff[:5]}")
             say(f"  rollups {town:<9} {len(a):>7,} issues  "
                 f"{'agree' if a == b else 'DISAGREE'}")
+        scratch.cleanup()
     finally:
         src.close()
     return out

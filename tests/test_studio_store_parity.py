@@ -45,6 +45,12 @@ SELECT = [
     {"start": 28.0, "end": 34.0, "speaker": None,
      "text": "All in favor? The motion passes five to zero."},
 ]
+BOSTON_SEGS = [
+    {"start": 0.0, "end": 6.0, "speaker": "Speaker 1",
+     "text": "The Council takes up the rezoning of the waterfront district."},
+    {"start": 6.0, "end": 12.0, "speaker": "Speaker 2",
+     "text": "The rezoning article returns to committee for review."},
+]
 SCHOOL = [
     {"start": 0.0, "end": 6.0, "speaker": "Speaker 1",
      "text": "The School Committee returns to the rezoning and enrollment."},
@@ -435,6 +441,74 @@ class StoreGuarantees:
         issues.assign_meeting(self.c, "sch")
         mids = {n["meeting_id"] for n in self.c.issue_appearances("i1")}
         self.assertIn("sch", mids)
+
+
+    # -- what the adversarial review found ---------------------------------
+
+    def test_search_never_serves_a_meeting_the_edition_withholds(self):
+        """A meeting that is queued, errored, or mid-ingest is not part of the
+        record yet — the pressed edition withholds it, and search must agree.
+        Before this, an un-approved submission's full transcript, title and URL
+        were readable by anyone through the public search endpoint."""
+        self.add("live1", SELECT, town="Brookline", title="Select Board")
+        self.c.upsert_meeting({"id": "secret", "town": "Brookline",
+                               "status": "error", "title": "Executive Session"})
+        self.c.replace_segments("secret", [
+            {"start": 0.0, "end": 5.0,
+             "text": "the Harvard Street rezoning article in private"}])
+        hits = self.c.search("rezoning")
+        self.assertTrue(hits)
+        self.assertEqual({h["meeting_id"] for h in hits}, {"live1"})
+        self.assertEqual(self.c.semantic(embed.embed("rezoning article")) and
+                         {h["meeting_id"] for h in
+                          self.c.semantic(embed.embed("rezoning article"))},
+                         {"live1"})
+
+    def test_town_scope_follows_a_corrected_town(self):
+        """The Postgres store denormalises `town` onto segments for speed, and
+        that snapshot goes stale the moment a steward corrects a meeting's
+        town — so the filter reads the meeting, not the copy. Otherwise one
+        store answers under the old town and the other under the new."""
+        self.add("m1", SELECT, town="Brookline", title="Select Board")
+        self.c.upsert_meeting({"id": "m1", "town": "Boston"})   # corrected
+        self.assertEqual({h["town"] for h in self.c.search("rezoning",
+                                                           town="Boston")},
+                         {"Boston"})
+        self.assertEqual(self.c.search("rezoning", town="Brookline"), [])
+
+    def test_town_scope_survives_segments_written_before_the_town(self):
+        """`memory/ingest.py` writes segments before it upserts the resolved
+        town, so the denormalised copy is '' for any ingest whose town is
+        derived from the uploader. The meeting must still be findable."""
+        self.c.upsert_meeting({"id": "m1", "status": "live", "title": "S"})
+        self.c.replace_segments("m1", SELECT)          # town not known yet
+        self.c.upsert_meeting({"id": "m1", "town": "Brookline"})
+        hits = self.c.search("rezoning", town="Brookline")
+        self.assertTrue(hits, "the meeting became invisible to its own town")
+
+    def test_re_ingest_leaves_no_orphan_issue_links(self):
+        """The forget() cascade's twin, reached by re-ingest: replacing a
+        meeting's segments must take the issue links that pointed at them, or
+        list_issues counts ghosts issue_appearances hides."""
+        self.add("sel", SELECT, town="Brookline", date="2026-05-19")
+        seg = self.c.segments_of("sel")[1]
+        self.c.upsert_issue({"id": "i1", "town": "Brookline", "name": "rezoning"})
+        self.c.link_segments("i1", [(seg["id"], "sel", 1.0, "alias")])
+        self.add("sel", SELECT, town="Brookline", date="2026-05-19")   # re-ingest
+        counted = self.c.list_issues(town="Brookline")[0]["n_segments"]
+        shown = sum(n["n"] for n in self.c.issue_appearances("i1"))
+        self.assertEqual(counted, shown)
+
+    def test_minting_an_issue_stays_inside_its_town(self):
+        """`mint_from_query` seeds from a search. Unscoped, a steward minting a
+        Brookline issue pulled Boston's segments onto its timeline."""
+        self.add("bro", SELECT, town="Brookline", date="2026-05-19", title="B")
+        self.add("bos", BOSTON_SEGS, town="Boston", date="2026-05-20", title="C")
+        out = issues.mint_from_query(self.c, "rezoning", "Brookline")
+        self.assertIsNotNone(out)
+        iid = out.get("issue_id") or out.get("id")
+        towns = {n["town"] for n in self.c.issue_appearances(iid)}
+        self.assertTrue(towns <= {"Brookline"}, f"leaked into Brookline: {towns}")
 
     def test_stats_reports_capability_honestly(self):
         self.add("sel", SELECT, town="Brookline", body="Select Board", duration=34.0)

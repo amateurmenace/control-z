@@ -592,6 +592,25 @@ def main(argv=None):
         print(f"  ⚠ the edition did not travel: {sync['reason']}")
         for e in sync.get("errors", [])[1:6]:
             print(f"    {e}")
+        # The fingerprint was written to disk by the press, before the upload
+        # was attempted — so without this, the next run would compare the
+        # record against a marker claiming it had already been pressed, say
+        # "nothing to press", and exit 0 forever. A nightly job would go green
+        # every night while readers stayed on the last edition that actually
+        # made it. Clearing the marker makes the failure retry, which is what
+        # a scheduler's next tick is for.
+        try:
+            marker = Path(out_dir) / PRESSING
+            data = _read_json(marker) or {}
+            data["fingerprint"] = ""
+            data["synced"] = False
+            data["note"] = ("this pressing never reached the bucket; the "
+                            "fingerprint is cleared so the next run presses "
+                            "and uploads again")
+            marker.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception as exc:
+            print(f"    (could not clear the pressing marker: {exc} — "
+                  f"delete {out_dir}/{PRESSING} before the next run)")
         return 1
     print(f"synced → gs://{bucket}/{sync['prefix']}: "
           f"{sync['uploaded']} uploaded ({sync['gzipped']} gzipped, "

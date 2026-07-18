@@ -759,7 +759,7 @@ def mint_from_query(corpus, query: str, town: str = "") -> Optional[dict]:
                          "keywords": kws, "centroid": qvec,
                          "note": "minted from a search"})
     # seed it with the moments the query already finds
-    hits = corpus.search(query, limit=60)
+    hits = corpus.search(query, limit=60, town=town)
     links = [(h["seg_id"], h["meeting_id"], h.get("score", 0.5), "minted")
              for h in hits if h.get("seg_id")]
     if links:

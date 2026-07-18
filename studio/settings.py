@@ -74,17 +74,34 @@ class Settings:
         return bool(self.google_client_id and self.steward_allowlist)
 
     def redacted(self) -> str:
-        """The DSN with its password removed — safe for a log line or a health
-        endpoint, which is the only reason a service ever prints its DSN."""
-        dsn = self.dsn
-        if "://" not in dsn:
-            return dsn
-        scheme, rest = dsn.split("://", 1)
-        if "@" not in rest:
-            return dsn
-        creds, host = rest.rsplit("@", 1)
-        user = creds.split(":", 1)[0]
-        return f"{scheme}://{user}:***@{host}"
+        """The DSN with every secret removed — safe for a log line or a health
+        endpoint, which is the only reason a service ever prints its DSN.
+
+        This used to return the string verbatim whenever it was not clean URI
+        form, which is exactly backwards: libpq also accepts keyword/value
+        (`host=… password=…`) and URI form with the password in the query
+        string, and both fell through the early returns straight onto an
+        anonymous /api/health response. A redactor whose failure mode is
+        "publish it" is worse than none, so this one redacts first and parses
+        second, and anything it does not recognise it refuses to echo."""
+        import re
+        dsn = (self.dsn or "").strip()
+        if not dsn:
+            return ""
+        # keyword/value form, and any URI query parameter
+        out = re.sub(r"(?i)\b(password|pgpassword)\s*=\s*[^\s&]+",
+                     r"\1=***", dsn)
+        if "://" in out:
+            scheme, rest = out.split("://", 1)
+            if "@" in rest:
+                creds, host = rest.rsplit("@", 1)
+                user = creds.split(":", 1)[0]
+                out = f"{scheme}://{user}:***@{host}"
+        if out == dsn and re.search(r"(?i)password", dsn):
+            # It carries a password and nothing above matched its shape. Do not
+            # guess, and do not print it.
+            return "<dsn redacted>"
+        return out
 
     def is_steward(self, email: str) -> bool:
         return bool(email) and email.strip().lower() in self.steward_allowlist

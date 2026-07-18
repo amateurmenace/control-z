@@ -138,6 +138,17 @@ def create_app(corpus=None) -> FastAPI:
                     + embed_neural.status()["reason"])
         try:
             hits = store().search(q, limit=limit, town=town, space=used)
+            if used == "neural" and not any(h["why"] in ("meaning", "both")
+                                            for h in hits):
+                # The key is set and the SDK imports, which is all available()
+                # can see — it cannot see that the corpus was never backfilled,
+                # or that this query's vector failed. Reporting "neural" on a
+                # purely lexical result is the exact dishonesty the note exists
+                # to prevent, so the claim is made from the result, not the
+                # configuration.
+                used = "lexical"
+                note = ("meaning-search found nothing to compare against — "
+                        "this corpus has not been embedded yet; words still work")
         except Exception as exc:
             return JSONResponse(
                 {"q": q, "hits": [], "space": "none",

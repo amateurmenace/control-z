@@ -285,6 +285,8 @@ class Corpus:
             if self.fts:
                 con.execute("DELETE FROM segments_fts WHERE meeting_id=?",
                             (meeting_id,))
+            con.execute("DELETE FROM issue_segments WHERE meeting_id=?",
+                        (meeting_id,))
             con.execute("DELETE FROM segments WHERE meeting_id=?", (meeting_id,))
             for i, s in enumerate(segments):
                 text = str(s.get("text", ""))
@@ -360,11 +362,16 @@ class Corpus:
             if hit is None:
                 seg = self._segment(seg_id)
                 hit = self._hit(seg) if seg else None
-            if hit is None or (town and hit.get("town") != town):
+            if hit is None or hit.get("_status") != "live":
+                continue
+            if town and hit.get("town") != town:
                 continue
             vector_hits.append((hit, sim))
         # the fold — and the provenance the reader is shown — is policy, shared
-        return policy.blend(keyword_hits, vector_hits, limit)
+        hits = policy.blend(keyword_hits, vector_hits, limit)
+        for h in hits:
+            h.pop("_status", None)
+        return hits
 
     def semantic(self, qvec, limit: int = 40, town: str = "") -> List[dict]:
         """Vector-only search — the context API's prior-appearances feed."""
@@ -374,6 +381,8 @@ class Corpus:
             if not seg:
                 continue
             hit = self._hit(seg)
+            if hit.pop("_status", "") != "live":
+                continue
             if town and hit.get("town") != town:
                 continue
             out.append({**hit, "score": round(sim, 4)})
@@ -385,17 +394,16 @@ class Corpus:
         with self._con() as con:
             if self.fts and _fts_query(q):
                 sql = ("SELECT s.* FROM segments_fts f JOIN segments s "
-                       "ON s.id=f.seg_id " +
-                       ("JOIN meetings m ON m.id=s.meeting_id " if town else "") +
-                       "WHERE segments_fts MATCH ?" +
+                       "ON s.id=f.seg_id JOIN meetings m ON m.id=s.meeting_id "
+                       "WHERE segments_fts MATCH ? AND m.status='live'" +
                        (" AND m.town=?" if town else "") +
                        " ORDER BY bm25(segments_fts, 1, 1, 8) LIMIT ?")
                 args = [_fts_query(q)] + ([town] if town else []) + [limit]
                 rows = con.execute(sql, args).fetchall()
             else:
-                sql = ("SELECT s.* FROM segments s " +
-                       ("JOIN meetings m ON m.id=s.meeting_id " if town else "") +
-                       "WHERE s.text LIKE ?" +
+                sql = ("SELECT s.* FROM segments s "
+                       "JOIN meetings m ON m.id=s.meeting_id "
+                       "WHERE s.text LIKE ? AND m.status='live'" +
                        (" AND m.town=?" if town else "") +
                        " ORDER BY s.meeting_id LIMIT ?")
                 args = [f"%{q}%"] + ([town] if town else []) + [limit]
@@ -445,7 +453,7 @@ class Corpus:
     def _hit(self, seg) -> dict:
         m = self._first_row(
             "SELECT id, title, date, body, town, url, source_kind, video_id, "
-            "media_path, duration FROM meetings WHERE id=?",
+            "media_path, duration, status FROM meetings WHERE id=?",
             (seg["meeting_id"],))
         info = dict(m) if m else {"id": seg["meeting_id"]}
         return {
@@ -458,6 +466,9 @@ class Corpus:
             "video_id": info.get("video_id", ""),
             "media_path": info.get("media_path", ""),
             "duration": info.get("duration", 0),
+            # not part of the envelope — search filters on it and drops it, so
+            # both stores hand back the same seventeen keys.
+            "_status": info.get("status", ""),
         }
 
     # -- stats -------------------------------------------------------------

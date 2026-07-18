@@ -150,20 +150,20 @@ class PgCorpus:
         columns keep their value."""
         now = time.time()
         fresh, cols = policy.merge_plan(row, now)
+        # One statement, not SELECT-then-branch. The desk can check and then act
+        # because it has one writer; here a nightly job and a steward approval
+        # land on the same id and the loser raised UniqueViolation instead of
+        # merging. ON CONFLICT does the whole thing atomically, and the DO
+        # UPDATE list is still only the caller's keys — merge, never shrink.
+        names = list(fresh)
+        sets = ", ".join(f"{c}=excluded.{c}" for c in cols) if cols else ""
+        sets = (sets + ", " if sets else "") + "updated_at=excluded.updated_at"
         with self._con() as con:
-            exists = con.execute(
-                f"SELECT id FROM {table} WHERE id=%s", (row["id"],)).fetchone()
-            if exists:
-                if cols:
-                    sets = ", ".join(f"{c}=%s" for c in cols) + ", updated_at=%s"
-                    con.execute(f"UPDATE {table} SET {sets} WHERE id=%s",
-                                [row[c] for c in cols] + [now, row["id"]])
-            else:
-                names = list(fresh)
-                con.execute(
-                    f"INSERT INTO {table} ({', '.join(names)}) "
-                    f"VALUES ({', '.join('%s' for _ in names)})",
-                    [fresh[c] for c in names])
+            con.execute(
+                f"INSERT INTO {table} ({', '.join(names)}) "
+                f"VALUES ({', '.join('%s' for _ in names)}) "
+                f"ON CONFLICT (id) DO UPDATE SET {sets}",
+                [fresh[c] for c in names])
 
     def set_status(self, meeting_id: str, status: str, error: str = "") -> None:
         with self._con() as con:
@@ -374,10 +374,11 @@ class PgCorpus:
         tsq = " & ".join(f"{t}:*" for t in toks)
         sql = (f"SELECT {_HIT_COLS} FROM segments s "
                "JOIN meetings m ON m.id=s.meeting_id "
-               "WHERE s.fts @@ to_tsquery('english', %s)")
+               "WHERE s.fts @@ to_tsquery('english', %s) "
+               "AND m.status='live'")
         args: list = [tsq]
         if town:
-            sql += " AND s.town=%s"
+            sql += " AND m.town=%s"
             args.append(town)
         sql += (" ORDER BY ts_rank_cd(s.fts, to_tsquery('english', %s)) DESC, "
                 "s.id LIMIT %s")
@@ -395,10 +396,11 @@ class PgCorpus:
 
     def _like_rows(self, q: str, limit: int, town: str = "") -> List[dict]:
         sql = (f"SELECT {_HIT_COLS} FROM segments s "
-               "JOIN meetings m ON m.id=s.meeting_id WHERE s.text ILIKE %s")
+               "JOIN meetings m ON m.id=s.meeting_id "
+               "WHERE s.text ILIKE %s AND m.status='live'")
         args: list = [f"%{q}%"]
         if town:
-            sql += " AND s.town=%s"
+            sql += " AND m.town=%s"
             args.append(town)
         sql += " ORDER BY s.meeting_id, s.id LIMIT %s"
         args.append(limit)
@@ -413,10 +415,10 @@ class PgCorpus:
         col = "emb_neural" if space == "neural" else "emb"
         sql = (f"SELECT {_HIT_COLS}, 1 - (s.{col} <=> %s) AS sim "
                "FROM segments s JOIN meetings m ON m.id=s.meeting_id "
-               f"WHERE s.{col} IS NOT NULL")
+               f"WHERE s.{col} IS NOT NULL AND m.status='live'")
         args: list = [qvec]
         if town:
-            sql += " AND s.town=%s"
+            sql += " AND m.town=%s"
             args.append(town)
         sql += f" ORDER BY s.{col} <=> %s LIMIT %s"
         args += [qvec, limit]
@@ -721,7 +723,7 @@ class PgCorpus:
                 "LEFT JOIN issue_segments g ON g.issue_id=t.issue_id "
                 "LEFT JOIN meetings m ON m.id=g.meeting_id "
                 "GROUP BY t.id, t.issue_id, t.last_seen_date, i.name, i.town, "
-                "i.status ORDER BY unseen DESC, last_seen DESC").fetchall()
+                "i.status ORDER BY unseen DESC, last_seen DESC NULLS LAST").fetchall()
         out = []
         for r in rows:
             d = dict(r)
