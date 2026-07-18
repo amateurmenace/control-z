@@ -14,12 +14,38 @@ from czcore import models
 
 
 class TestRegistry(unittest.TestCase):
-    def test_every_entry_states_its_license_and_pins_its_hash(self):
+    def test_every_entry_states_its_license_and_card(self):
         for name, spec in models.REGISTRY.items():
             self.assertTrue(spec.license, f"{name} has no license")
             self.assertTrue(spec.card, f"{name} has no card")
-            self.assertTrue(spec.sha256, f"{name} ships without a pinned hash")
-            self.assertEqual(len(spec.sha256), 64, f"{name}'s hash isn't sha256")
+
+    def test_every_hosted_model_pins_its_hash(self):
+        # the covenant, precisely: anything the app will DOWNLOAD (url set) must
+        # be pinned so it is verified before use. A card that names a not-yet-
+        # hosted asset (url None) can't pin a hash yet — model_path never
+        # fetches it, so it can't slip in unverified; it must carry a hint
+        # instead (checked below).
+        for name, spec in models.REGISTRY.items():
+            if spec.url is not None:
+                self.assertTrue(spec.sha256,
+                                f"{name} is hosted but ships without a pinned hash")
+                self.assertEqual(len(spec.sha256), 64,
+                                 f"{name}'s hash isn't sha256")
+
+    def test_every_entry_is_covenant_permissive(self):
+        # the licence rule is executable (models._licence_is_permissive); a
+        # non-permissive card would have ValueError'd at import, but assert the
+        # whole registry stays clean so a future NC/GPL card can't sneak past.
+        for name, spec in models.REGISTRY.items():
+            self.assertTrue(models._licence_is_permissive(spec.license),
+                            f"{name} declares a non-permissive licence")
+
+    def test_the_local_model_cards_are_registered_by_namespace(self):
+        # the MT + vision cards land as directories under the engine's own
+        # discovery namespace, so a one-click install drops them where
+        # czcore.mt_local / czcore.vision already look by shape.
+        self.assertTrue(models.REGISTRY["madlad400-mt"].filename.startswith("mt/"))
+        self.assertTrue(models.REGISTRY["moondream2-vlm"].filename.startswith("vlm/"))
 
     def test_locally_built_models_say_how_to_build_them(self):
         for name, spec in models.REGISTRY.items():

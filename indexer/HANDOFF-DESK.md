@@ -219,10 +219,46 @@ until the Studio exists.**
     desk? And is a *lease TTL* on claim wanted (a desk that dies mid-transcribe
     shouldn't strand a task)? Both feel like real gaps; deferred to you.
 
+## landed (wave 7 — the local model cards, thrust 3)
+
+The two cards the 1.9.0 notes promised (specs/15), scaffolded honestly. The
+engines already discover by folder shape; these cards give each a Models-page
+home, a verified permissive licence, and a reproducible recipe — hosting +
+pinning is the one external human step.
+
+- **`madlad400-mt`** — MADLAD-400-3B (Google, **Apache-2.0**, licence verified
+  on HF) converted to CTranslate2, landing as a directory under `mt/` where
+  `czcore.mt_local` already looks. The card's hint records the exact
+  `ct2-transformers-converter … --quantization int8` command + the
+  tokenizer.json step (the suite ships no sentencepiece on purpose). NLLB-200
+  stays refused — CC-BY-NC, and the registry ValueErrors on it at definition.
+- **`moondream2-vlm`** — Moondream 2 (**Apache-2.0**, verified on HF) as an
+  ONNX export under `vlm/` where `czcore.vision` looks. A pre-built Apache-2.0
+  export exists (vikhyatk/moondream2's `onnx` branch / Xenova); the hint flags
+  that its graph must be checked against vision.py's encode→decode contract
+  before pinning (Moondream's custom arch doesn't round-trip the stock ONNX
+  exporter — adapting it may be part of the build).
+- Both `url=None` / `sha256=None` for now → the Models page shows them "not
+  hosted — {recipe}", never a download button that 404s. The covenant test
+  was refined precisely: **hosted ⇒ pinned** (nothing downloadable is ever
+  unverified); an unhosted recipe-card is exempt but must carry a hint.
+- **540 green** (3 new registry tests: hosted-⇒-pinned, whole-registry-
+  permissive, namespace).
+
+## asks (external — Stephen / the release ritual)
+
+- **Host + pin the two cards.** Build each asset from the recipe in its card
+  hint, tar it, upload as a control-z release asset (the realesrgan v1.0.0
+  precedent), then set the card's `url` + `sha256`. Verify determinism (fixed
+  source revision + int8 for MT). Then the acceptance lands: with no key set,
+  Interpreter translates and Narrator describes on-device with local
+  provenance, zero token spend, one-click install, pinned hash verified.
+
 ## next
 
-- The local model cards (thrust 3 — scaffold + conversion recipe; hosting is
-  an external human step).
+- All five thrusts are landed on lane/desk. Open: host+pin the model cards
+  (above), and the gated ffmpeg `--prefix` rebuild (1.9.0 WATCH item) — both
+  deliberately deferred (external / release-gated).
 
 ## asks (A-owned files; single lines, in your hands)
 
@@ -272,3 +308,8 @@ until the Studio exists.**
   desk running the suite — on its own hardware, with Scribe's engine, no cloud
   GPU and no bill — and posted back. The wiring is here and tested against a
   stand-in Studio; until the real one exists, Settings says so plainly.
+- **The local doors get their keys.** The two on-device models the release
+  notes promised — a permissive translator for Interpreter and a permissive
+  vision model for Narrator — now have honest Models-page cards: the licence
+  verified, the folder shape right, and the exact recipe to build each one,
+  waiting only to be hosted and pinned.

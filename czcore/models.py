@@ -170,6 +170,52 @@ REGISTRY = {
         license="MIT (OpenCV Zoo)",
         card="YuNet face detector — finds faces so Pivot can follow them. Tiny (2 MB), on-device.",
     ),
+    # --- the two local-model cards the 1.9.0 notes promised (specs/15) -------
+    # Both are permissive (the registry would ValueError otherwise) and both
+    # land as a DIRECTORY under the engine's discovery namespace: mt_local
+    # reads models/mt/<dir>, vision reads models/vlm/<dir>. url is None until
+    # the pinned tarball is built + hosted as a control-z release asset (the
+    # realesrgan precedent) — the hint records the exact, reproducible recipe.
+    # NLLB-200 was deliberately NOT chosen: it is CC-BY-NC and the covenant's
+    # permissive-only rule (executable, above) refuses it at definition.
+    "madlad400-mt": ModelSpec(
+        name="madlad400-mt",
+        filename="mt/madlad400-3b-mt-ct2",   # a directory: model.bin + tokenizer
+        url=None,
+        sha256=None,
+        license="Apache-2.0 (Google MADLAD-400-3B-MT weights; CTranslate2 export)",
+        card="MADLAD-400 3B — on-device translation for Interpreter's panel "
+             "languages, no key, no tokens. ~2.9 GB int8, on-device.",
+        hint=("czcore.mt_local finds any CTranslate2 model dropped under "
+              "models/mt/ by shape (model.bin + a fast tokenizer.json). Build "
+              "the pinned asset from the Apache-2.0 weights, deterministically: "
+              "ct2-transformers-converter --model google/madlad400-3b-mt "
+              "--output_dir madlad400-3b-mt-ct2 --quantization int8 ; then add a "
+              "tokenizer.json (AutoTokenizer.from_pretrained(...).save_pretrained "
+              "— the suite ships no sentencepiece on purpose). A fixed source "
+              "revision + int8 makes it reproducible; tar the dir, host it as a "
+              "control-z release asset, and set this card's url + sha256. Until "
+              "then Interpreter falls back to the key."),
+    ),
+    "moondream2-vlm": ModelSpec(
+        name="moondream2-vlm",
+        filename="vlm/moondream2-onnx",       # a directory: vision + text onnx + tokenizer
+        url=None,
+        sha256=None,
+        license="Apache-2.0 (vikhyatk/moondream2; ONNX export)",
+        card="Moondream 2 — on-device descriptions for Narrator, no key, no "
+             "tokens. A small permissive vision-language model in ONNX.",
+        hint=("czcore.vision finds any VLM under models/vlm/ by shape (a "
+              "vision-encoder + text-decoder .onnx and a tokenizer.json). A "
+              "pre-built Apache-2.0 export exists on vikhyatk/moondream2's "
+              "'onnx' branch (also Xenova/moondream2); verify its graph matches "
+              "czcore.vision's encode→decode contract before pinning — "
+              "Moondream's custom architecture doesn't round-trip through the "
+              "stock ONNX exporter, so building/adapting the export may be part "
+              "of the job. Host the verified export as a control-z release "
+              "asset, then set this card's url + sha256. Until then Narrator "
+              "falls back to the key."),
+    ),
 }
 
 
