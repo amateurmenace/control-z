@@ -32,6 +32,12 @@ dev = []
 # PyInstaller must run from THIS venv (a foreign venv is a hard error in
 # PyInstaller 7).
 packaging = ["pyinstaller>=6.21"]
+# The hosted record's server (specs/17). Deliberately NOT part of the `suite`
+# runtime extra, and deliberately absent from packaging/suite.spec: a signed
+# desktop DMG has no business carrying a Postgres driver or a cloud SDK. The
+# desk stays local-first and BYO-key; this is the Studio's own bill.
+studio = ["psycopg[binary,pool]>=3.2", "pgvector>=0.3",
+          "fastapi", "uvicorn[standard]"]
 
 [project.scripts]
 suite = "suite.__main__:main"
@@ -53,6 +59,7 @@ packages = ["czcore", "czcore.exports", "czcore.appshell",
             "highlighter", "grabber", "indexer", "slate", "publisher",
             "memory", "interpreter", "narrator",
             "web",
+            "studio", "studio.connectors",
             "suite", "suite.tools"]
 
 [tool.setuptools.package-data]
@@ -60,5 +67,7 @@ pivot = ["static/*.html"]
 depth = ["templates/*.setting"]
 interpreter = ["glossaries/*.json"]
 web = ["static/*"]
+# The migrations are data, not code — setuptools will not carry .sql for free.
+studio = ["migrations/*.sql"]
 # static/* alone misses static/js/*.js — the whole UI. Both globs, explicitly.
 suite = ["static/*.html", "static/*.css", "static/js/*.js"]

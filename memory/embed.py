@@ -100,6 +100,10 @@ def as_vec(x):
         return None
     if isinstance(x, (bytes, bytearray, memoryview)):
         return from_bytes(bytes(x))
+    # pgvector hands back its own Vector, which numpy will not coerce — it
+    # raises rather than converting, so ask the object first and never guess.
+    if hasattr(x, "to_numpy"):
+        x = x.to_numpy()
     a = np.asarray(x, dtype=np.float32)
     return a if a.size else None
 

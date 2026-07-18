@@ -335,51 +335,71 @@ class Corpus:
 
     # -- search ------------------------------------------------------------
 
-    def search(self, q: str, limit: int = 60) -> List[dict]:
+    def search(self, q: str, limit: int = 60, town: str = "") -> List[dict]:
         """Cross-corpus search: FTS keyword hits, blended with related-language
-        (vector) hits, every hit time-coded to a segment for jump-to-play."""
+        (vector) hits, every hit time-coded to a segment for jump-to-play.
+
+        `town` scopes the whole search to one town. It defaults to empty — the
+        behavior this has always had — but a record serving several towns must
+        pass it, and the Studio's API layer always does: aggregation across
+        towns is a covenant question, not a convenience."""
         q = (q or "").strip()
         if not q:
             return []
         # 1) keyword — exact, ordered by relevance
         keyword_hits = [{**self._hit(seg), "score": score}
-                        for seg, score in self._keyword(q, limit)]
+                        for seg, score in self._keyword(q, limit, town)]
         by_kw = {h["seg_id"]: h for h in keyword_hits}
-        # 2) related language — vector neighbours the words missed
+        # 2) related language — vector neighbours the words missed. The matrix
+        # is corpus-wide, so a town filter is applied once a hit is resolved;
+        # over-fetch so scoping cannot quietly shorten the result.
         qvec = embed.embed(q)
         vector_hits = []
-        for seg_id, sim in self._semantic(qvec, limit):
-            if seg_id in by_kw:
-                vector_hits.append((by_kw[seg_id], sim))   # already resolved
-            else:
+        for seg_id, sim in self._semantic(qvec, limit * 5 if town else limit):
+            hit = by_kw.get(seg_id)
+            if hit is None:
                 seg = self._segment(seg_id)
-                if seg:
-                    vector_hits.append((self._hit(seg), sim))
+                hit = self._hit(seg) if seg else None
+            if hit is None or (town and hit.get("town") != town):
+                continue
+            vector_hits.append((hit, sim))
         # the fold — and the provenance the reader is shown — is policy, shared
         return policy.blend(keyword_hits, vector_hits, limit)
 
-    def semantic(self, qvec, limit: int = 40) -> List[dict]:
+    def semantic(self, qvec, limit: int = 40, town: str = "") -> List[dict]:
         """Vector-only search — the context API's prior-appearances feed."""
         out = []
-        for seg_id, sim in self._semantic(qvec, limit):
+        for seg_id, sim in self._semantic(qvec, limit * 5 if town else limit):
             seg = self._segment(seg_id)
-            if seg:
-                out.append({**self._hit(seg), "score": round(sim, 4)})
+            if not seg:
+                continue
+            hit = self._hit(seg)
+            if town and hit.get("town") != town:
+                continue
+            out.append({**hit, "score": round(sim, 4)})
+            if len(out) >= limit:
+                break
         return out
 
-    def _keyword(self, q: str, limit: int):
+    def _keyword(self, q: str, limit: int, town: str = ""):
         with self._con() as con:
             if self.fts and _fts_query(q):
-                rows = con.execute(
-                    "SELECT s.* FROM segments_fts f JOIN segments s "
-                    "ON s.id=f.seg_id WHERE segments_fts MATCH ? "
-                    "ORDER BY bm25(segments_fts, 1, 1, 8) LIMIT ?",
-                    (_fts_query(q), limit)).fetchall()
+                sql = ("SELECT s.* FROM segments_fts f JOIN segments s "
+                       "ON s.id=f.seg_id " +
+                       ("JOIN meetings m ON m.id=s.meeting_id " if town else "") +
+                       "WHERE segments_fts MATCH ?" +
+                       (" AND m.town=?" if town else "") +
+                       " ORDER BY bm25(segments_fts, 1, 1, 8) LIMIT ?")
+                args = [_fts_query(q)] + ([town] if town else []) + [limit]
+                rows = con.execute(sql, args).fetchall()
             else:
-                like = f"%{q}%"
-                rows = con.execute(
-                    "SELECT * FROM segments WHERE text LIKE ? "
-                    "ORDER BY meeting_id LIMIT ?", (like, limit)).fetchall()
+                sql = ("SELECT s.* FROM segments s " +
+                       ("JOIN meetings m ON m.id=s.meeting_id " if town else "") +
+                       "WHERE s.text LIKE ?" +
+                       (" AND m.town=?" if town else "") +
+                       " ORDER BY s.meeting_id LIMIT ?")
+                args = [f"%{q}%"] + ([town] if town else []) + [limit]
+                rows = con.execute(sql, args).fetchall()
         # bm25 order → a descending 1.0..~0.5 score so keyword beats vector
         # ties. The store owes an ordering; the numbers are policy's, because
         # bm25 is negative and Postgres's ts_rank_cd is positive and the two

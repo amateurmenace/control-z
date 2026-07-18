@@ -106,7 +106,7 @@ class CorpusStore(Protocol):
 
     # -- search ------------------------------------------------------------
 
-    def search(self, q: str, limit: int = 60) -> List[dict]:
+    def search(self, q: str, limit: int = 60, town: str = "") -> List[dict]:
         """Words and meaning, blended, every hit time-coded to a segment.
 
         The hit envelope is fixed and identical on both stores:
@@ -117,7 +117,7 @@ class CorpusStore(Protocol):
         Studio adds `meaning` for its neural half); it may not change what the
         existing values mean."""
 
-    def semantic(self, qvec, limit: int = 40) -> List[dict]: ...
+    def semantic(self, qvec, limit: int = 40, town: str = "") -> List[dict]: ...
 
     # -- stats -------------------------------------------------------------
 
