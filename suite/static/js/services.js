@@ -242,6 +242,7 @@ const SettingsPage = (() => {
     <div id="se-proxy" style="margin-top:16px"></div>
     <div id="se-runtimes" style="margin-top:22px"></div>
     <div id="se-llm" style="margin-top:22px"></div>
+    <div id="se-llmaudit" style="margin-top:22px"></div>
     <div id="se-caches" style="margin-top:22px"></div>
     <div id="se-about" style="margin-top:22px"></div>
   </div>`;
@@ -289,6 +290,83 @@ const SettingsPage = (() => {
       toast("key removed — everything keeps working locally");
       refreshLLM();
     };
+  }
+
+  /* the AI audit — what this session actually spent, attributed. Prices
+     are ESTIMATES, kept here in one place so they're easy to correct;
+     token counts are the providers' own numbers. $/1M tokens (in, out). */
+  const LLM_PRICES = {
+    "gpt-4o-mini": [0.15, 0.60], "gpt-4o": [2.50, 10.00],
+    "gpt-4.1-mini": [0.40, 1.60], "gpt-4.1": [2.00, 8.00],
+    "claude-haiku-4-5": [1.00, 5.00], "claude-sonnet-4-5": [3.00, 15.00],
+    "claude-opus-4-8": [10.00, 40.00],
+  };
+  const llmPrice = model => {
+    const k = Object.keys(LLM_PRICES).find(p => (model || "").startsWith(p));
+    return k ? LLM_PRICES[k] : null;
+  };
+  const llmCost = (model, tin, tout) => {
+    const p = llmPrice(model);
+    return p ? (tin / 1e6 * p[0] + tout / 1e6 * p[1]) : null;
+  };
+  const fmtTok = n => n >= 1e6 ? (n / 1e6).toFixed(2) + "M"
+    : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+
+  async function refreshAudit() {
+    const box = $("#se-llmaudit", el);
+    let u = null;
+    try { u = await api("/api/settings/llm/usage"); } catch (e) { return; }
+    const cost = Object.entries(u.by_model)
+      .reduce((a, [m, v]) => {
+        const c = llmCost(m, v.in, v.out);
+        return c === null || a === null ? null : a + c;
+      }, 0);
+    box.innerHTML = `
+      <div class="tag" style="margin-bottom:6px">AI audit — this session</div>
+      <div class="hint" style="margin-bottom:8px;line-height:1.6">
+        Every API call since the app started, counted from the providers'
+        own token numbers and attributed to the tool whose job spent them —
+        so the spend is never a mystery. Dollar figures are <i>estimates</i>
+        from list prices; your bill is the truth.</div>
+      ${u.calls === 0 ? `<div class="hint">no API calls yet — everything so
+        far ran locally</div>` : `
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">
+        <div class="stat" style="background:var(--ink-2);border:1.5px solid var(--line);border-radius:10px;padding:8px 14px">
+          <b style="font-family:var(--head);font-size:18px">${u.calls}</b>
+          <span class="hint" style="display:block">calls</span></div>
+        <div class="stat" style="background:var(--ink-2);border:1.5px solid var(--line);border-radius:10px;padding:8px 14px">
+          <b style="font-family:var(--head);font-size:18px">${fmtTok(u.tokens_in)}</b>
+          <span class="hint" style="display:block">tokens in</span></div>
+        <div class="stat" style="background:var(--ink-2);border:1.5px solid var(--line);border-radius:10px;padding:8px 14px">
+          <b style="font-family:var(--head);font-size:18px">${fmtTok(u.tokens_out)}</b>
+          <span class="hint" style="display:block">tokens out</span></div>
+        <div class="stat" style="background:var(--ink-2);border:1.5px solid var(--line);border-radius:10px;padding:8px 14px">
+          <b style="font-family:var(--head);font-size:18px">${cost === null ? "?" : "$" + cost.toFixed(3)}</b>
+          <span class="hint" style="display:block">est. spend</span></div>
+        <div class="stat" style="background:var(--ink-2);border:1.5px solid var(--line);border-radius:10px;padding:8px 14px">
+          <b style="font-family:var(--head);font-size:18px">${u.fullest_call_pct}%</b>
+          <span class="hint" style="display:block">fullest single call
+            (of ${fmtTok(u.window)} window)</span></div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+        <tr style="text-align:left;color:var(--cream-dim)">
+          <th style="padding:4px 8px">tool</th><th>calls</th>
+          <th>in</th><th>out</th><th>est.</th></tr>
+        ${Object.entries(u.by_tool).sort((a, b) => b[1].in - a[1].in)
+          .map(([t, v]) => `<tr style="border-top:1px solid var(--line-soft)">
+            <td style="padding:5px 8px"><b>${esc(t)}</b></td>
+            <td>${v.calls}</td><td>${fmtTok(v.in)}</td><td>${fmtTok(v.out)}</td>
+            <td>${(() => { const c = llmCost(u.model, v.in, v.out);
+              return c === null ? "—" : "$" + c.toFixed(3); })()}</td>
+          </tr>`).join("")}
+      </table>
+      <div class="hint" style="margin-top:8px">recent calls:
+        ${u.recent.slice(-6).map(r => `<span class="tpill"
+          title="${esc(r.tool)} · ${esc(r.model)} · ${r.window_pct}% of the context window">
+          ${esc(r.tool)} ${fmtTok(r.tokens_in)}→${fmtTok(r.tokens_out)}</span>`).join(" ")}
+      </div>`}
+      <button class="btn" id="se-auditrefresh" style="margin-top:8px;width:auto">↻ refresh</button>`;
+    $("#se-auditrefresh", box).onclick = refreshAudit;
   }
 
   async function refreshProxy() {
@@ -384,7 +462,8 @@ const SettingsPage = (() => {
   }
 
   async function refresh(arg) {
-    const sections = Promise.all([refreshProxy(), refreshRuntimes(), refreshLLM()]);
+    const sections = Promise.all([refreshProxy(), refreshRuntimes(),
+                                  refreshLLM(), refreshAudit()]);
     /* another page can land here on a specific card: go("settings",
        {section:"runtimes"}) — wait for the cards to exist, then walk there */
     if (arg && arg.section) sections.then(() => {

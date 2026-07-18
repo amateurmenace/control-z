@@ -125,3 +125,59 @@ class TestHotwords(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTokenLedger(unittest.TestCase):
+    """The AI audit: every call counted, attributed, never invented."""
+
+    def setUp(self):
+        with llm._LEDGER_LOCK:
+            self._saved = llm._LEDGER[:]
+            llm._LEDGER.clear()
+        llm.set_tool("")
+
+    def tearDown(self):
+        with llm._LEDGER_LOCK:
+            llm._LEDGER[:] = self._saved
+        llm.set_tool("")
+
+    def test_jobs_name_the_spender(self):
+        """The job runner stamps its tool; a direct call may still say
+        its own name, and the explicit name wins."""
+        llm.set_tool("interpreter")
+        self.assertEqual(llm._record("gpt-4o-mini", "openai", 10, 1)["tool"],
+                         "interpreter")
+        self.assertEqual(
+            llm._record("gpt-4o-mini", "openai", 10, 1, tool="kb")["tool"],
+            "kb")
+        llm.set_tool("")
+        self.assertEqual(llm._record("gpt-4o-mini", "openai", 10, 1)["tool"],
+                         "app")
+
+    def test_usage_reads_both_providers_and_never_invents_output(self):
+        self.assertEqual(
+            llm._usage_from({"usage": {"prompt_tokens": 5,
+                                       "completion_tokens": 7}},
+                            "openai", 999), (5, 7))
+        self.assertEqual(
+            llm._usage_from({"usage": {"input_tokens": 9,
+                                       "output_tokens": 4}},
+                            "anthropic", 999), (9, 4))
+        # no usage block: input estimated from length, output stays zero
+        self.assertEqual(llm._usage_from({}, "openai", 400), (100, 0))
+
+    def test_summary_totals_and_fullest_call(self):
+        llm._record("gpt-4o-mini", "openai", 12000, 300, tool="highlighter")
+        llm._record("gpt-4o-mini", "openai", 64000, 900, tool="memory")
+        s = llm.usage_summary()
+        self.assertEqual(s["calls"], 2)
+        self.assertEqual(s["tokens_in"], 76000)
+        self.assertEqual(s["by_tool"]["memory"]["out"], 900)
+        self.assertEqual(s["fullest_call_pct"], 50.0)
+
+    def test_windows_match_by_prefix_and_fall_back_small(self):
+        self.assertEqual(llm.context_window("claude-haiku-4-5-20251001"),
+                         200_000)
+        self.assertEqual(llm.context_window("gpt-4o-mini-2024-07-18"),
+                         128_000)
+        self.assertEqual(llm.context_window("some-local-model"), 128_000)

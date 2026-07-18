@@ -234,3 +234,13 @@ def register_settings(app, jobs, frames):
                           "environment — change it there"}, status_code=409)
         return llm.set_config(str(body.get("api_key", "")).strip(),
                               str(body.get("model", "")).strip())
+
+    @app.get("/api/settings/llm/usage")
+    def api_llm_usage():
+        """The session's AI audit: every API call since this serve started,
+        counted and attributed to its tool. Token counts come from the
+        providers' own responses; the page turns them into rough dollars."""
+        from czcore import llm
+        return {**llm.usage_summary(),
+                "model": llm.status().get("model"),
+                "window": llm.context_window(llm.status().get("model") or "")}

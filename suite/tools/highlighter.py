@@ -543,8 +543,12 @@ def register_highlighter(app, jobs, frames):
                         "each starting with its [MM:SS], 3) one sentence on "
                         "what's next. Under 250 words."))
             job.message = "brief written — generative, your key"
+            u = llm.last_usage()
             out = {"text": text, "model": llm.status()["model"],
-                   "n_segments": len(t["segments"])}
+                   "n_segments": len(t["segments"]),
+                   "usage": (f"{u['tokens_in']:,} in / {u['tokens_out']:,} "
+                             f"out · {u['window_pct']}% of the context "
+                             "window" if u else "")}
             cache_p.write_text(json.dumps(out))
             return out
 

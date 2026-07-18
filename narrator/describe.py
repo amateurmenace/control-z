@@ -15,11 +15,9 @@ camera talk, fits its gap. A draft that fails lint still lands — marked
 from __future__ import annotations
 
 import base64
-import json
 import re
 import subprocess
-import urllib.request
-from typing import List, Optional
+from typing import List
 
 from .gaps import fits
 
@@ -67,56 +65,19 @@ def draft_prompt(kind: str, words_budget: int) -> str:
 
 def describe_frame(jpeg: bytes, kind: str, words_budget: int,
                    timeout: float = 60.0) -> str:
-    """One vision call on the user's key. Returns the draft text; raises
+    """One vision call on the user's key — through czcore.llm's multimodal
+    door (this module's request shape moved in there for 1.7.1, so the
+    tokens land in the suite-wide AI audit). Returns the draft text; raises
     RuntimeError with a sentence on every failure mode."""
     from czcore import llm
 
-    c = llm.get_config()
-    if not c["api_key"]:
+    if not llm.enabled():
         raise RuntimeError("descriptions need your API key — Settings → AI")
     b64 = base64.b64encode(jpeg).decode("ascii")
-    prompt = draft_prompt(kind, words_budget)
-    if c.get("provider") == "openai":
-        body = {"model": c["model"], "max_completion_tokens": 300,
-                "messages": [
-                    {"role": "system", "content": DCMP_SYSTEM},
-                    {"role": "user", "content": [
-                        {"type": "image_url", "image_url": {
-                            "url": f"data:image/jpeg;base64,{b64}"}},
-                        {"type": "text", "text": prompt}]}]}
-        req = urllib.request.Request(
-            c["base_url"].rstrip("/") + "/v1/chat/completions",
-            data=json.dumps(body).encode(), method="POST",
-            headers={"Content-Type": "application/json",
-                     "Authorization": f"Bearer {c['api_key']}",
-                     "User-Agent": "control-z-suite"})
-    else:
-        body = {"model": c["model"], "max_tokens": 300,
-                "system": DCMP_SYSTEM,
-                "messages": [{"role": "user", "content": [
-                    {"type": "image", "source": {
-                        "type": "base64", "media_type": "image/jpeg",
-                        "data": b64}},
-                    {"type": "text", "text": prompt}]}]}
-        req = urllib.request.Request(
-            c["base_url"].rstrip("/") + "/v1/messages",
-            data=json.dumps(body).encode(), method="POST",
-            headers={"Content-Type": "application/json",
-                     "x-api-key": c["api_key"],
-                     "anthropic-version": "2023-06-01",
-                     "User-Agent": "control-z-suite"})
-    try:
-        raw = urllib.request.urlopen(req, timeout=timeout).read()
-        data = json.loads(raw.decode("utf-8", "replace"))
-    except Exception as e:
-        raise RuntimeError(f"the vision call didn't answer ({e.__class__.__name__})") from e
-    if c.get("provider") == "openai":
-        text = ((data.get("choices") or [{}])[0]
-                .get("message", {}).get("content") or "")
-    else:
-        text = "".join(b.get("text", "") for b in data.get("content", [])
-                       if b.get("type") == "text")
-    text = re.sub(r"\s+", " ", str(text)).strip()
+    text = llm.complete_vision(draft_prompt(kind, words_budget), b64,
+                               system=DCMP_SYSTEM, max_tokens=300,
+                               timeout=timeout)
+    text = re.sub(r"\s+", " ", text).strip()
     if not text:
         raise RuntimeError("the model answered with no description")
     return text

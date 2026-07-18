@@ -252,6 +252,13 @@ class JobManager:
         job.started_at = time.time()
         job.message = job.message if job.message not in ("", "queued") else "running"
         self._flush(job)
+        # any API tokens spent inside this job attribute themselves to the
+        # job's tool in the AI audit — no tool has to say its own name
+        try:
+            from czcore import llm as _llm
+            _llm.set_tool(job.tool or "")
+        except Exception:
+            _llm = None
         try:
             # a fn that finishes its work is "done" even if cancel raced the
             # last frame — fns signal a real early stop by raising JobCancelled
@@ -265,6 +272,8 @@ class JobManager:
             job.status = "error"
             job.error = _sentence(e)
             traceback.print_exc()
+        if _llm is not None:
+            _llm.set_tool("")
         job.finished_at = time.time()
         self._flush(job)
 

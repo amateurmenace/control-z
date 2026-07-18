@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 import urllib.error
 import urllib.request
 from typing import Optional
@@ -110,8 +112,98 @@ def status() -> dict:
             if key else None}
 
 
+# ---------------------------------------------------------------------------
+# the token ledger — every call on the user's key, counted and attributed.
+# The suite's generative passes run inside JobManager jobs; the job runner
+# stamps its tool name into a thread-local (set_tool) so Memory's deltas,
+# Interpreter's chunks and Narrator's vision drafts attribute themselves
+# without those tools changing a line. Settings → AI shows the audit.
+# ---------------------------------------------------------------------------
+
+# context windows, tokens — conservative, for the "how full was the window"
+# line; an unknown model falls back to the smallest common window
+CONTEXT_WINDOWS = {
+    "gpt-4o-mini": 128_000, "gpt-4o": 128_000,
+    "gpt-4.1-mini": 1_000_000, "gpt-4.1": 1_000_000,
+    "claude-haiku-4-5": 200_000, "claude-sonnet-4-5": 200_000,
+    "claude-opus-4-8": 200_000,
+}
+_WINDOW_DEFAULT = 128_000
+
+_LEDGER: list = []          # this serve's session, in memory — the audit
+_LEDGER_LOCK = threading.Lock()
+_tool_ctx = threading.local()
+
+
+def set_tool(name: str) -> None:
+    """The job runner names whose turn it is; "" clears it."""
+    _tool_ctx.name = str(name or "")
+
+
+def context_window(model: str) -> int:
+    for k, v in CONTEXT_WINDOWS.items():
+        if str(model).startswith(k):
+            return v
+    return _WINDOW_DEFAULT
+
+
+def _record(model: str, provider: str, tin: int, tout: int,
+            tool: str = "", kind: str = "text") -> dict:
+    entry = {"ts": round(time.time(), 1),
+             "tool": tool or getattr(_tool_ctx, "name", "") or "app",
+             "model": model, "provider": provider, "kind": kind,
+             "tokens_in": int(tin), "tokens_out": int(tout),
+             "window_pct": round(int(tin) / context_window(model) * 100, 1)}
+    with _LEDGER_LOCK:
+        _LEDGER.append(entry)
+    return entry
+
+
+def _usage_from(data: dict, provider: str, prompt_len: int) -> tuple:
+    """(tokens_in, tokens_out) from the response; a length/4 estimate only
+    when the API didn't say (and then it's still labeled in the audit by
+    being divisible-looking — the audit never invents precision)."""
+    u = data.get("usage") or {}
+    if provider == "openai":
+        tin, tout = u.get("prompt_tokens"), u.get("completion_tokens")
+    else:
+        tin, tout = u.get("input_tokens"), u.get("output_tokens")
+    if tin is None:
+        tin = prompt_len // 4
+    if tout is None:
+        tout = 0
+    return int(tin), int(tout)
+
+
+def last_usage() -> Optional[dict]:
+    """The most recent call's entry — pages append it to their origin
+    lines so a user watches the window fill in real time."""
+    with _LEDGER_LOCK:
+        return dict(_LEDGER[-1]) if _LEDGER else None
+
+
+def usage_summary() -> dict:
+    """The session audit: totals, per tool, per model, and the fullest
+    single call — everything Settings needs to keep the spend in view."""
+    with _LEDGER_LOCK:
+        calls = [dict(e) for e in _LEDGER]
+    by_tool: dict = {}
+    by_model: dict = {}
+    for e in calls:
+        t = by_tool.setdefault(e["tool"], {"calls": 0, "in": 0, "out": 0})
+        t["calls"] += 1; t["in"] += e["tokens_in"]; t["out"] += e["tokens_out"]
+        m = by_model.setdefault(e["model"], {"calls": 0, "in": 0, "out": 0})
+        m["calls"] += 1; m["in"] += e["tokens_in"]; m["out"] += e["tokens_out"]
+    return {"calls": len(calls),
+            "tokens_in": sum(e["tokens_in"] for e in calls),
+            "tokens_out": sum(e["tokens_out"] for e in calls),
+            "by_tool": by_tool, "by_model": by_model,
+            "fullest_call_pct": max([e["window_pct"] for e in calls] or [0]),
+            "recent": calls[-40:]}
+
+
 def complete(prompt: str, system: str = "", max_tokens: int = 1200,
-             timeout: float = 90.0) -> str:
+             timeout: float = 90.0, tool: str = "") -> str:
     """One Messages call with the user's key. Returns the text, or raises
     RuntimeError with a sentence — quota, auth and network each name
     themselves so the UI never shrugs."""
@@ -177,4 +269,64 @@ def complete(prompt: str, system: str = "", max_tokens: int = 1200,
                            "JSON") from e
     if not text.strip():
         raise RuntimeError("the API answered with no text")
+    tin, tout = _usage_from(data, c.get("provider") or "", len(prompt))
+    _record(c["model"], c.get("provider") or "", tin, tout, tool=tool)
     return text
+
+
+def complete_vision(prompt: str, jpeg_b64: str, system: str = "",
+                    max_tokens: int = 300, timeout: float = 60.0,
+                    tool: str = "") -> str:
+    """One message with a picture in it — the multimodal door Narrator
+    asked for (its request shape, moved in). Both providers take base64
+    JPEG; counted in the same ledger as every text call."""
+    c = get_config()
+    if not c["api_key"]:
+        raise RuntimeError("no API key configured — Settings → AI")
+    if c.get("provider") == "openai":
+        body = {"model": c["model"], "max_completion_tokens": max_tokens,
+                "messages": ([{"role": "system", "content": system}]
+                             if system else [])
+                + [{"role": "user", "content": [
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:image/jpeg;base64,{jpeg_b64}"}},
+                    {"type": "text", "text": prompt}]}]}
+        req = urllib.request.Request(
+            c["base_url"].rstrip("/") + "/v1/chat/completions",
+            data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {c['api_key']}",
+                     "User-Agent": "control-z-suite"})
+    else:
+        body = {"model": c["model"], "max_tokens": max_tokens,
+                **({"system": system} if system else {}),
+                "messages": [{"role": "user", "content": [
+                    {"type": "image", "source": {
+                        "type": "base64", "media_type": "image/jpeg",
+                        "data": jpeg_b64}},
+                    {"type": "text", "text": prompt}]}]}
+        req = urllib.request.Request(
+            c["base_url"].rstrip("/") + "/v1/messages",
+            data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json",
+                     "x-api-key": c["api_key"],
+                     "anthropic-version": ANTHROPIC_VERSION,
+                     "User-Agent": "control-z-suite"})
+    try:
+        raw = urllib.request.urlopen(req, timeout=timeout).read()
+        data = json.loads(raw.decode("utf-8", "replace"))
+    except Exception as e:
+        raise RuntimeError(
+            f"the vision call didn't answer ({e.__class__.__name__})") from e
+    if c.get("provider") == "openai":
+        text = ((data.get("choices") or [{}])[0]
+                .get("message", {}).get("content") or "")
+    else:
+        text = "".join(b.get("text", "") for b in data.get("content", [])
+                       if b.get("type") == "text")
+    if not str(text).strip():
+        raise RuntimeError("the model answered with no text")
+    tin, tout = _usage_from(data, c.get("provider") or "", len(prompt) + 1500)
+    _record(c["model"], c.get("provider") or "", tin, tout,
+            tool=tool, kind="vision")
+    return str(text)
