@@ -1,4 +1,4 @@
-"""The Studio's HTTP surface — small on purpose.
+"""Publicrecord's HTTP surface — small on purpose.
 
 The reader is static. That is not a limitation being worked around; it is the
 resilience answer and the cost answer in one move (specs/17 §6.2). The pressed
@@ -8,7 +8,7 @@ and the aeroplane mode on. So the API's job is only the part an envelope of
 static files structurally cannot hold:
 
   · **semantic search**, which needs a vector index at query time — the one
-    feature that is the Studio's whole reason to have a server;
+    feature that is publicrecord's whole reason to have a server;
   · **freshness**, so a reader looking at yesterday's pressing can be told a
     newer one exists rather than silently reading history;
   · **submissions**, so "Add a meeting" finally POSTs instead of composing a
@@ -29,7 +29,7 @@ a search with the neural half unavailable reports `"space": "lexical"` and a
 sentence, and the reader prints it. Degrading is allowed; degrading silently is
 not.
 
-    uvicorn studio.app:app --port 8080
+    uvicorn record.app:app --port 8080
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def get_corpus():
 
 
 def create_app(corpus=None) -> FastAPI:
-    app = FastAPI(title="Community AI Studio",
+    app = FastAPI(title="publicrecord.studio",
                   description="The record, hosted. specs/17.",
                   docs_url=None, redoc_url=None)
     _store = {"corpus": corpus}
@@ -134,7 +134,7 @@ def create_app(corpus=None) -> FastAPI:
         if want_neural and not have_neural:
             # The honest line specs/17 §8 asks for, served from the server side
             # so the reader can print it verbatim instead of inventing one.
-            note = ("meaning-search needs the Studio; words still work — "
+            note = ("meaning-search needs publicrecord; words still work — "
                     + embed_neural.status()["reason"])
         try:
             hits = store().search(q, limit=limit, town=town, space=used)

@@ -10,7 +10,7 @@ That word beside is the whole design. The desk's 256-dimension hashed vector
 downloads nothing, needs no key, and runs on old hardware; it is the covenant
 made literal, and it stays the default and the fallback everywhere. What Gemini
 buys is the one thing hashing structurally cannot do: two passages about the
-same subject in entirely different words. So the Studio keeps both columns,
+same subject in entirely different words. So publicrecord keeps both columns,
 search blends both and tells the reader which found what, and an edition is
 pressed from neither — `emb_neural` is the single column the record can lose
 without losing anything it promised anyone.
@@ -43,7 +43,7 @@ rather than a hole in the corpus. Every call that succeeds writes a row to
 `spend` — the ledger is the covenant's arithmetic, and a number nobody can see
 is a number nobody controls.
 
-    python -m studio.embed_neural --backfill [--town X] [--limit N]
+    python -m record.embed_neural --backfill [--town X] [--limit N]
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ from .settings import NEURAL_DIM, NEURAL_MODEL, settings
 
 # The SDK is not a suite dependency and is not installed at the desk; the
 # Studio's own container is the only place it is expected. Guarded, so that
-# importing this module — which `studio.store` does on every neural search —
+# importing this module — which `record.store` does on every neural search —
 # can never be the thing that takes the service down.
 try:
     from google import genai
@@ -123,7 +123,7 @@ def status() -> dict:
     if genai is None:
         reason = "the google-genai package is not installed"
     elif not settings.gemini_key:
-        reason = "STUDIO_GEMINI_KEY is not set"
+        reason = "RECORD_GEMINI_KEY is not set"
     else:
         reason = ""
     return {"model": NEURAL_MODEL, "dim": NEURAL_DIM,
@@ -387,7 +387,7 @@ def _pg_vector(vals: Sequence[float]) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="python -m studio.embed_neural",
+        prog="python -m record.embed_neural",
         description="The neural half of search: Gemini embeddings, batched, "
                     "stored beside the lexical vector and never instead of it.")
     ap.add_argument("--backfill", action="store_true",
@@ -395,7 +395,7 @@ def main(argv=None) -> int:
     ap.add_argument("--town", default="", help="restrict to one town")
     ap.add_argument("--limit", type=int, default=0,
                     help="stop after N segments (0 = all)")
-    ap.add_argument("--dsn", default="", help="override STUDIO_DSN")
+    ap.add_argument("--dsn", default="", help="override RECORD_DSN")
     args = ap.parse_args(argv)
 
     st = status()

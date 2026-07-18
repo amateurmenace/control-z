@@ -1,4 +1,4 @@
-"""The Studio's HTTP surface — and the promises it makes to a reader.
+"""Publicrecord's HTTP surface — and the promises it makes to a reader.
 
 Three things are under test and they matter in this order.
 
@@ -6,7 +6,7 @@ Three things are under test and they matter in this order.
 changes because of who is asking. That is not a feature to regress quietly, so
 it is asserted rather than assumed.
 
-**Honest degradation.** The Studio is allowed to have a half missing — no
+**Honest degradation.** Publicrecord is allowed to have a half missing — no
 Gemini key, no steward console configured, no database — and it is never
 allowed to hide that. A search with the neural half dark says so in the
 response and returns the words it does have; a corpus that is gone returns 503
@@ -17,14 +17,14 @@ that."
 The dangerous version of this bug is the one where the console falls *open*
 because nobody set an environment variable.
 
-Skips loudly without STUDIO_TEST_PG_DSN.
+Skips loudly without RECORD_TEST_PG_DSN.
 """
 
 import os
 import unittest
 from unittest import mock
 
-PG_DSN = os.environ.get("STUDIO_TEST_PG_DSN", "").strip()
+PG_DSN = os.environ.get("RECORD_TEST_PG_DSN", "").strip()
 
 SELECT = [
     {"start": 0.0, "end": 5.0, "speaker": "Speaker 1",
@@ -42,14 +42,14 @@ BOSTON = [
 STEWARD = {"email": "steward@example.org", "name": "A Steward", "sub": "1"}
 
 
-@unittest.skipUnless(PG_DSN, "STUDIO_TEST_PG_DSN unset — the Studio's API is "
+@unittest.skipUnless(PG_DSN, "RECORD_TEST_PG_DSN unset — publicrecord's API is "
                              "UNPROVEN in this run")
 class ApiTest(unittest.TestCase):
     def setUp(self):
         from fastapi.testclient import TestClient
 
-        from studio.app import create_app
-        from studio.store import PgCorpus
+        from record.app import create_app
+        from record.store import PgCorpus
 
         self.c = PgCorpus(dsn=PG_DSN)
         self.addCleanup(self.c.close)
@@ -118,7 +118,7 @@ class ApiTest(unittest.TestCase):
         j = self.client.get("/api/search",
                             params={"q": "rezoning", "space": "neural"}).json()
         self.assertEqual(j["space"], "lexical")     # what actually happened
-        self.assertIn("meaning-search needs the Studio", j["note"])
+        self.assertIn("meaning-search needs publicrecord", j["note"])
         self.assertGreater(j["count"], 0)           # and the words still work
 
     def test_empty_query_is_not_an_error(self):
@@ -185,7 +185,8 @@ class ApiTest(unittest.TestCase):
         self.assertTrue(j["ok"])
         self.assertEqual(j["record"]["meetings"], 2)
         self.assertIn("available", j["neural"])
-        self.assertNotIn("studio:studio@", j["store"])     # never the password
+        self.assertNotIn("record:record@", j["store"])   # never the password
+        self.assertIn("***", j["store"])                 # and it says so
 
 
     # -- what the adversarial review found ---------------------------------
@@ -196,11 +197,11 @@ class ApiTest(unittest.TestCase):
         password in the query string. Both fell straight onto this anonymous
         endpoint. A redactor whose failure mode is "publish it" is worse than
         none."""
-        from studio.settings import Settings
+        from record.settings import Settings
         for dsn in (
-            "postgresql://studio:hunter2@localhost:5432/studio",
-            "host=localhost port=5432 dbname=studio user=studio password=hunter2",
-            "postgresql://localhost/studio?user=studio&password=hunter2",
+            "postgresql://record:hunter2@localhost:5432/record",
+            "host=localhost port=5432 dbname=record user=record password=hunter2",
+            "postgresql://localhost/record?user=record&password=hunter2",
             "postgres://u:hunter2@h/db",
         ):
             out = Settings(dsn=dsn).redacted()
@@ -213,7 +214,7 @@ class ApiTest(unittest.TestCase):
         prevent."""
         from unittest import mock
 
-        from studio import embed_neural
+        from record import embed_neural
         with mock.patch.object(embed_neural, "available", lambda: True), \
              mock.patch.object(embed_neural, "embed_query", lambda *a, **k: None):
             j = self.client.get("/api/search",
@@ -250,7 +251,7 @@ class ApiTest(unittest.TestCase):
             self.assertIn("not configured", r.json()["error"])
 
 
-@unittest.skipUnless(PG_DSN, "STUDIO_TEST_PG_DSN unset — the steward console is "
+@unittest.skipUnless(PG_DSN, "RECORD_TEST_PG_DSN unset — the steward console is "
                              "UNPROVEN in this run")
 class StewardTest(unittest.TestCase):
     """The console with auth configured. The Google verifier is stubbed — what
@@ -259,10 +260,10 @@ class StewardTest(unittest.TestCase):
     def setUp(self):
         from fastapi.testclient import TestClient
 
-        from studio import auth
-        from studio.app import create_app
-        from studio.settings import Settings
-        from studio.store import PgCorpus
+        from record import auth
+        from record.app import create_app
+        from record.settings import Settings
+        from record.store import PgCorpus
 
         self.c = PgCorpus(dsn=PG_DSN)
         self.addCleanup(self.c.close)
@@ -276,7 +277,7 @@ class StewardTest(unittest.TestCase):
                        steward_allowlist=["steward@example.org"])
         p = mock.patch.object(auth, "settings", cfg, create=True)
         p.start(); self.addCleanup(p.stop)
-        p2 = mock.patch("studio.settings.settings", cfg)
+        p2 = mock.patch("record.settings.settings", cfg)
         p2.start(); self.addCleanup(p2.stop)
         p3 = mock.patch.object(auth, "_HAVE_GOOGLE_AUTH", True)
         p3.start(); self.addCleanup(p3.stop)

@@ -45,7 +45,7 @@ from memory import embed, policy
 # One open transaction per task, when a caller has asked for one via unit().
 # A ContextVar rather than an attribute because the service is concurrent and
 # two requests curating at once must not share a transaction.
-_UNIT: ContextVar = ContextVar("studio_unit", default=None)
+_UNIT: ContextVar = ContextVar("record_unit", default=None)
 
 # The hit envelope, identical on both stores. Selected once here rather than
 # assembled per row, because this JOIN is what replaces the desk's N+1.
@@ -58,7 +58,7 @@ _HIT_COLS = """
 
 
 class PgCorpus:
-    """The Studio's store. Implements `memory.seam.CorpusStore`."""
+    """Publicrecord's store. Implements `memory.seam.CorpusStore`."""
 
     def __init__(self, dsn: str = "", pool_min: int = 1, pool_max: int = 8,
                  check_dims: bool = True):

@@ -13,7 +13,7 @@ reader cookie, no reader anything: that is covenant, not configuration
 (specs/17 §9). Nothing in this module is on the path of a page a resident
 reads, and the API's public endpoints must never import `require_steward`.
 
-Two failure modes are deliberate. With no `STUDIO_GOOGLE_CLIENT_ID` and no
+Two failure modes are deliberate. With no `RECORD_GOOGLE_CLIENT_ID` and no
 allowlist configured, every steward route returns 503 with a sentence saying
 the console is not configured — it does not fall open, and it does not pretend
 to be broken. And a token that verifies but whose email is not on the list gets
@@ -74,9 +74,9 @@ def why_unconfigured(settings=None) -> str:
         return (f"google-auth[requests] is not installed ({_IMPORT_ERROR})"
                 if _IMPORT_ERROR else "google-auth[requests] is not installed")
     if not s.google_client_id:
-        return "STUDIO_GOOGLE_CLIENT_ID is not set"
+        return "RECORD_GOOGLE_CLIENT_ID is not set"
     if not s.steward_allowlist:
-        return "STUDIO_STEWARD_ALLOWLIST is empty — no one is a steward yet"
+        return "RECORD_STEWARD_ALLOWLIST is empty — no one is a steward yet"
     return ""
 
 

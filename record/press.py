@@ -1,10 +1,10 @@
 """Press the edition from the cloud — the record, on paper, without us.
 
 specs/17 §6.2 makes one promise and everything in this file serves it: **if
-Cloud Run and Postgres both vanish, the record still reads.** The Studio is
+Cloud Run and Postgres both vanish, the record still reads.** Publicrecord is
 allowed to be clever — semantic search needs a server, and that is the whole
 reason there is one — but the reading of the record is not allowed to depend
-on the Studio being alive. So on every corpus change, debounced, the same
+on publicrecord being alive. So on every corpus change, debounced, the same
 specs/16 edition the desk presses is pressed here and pushed to a bucket
 behind a CDN, and the reader shell talks to the API for exactly two things
 (meaning-search and freshness) and to the bucket for everything else.
@@ -36,7 +36,7 @@ could be satisfied.
 as a side effect of being asked where they are; `settings.py` already refuses
 to import it for that reason. It is used for one purpose — finding the
 Interpreter and Narrator sidecar tracks a desk wrote beside a meeting — and
-the Studio has no sidecars, because nothing has ever transcribed or described
+publicrecord has no sidecars, because nothing has ever transcribed or described
 a meeting on this machine. So press passes a resolver that points at a path
 that does not exist, the track scan finds nothing, and the pressed edition
 carries no translated or described tracks. It says so: `sidecars` is False in
@@ -100,7 +100,7 @@ _DOC_LIMIT = 2000
 # Where the sidecar scan is pointed. It must be a path that does not exist and
 # will not be created: `web.bake._sidecar_dirs` only ever calls `.is_dir()` on
 # it, so a missing directory is a clean "no tracks here" rather than an error.
-_NO_SIDECARS = Path("/var/empty/studio-has-no-sidecars")
+_NO_SIDECARS = Path("/var/empty/record-has-no-sidecars")
 
 # The object metadata key carrying the digest of the *plain* bytes. Comparing
 # GCS's own md5 would compare the gzipped object against the local file and
@@ -239,7 +239,7 @@ def _write_pressing(out: Path, manifest: dict, fingerprint: str) -> dict:
     whether the server is still tending it. A reader polling this file
     compares `fingerprint` against the one its cached shell was built from;
     an equal fingerprint with a newer `pressed_at` means the record is
-    unchanged and the Studio is alive, which is a real and reassuring answer.
+    unchanged and publicrecord is alive, which is a real and reassuring answer.
     """
     doc = {
         "fingerprint": fingerprint,
@@ -296,7 +296,7 @@ def corpus_fingerprint(corpus) -> str:
     deletion or a re-link would change without moving any single row's clock.
 
     Goes through the seam only, so it answers identically for the desk's
-    SQLite `Corpus` and the Studio's `PgCorpus`. Timestamps are folded at
+    SQLite `Corpus` and publicrecord's `PgCorpus`. Timestamps are folded at
     one-second resolution: SQLite keeps them as REAL and Postgres as double
     precision, and float repr drift between the two would otherwise make the
     same record fingerprint differently on each store.
@@ -548,20 +548,20 @@ def sync_to_gcs(local_dir: str, bucket: str, prefix: str = "") -> dict:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        prog="studio.press",
+        prog="record.press",
         description="Press the record's edition from Postgres and push it.")
     ap.add_argument("--out", default="",
-                    help="output dir (default: STUDIO_EDITION_DIR)")
+                    help="output dir (default: RECORD_EDITION_DIR)")
     ap.add_argument("--bucket", default="",
                     help="GCS bucket to sync into (default: "
-                         "STUDIO_EDITION_BUCKET; omit to press to disk only)")
+                         "RECORD_EDITION_BUCKET; omit to press to disk only)")
     ap.add_argument("--prefix", default="app",
                     help="object prefix inside the bucket (default: app)")
     ap.add_argument("--version", default="",
                     help="edition version (default: the suite's)")
     ap.add_argument("--base", default="",
                     help="site base URL for feeds + OG tags (default: "
-                         "STUDIO_SITE_BASE)")
+                         "RECORD_SITE_BASE)")
     ap.add_argument("--force", action="store_true",
                     help="press even when the record has not moved")
     args = ap.parse_args(argv)

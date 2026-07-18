@@ -595,7 +595,7 @@ def _print_run(r: dict) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="studio.connectors.youtube",
+        prog="record.connectors.youtube",
         description="Poll a town body's YouTube channel and file what is new.")
     ap.add_argument("--source", required=True,
                     help="channel id (UC…), playlist id (PL…), @handle, or URL")
@@ -642,7 +642,7 @@ def main(argv=None) -> int:
     if not args.town:
         print("note: no --town given; these submissions will be filed "
               "town-less and a steward will have to say where they belong")
-    from studio.store import PgCorpus
+    from record.store import PgCorpus
 
     corpus = PgCorpus()
     try:

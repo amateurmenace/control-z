@@ -1,14 +1,14 @@
-# The Studio, on your own machine — and the shape of In-a-Box v2.
+# Publicrecord, on your own machine — and the shape of In-a-Box v2.
 #
 # specs/17 §9 promises anyone can run the same record for their town, and that
 # In-a-Box v2 is literally `docker compose up` of these containers. This is
 # that file, and it is also how wave 1 was built and proven: nothing in the
 # Studio has been provisioned on GCP, so every claim in the commit log was
-# demonstrated here first. studio/INFRA.md is the same stack said in gcloud.
+# demonstrated here first. record/INFRA.md is the same stack said in gcloud.
 #
 #   docker compose up -d db
-#   docker compose run --rm api python -m studio.migrate
-#   docker compose run --rm api python -m studio.import_desk \
+#   docker compose run --rm api python -m record.migrate
+#   docker compose run --rm api python -m record.import_desk \
 #       --corpus /corpus/corpus.db
 #   docker compose up api
 #
@@ -19,17 +19,17 @@ services:
   db:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: studio
-      POSTGRES_PASSWORD: studio
-      POSTGRES_DB: studio
+      POSTGRES_USER: record
+      POSTGRES_PASSWORD: record
+      POSTGRES_DB: record
     ports:
       - "55432:5432"
     volumes:
-      - studio-db:/var/lib/postgresql/data
+      - record-db:/var/lib/postgresql/data
     healthcheck:
       # The API's pool waits 15s and then says the corpus is unreachable, which
       # is honest but unhelpful if the truth is "Postgres is still starting".
-      test: ["CMD-SHELL", "pg_isready -U studio -d studio"]
+      test: ["CMD-SHELL", "pg_isready -U record -d record"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -37,48 +37,48 @@ services:
   api:
     build:
       context: .
-      dockerfile: studio/Dockerfile
+      dockerfile: record/Dockerfile
     depends_on:
       db:
         condition: service_healthy
     environment:
-      STUDIO_DSN: postgresql://studio:studio@db:5432/studio
-      # Every one of these is absent by default, and the Studio says so rather
+      RECORD_DSN: postgresql://record:record@db:5432/record
+      # Every one of these is absent by default, and publicrecord says so rather
       # than pretending. No key: search is lexical and the reader is told.
       # No allowlist: the steward console returns 503 on every route.
-      STUDIO_GEMINI_KEY: "${STUDIO_GEMINI_KEY:-}"
-      STUDIO_GOOGLE_CLIENT_ID: "${STUDIO_GOOGLE_CLIENT_ID:-}"
-      STUDIO_STEWARD_ALLOWLIST: "${STUDIO_STEWARD_ALLOWLIST:-}"
-      STUDIO_SERVICE_TOKEN: "${STUDIO_SERVICE_TOKEN:-}"
-      STUDIO_SITE_BASE: "${STUDIO_SITE_BASE:-http://localhost:8330}"
+      RECORD_GEMINI_KEY: "${RECORD_GEMINI_KEY:-}"
+      RECORD_GOOGLE_CLIENT_ID: "${RECORD_GOOGLE_CLIENT_ID:-}"
+      RECORD_STEWARD_ALLOWLIST: "${RECORD_STEWARD_ALLOWLIST:-}"
+      RECORD_SERVICE_TOKEN: "${RECORD_SERVICE_TOKEN:-}"
+      RECORD_SITE_BASE: "${RECORD_SITE_BASE:-http://localhost:8330}"
     ports:
       - "8330:8330"
     volumes:
       # Read-only, and pointed at the desk's corpus so `import_desk` can carry
-      # a record in. The Studio never writes to a desk's file.
+      # a record in. Publicrecord never writes to a desk's file.
       - "${HOME}/Movies/control-z/memory:/corpus:ro"
-      - studio-editions:/editions
-    command: uvicorn studio.app:app --host 0.0.0.0 --port 8330
+      - record-editions:/editions
+    command: uvicorn record.app:app --host 0.0.0.0 --port 8330
 
   # The nightly poll and the press. Not a long-running service — Cloud Run Jobs
-  # in the Studio, `docker compose run` here.
+  # in publicrecord, `docker compose run` here.
   pipeline:
     build:
       context: .
-      dockerfile: studio/Dockerfile
+      dockerfile: record/Dockerfile
     depends_on:
       db:
         condition: service_healthy
     environment:
-      STUDIO_DSN: postgresql://studio:studio@db:5432/studio
-      STUDIO_GEMINI_KEY: "${STUDIO_GEMINI_KEY:-}"
-      STUDIO_EDITION_DIR: /editions/app
+      RECORD_DSN: postgresql://record:record@db:5432/record
+      RECORD_GEMINI_KEY: "${RECORD_GEMINI_KEY:-}"
+      RECORD_EDITION_DIR: /editions/app
     volumes:
       - "${HOME}/Movies/control-z/memory:/corpus:ro"
-      - studio-editions:/editions
+      - record-editions:/editions
     profiles: ["jobs"]
-    command: python -m studio.press --out /editions/app
+    command: python -m record.press --out /editions/app
 
 volumes:
-  studio-db:
-  studio-editions:
+  record-db:
+  record-editions:

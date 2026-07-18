@@ -90,7 +90,7 @@ def from_bytes(blob: Optional[bytes]):
 def as_vec(x):
     """Read an embedding back from whatever a store hands over.
 
-    The desk stores vectors as raw float32 bytes in a BLOB; the Studio stores
+    The desk stores vectors as raw float32 bytes in a BLOB; publicrecord stores
     them as a typed pgvector column and gets an array back. Both are the same
     256 numbers, and no caller should have to know which one it is holding —
     so this is the one dialect-free reader, and `memory.seam` declares the

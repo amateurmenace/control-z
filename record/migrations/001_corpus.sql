@@ -241,7 +241,7 @@ CREATE TABLE IF NOT EXISTS votes (
 );
 CREATE INDEX IF NOT EXISTS idx_vote_meeting ON votes (meeting_id, t);
 
--- ------------------------------------------------- the Studio's own tables
+-- ------------------------------------------------- publicrecord's own tables
 -- The public "Add a meeting" stops composing a GitHub issue and POSTs here.
 -- specs/16's contract shape is unchanged; it just lands in a queue now.
 CREATE TABLE IF NOT EXISTS submissions (

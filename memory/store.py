@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS votes (
 CREATE INDEX IF NOT EXISTS idx_vote_meeting ON votes(meeting_id);
 """
 
-# The record's rules live in policy.py now, so the Studio's Postgres store
+# The record's rules live in policy.py now, so publicrecord's Postgres store
 # inherits the same answers instead of re-deciding them. These names stay as
 # aliases because this module has always spelled them this way.
 _HEAVY = policy.HEAVY
@@ -159,7 +159,7 @@ class Corpus:
 
     def close(self) -> None:
         """Nothing to release: every operation here opens and closes its own
-        connection, and the only shared state is the vector cache. The Studio's
+        connection, and the only shared state is the vector cache. Publicrecord's
         store returns a pool; the seam asks both the same question."""
         self._cache = (-1, None, [])
 
@@ -168,7 +168,7 @@ class Corpus:
         """A unit of work. SQLite has one writer and WAL already serialises it,
         so this yields immediately and every inner `_con()` behaves exactly as
         it always has — the desk's behavior is untouched by design. It exists
-        because the Studio's curation verbs are multi-call sequences that must
+        because publicrecord's curation verbs are multi-call sequences that must
         not half-land, and the callers of those sequences live in shared code."""
         yield self
 
@@ -343,7 +343,7 @@ class Corpus:
 
         `town` scopes the whole search to one town. It defaults to empty — the
         behavior this has always had — but a record serving several towns must
-        pass it, and the Studio's API layer always does: aggregation across
+        pass it, and publicrecord's API layer always does: aggregation across
         towns is a covenant question, not a convenience."""
         q = (q or "").strip()
         if not q:
@@ -1105,7 +1105,7 @@ class Corpus:
             return con.execute(sql, args).fetchone()
 
 
-# The record's judgement calls now live in policy.py, shared with the Studio's
+# The record's judgement calls now live in policy.py, shared with publicrecord's
 # store. These stay as this module's names for the callers that already use them.
 _loads = policy.loads
 _dedupe_keep_order = policy.dedupe_keep_order

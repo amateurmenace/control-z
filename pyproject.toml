@@ -35,11 +35,11 @@ packaging = ["pyinstaller>=6.21"]
 # The hosted record's server (specs/17). Deliberately NOT part of the `suite`
 # runtime extra, and deliberately absent from packaging/suite.spec: a signed
 # desktop DMG has no business carrying a Postgres driver or a cloud SDK. The
-# desk stays local-first and BYO-key; this is the Studio's own bill.
+# desk stays local-first and BYO-key; this is publicrecord's own bill.
 # google-auth alone imports and then fails on its transport, so the extra
 # names the transport too — otherwise the console's own error message tells
 # an operator to install a package they already have.
-studio = ["psycopg[binary,pool]>=3.2", "pgvector>=0.3",
+record = ["psycopg[binary,pool]>=3.2", "pgvector>=0.3",
           "fastapi", "uvicorn[standard]",
           "google-auth[requests]>=2.30"]
 
@@ -63,7 +63,7 @@ packages = ["czcore", "czcore.exports", "czcore.appshell",
             "highlighter", "grabber", "indexer", "slate", "publisher",
             "memory", "interpreter", "narrator",
             "web",
-            "studio", "studio.connectors",
+            "studio", "record.connectors",
             "suite", "suite.tools"]
 
 [tool.setuptools.package-data]
@@ -72,6 +72,6 @@ depth = ["templates/*.setting"]
 interpreter = ["glossaries/*.json"]
 web = ["static/*"]
 # The migrations are data, not code — setuptools will not carry .sql for free.
-studio = ["migrations/*.sql"]
+record = ["migrations/*.sql"]
 # static/* alone misses static/js/*.js — the whole UI. Both globs, explicitly.
 suite = ["static/*.html", "static/*.css", "static/js/*.js"]

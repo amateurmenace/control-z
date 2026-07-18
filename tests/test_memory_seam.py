@@ -1,7 +1,7 @@
 """The store seam — what the engine may assume, pinned.
 
 These run against a throwaway SQLite file only; the Postgres half of the seam
-is proven in tests/test_studio_store_parity.py, which needs a server. What is
+is proven in tests/test_record_store_parity.py, which needs a server. What is
 pinned here is the part that must hold before a second store is even worth
 writing: that the desk's Corpus satisfies the interface, that the record's
 judgement calls live in one place, and that an embedding can be read back
@@ -35,7 +35,7 @@ class SeamTest(unittest.TestCase):
     def test_the_desk_store_satisfies_the_interface(self):
         """The acceptance test for the whole seam: Corpus is a CorpusStore
         without inheriting from one. If this fails, a method was renamed and
-        the Studio's store is about to diverge silently."""
+        publicrecord's store is about to diverge silently."""
         self.assertIsInstance(self.c, CorpusStore)
 
     def test_every_declared_method_exists_and_is_callable(self):
@@ -48,7 +48,7 @@ class SeamTest(unittest.TestCase):
         self.assertEqual(missing, [])
 
     def test_unit_is_transparent_at_the_desk(self):
-        """unit() exists for the Studio's multi-call verbs. At the desk it must
+        """unit() exists for publicrecord's multi-call verbs. At the desk it must
         change nothing at all — one writer, WAL, already serialised."""
         with self.c.unit() as u:
             self.assertIs(u, self.c)

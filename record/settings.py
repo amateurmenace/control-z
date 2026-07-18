@@ -5,7 +5,7 @@ its media under `~/Movies`; `czcore.paths` will happily *create* those
 directories as a side effect of being asked where they are. None of that has
 any meaning in a container, so none of it is imported here.
 
-Secrets arrive as environment variables — from Secret Manager in the Studio,
+Secrets arrive as environment variables — from Secret Manager in publicrecord,
 from a `.env` the developer never commits locally. Nothing in this file has a
 secret as its default, and `redacted()` exists so a store can say which
 database it is talking to without putting a password in a log line.
@@ -39,31 +39,31 @@ class Settings:
 
     # -- the corpus --------------------------------------------------------
     dsn: str = field(default_factory=lambda: _env(
-        "STUDIO_DSN", "postgresql://studio:studio@localhost:55432/studio"))
-    pool_min: int = field(default_factory=lambda: int(_env("STUDIO_POOL_MIN", "1")))
-    pool_max: int = field(default_factory=lambda: int(_env("STUDIO_POOL_MAX", "8")))
+        "RECORD_DSN", "postgresql://record:record@localhost:55432/record"))
+    pool_min: int = field(default_factory=lambda: int(_env("RECORD_POOL_MIN", "1")))
+    pool_max: int = field(default_factory=lambda: int(_env("RECORD_POOL_MAX", "8")))
 
     # -- the neural half ---------------------------------------------------
-    # Absent by design: with no key the Studio still runs, search still works,
+    # Absent by design: with no key publicrecord still runs, search still works,
     # and the reader is told which half is missing rather than shown a blank.
-    gemini_key: str = field(default_factory=lambda: _env("STUDIO_GEMINI_KEY"))
+    gemini_key: str = field(default_factory=lambda: _env("RECORD_GEMINI_KEY"))
 
     # -- stewards ----------------------------------------------------------
     # The allowlist is server-side and small on purpose. specs/17 §3: steward
     # auth is thirty lines, not a platform.
     steward_allowlist: List[str] = field(default_factory=lambda: _env_list(
-        "STUDIO_STEWARD_ALLOWLIST"))
-    google_client_id: str = field(default_factory=lambda: _env("STUDIO_GOOGLE_CLIENT_ID"))
+        "RECORD_STEWARD_ALLOWLIST"))
+    google_client_id: str = field(default_factory=lambda: _env("RECORD_GOOGLE_CLIENT_ID"))
     # A shared secret for machine callers (the pipeline job, the drain). Never a
     # steward's identity — those are people, this is a robot.
-    service_token: str = field(default_factory=lambda: _env("STUDIO_SERVICE_TOKEN"))
+    service_token: str = field(default_factory=lambda: _env("RECORD_SERVICE_TOKEN"))
 
     # -- the edition -------------------------------------------------------
     site_base: str = field(default_factory=lambda: _env(
-        "STUDIO_SITE_BASE", "https://communityai.studio"))
-    edition_bucket: str = field(default_factory=lambda: _env("STUDIO_EDITION_BUCKET"))
+        "RECORD_SITE_BASE", "https://communityai.studio"))
+    edition_bucket: str = field(default_factory=lambda: _env("RECORD_EDITION_BUCKET"))
     edition_dir: str = field(default_factory=lambda: _env(
-        "STUDIO_EDITION_DIR", "/tmp/studio-edition"))
+        "RECORD_EDITION_DIR", "/tmp/record-edition"))
 
     @property
     def has_neural(self) -> bool:

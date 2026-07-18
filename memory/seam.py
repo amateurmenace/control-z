@@ -3,13 +3,13 @@
 `memory/` is the civic-record engine: ingest, issues, votes, documents, the
 analysis passes. Until now it had exactly one place to put things, and the
 distinction between "the record's logic" and "SQLite" was never forced. specs/17
-forces it: the desk keeps its one file under `~/Movies`, the Studio keeps a
+forces it: the desk keeps its one file under `~/Movies`, publicrecord keeps a
 Postgres the towns share, and the same hand-audited issue engine has to run
 against both and produce the same record.
 
 So this is the line. Anything below it may differ between stores; anything
 above it may not. `Corpus` (SQLite) satisfies this as written — that is the
-acceptance test, not an aspiration — and `studio.store.PgCorpus` implements it
+acceptance test, not an aspiration — and `record.store.PgCorpus` implements it
 beside.
 
 It is a `Protocol`, not a base class, on purpose. `Corpus` is the most
@@ -28,7 +28,7 @@ the wrong moment if that changed. `list_events` is newest-first; `digest` calls
 the first match "latest" and is only correct under it.
 
 **Embeddings are opaque.** A store hands back whatever its column holds — raw
-float32 bytes at the desk, a pgvector array in the Studio. Callers read them
+float32 bytes at the desk, a pgvector array in publicrecord. Callers read them
 only through `embed.as_vec()`. No caller may assume `bytes`, and none may
 assume a dimension: `embed.DIM` is the single source of truth and there is no
 dim tag on the desk's blobs, so a mismatch raises a shape error rather than
@@ -68,7 +68,7 @@ class CorpusStore(Protocol):
     def close(self) -> None:
         """Release whatever the store holds. A no-op at the desk (every
         operation already opens and closes its own connection); returns the
-        pool in the Studio."""
+        pool in publicrecord."""
 
     def unit(self) -> ContextManager:
         """One transaction across several calls.
@@ -76,7 +76,7 @@ class CorpusStore(Protocol):
         The curation verbs are call *sequences* — merge is `merge_issues` then
         `reassign_issue` then `get_issue` — and each call commits on its own.
         With one writer on one file that is invisible. With N workers against
-        one Postgres it is a half-done merge, so the Studio needs a way to say
+        one Postgres it is a half-done merge, so publicrecord needs a way to say
         "these together or not at all". At the desk this yields immediately and
         changes nothing, which is why it can be added without touching a single
         existing caller."""

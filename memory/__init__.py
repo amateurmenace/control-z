@@ -12,7 +12,7 @@ Layout (this package is lane B's, owned end to end):
   store.py    — the corpus: one SQLite file under media_dir("memory"), FTS5
                 for words, local vectors beside it for related language.
   seam.py     — what the engine may assume of a store, so the desk's SQLite and
-                the Studio's Postgres (specs/17) can both answer to it.
+                publicrecord's Postgres (specs/17) can both answer to it.
   policy.py   — the record's judgement calls, held apart from the SQL that
                 stores them: merging, blending, the vector floor, dedupe.
   embed.py    — a small, offline, no-download text embedding (lexical). The one

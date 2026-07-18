@@ -1,7 +1,7 @@
 """One interface, two stores, one set of guarantees — proven, not asserted.
 
 Every case here runs twice: once against a throwaway SQLite file, once against
-a Postgres named by STUDIO_TEST_PG_DSN. The point is not that each store works;
+a Postgres named by RECORD_TEST_PG_DSN. The point is not that each store works;
 it is that they agree, because the hand-audited issue engine, the dedupe tiers
 and the vote reader run against whichever one they are handed, and a
 disagreement between the two is a record that says different things about the
@@ -17,10 +17,10 @@ When the DSN is unset the Postgres half skips **loudly** and says how many. A
 skip here is a gate that lost its inputs, not routine — the 1.9.0 audits made
 that a house rule after a missing `otool` silently disabled four licence gates.
 
-    docker run -d -e POSTGRES_PASSWORD=studio -e POSTGRES_USER=studio \
-        -e POSTGRES_DB=studio_test -p 55432:5432 pgvector/pgvector:pg16
-    export STUDIO_TEST_PG_DSN=postgresql://studio:studio@localhost:55432/studio_test
-    .venv/bin/python -m studio.migrate --dsn "$STUDIO_TEST_PG_DSN"
+    docker run -d -e POSTGRES_PASSWORD=record -e POSTGRES_USER=record \
+        -e POSTGRES_DB=record_test -p 55432:5432 pgvector/pgvector:pg16
+    export RECORD_TEST_PG_DSN=postgresql://record:record@localhost:55432/record_test
+    .venv/bin/python -m record.migrate --dsn "$RECORD_TEST_PG_DSN"
 """
 
 import os
@@ -31,7 +31,7 @@ from pathlib import Path
 from memory import embed, issues, policy
 from memory.store import Corpus
 
-PG_DSN = os.environ.get("STUDIO_TEST_PG_DSN", "").strip()
+PG_DSN = os.environ.get("RECORD_TEST_PG_DSN", "").strip()
 
 SELECT = [
     {"start": 0.0, "end": 5.0, "speaker": "Speaker 1",
@@ -528,13 +528,13 @@ class SqliteStoreTest(StoreGuarantees, unittest.TestCase):
         return Corpus(db_path=str(Path(td.name) / "corpus.db"))
 
 
-@unittest.skipUnless(PG_DSN, "STUDIO_TEST_PG_DSN unset — the Postgres half of "
+@unittest.skipUnless(PG_DSN, "RECORD_TEST_PG_DSN unset — the Postgres half of "
                              "the seam is UNPROVEN in this run")
 class PgStoreTest(StoreGuarantees, unittest.TestCase):
-    """The Studio's store — the same guarantees, other dialect."""
+    """Publicrecord's store — the same guarantees, other dialect."""
 
     def store(self):
-        from studio.store import PgCorpus
+        from record.store import PgCorpus
         c = PgCorpus(dsn=PG_DSN)
         # Each case starts from an empty record. TRUNCATE … CASCADE rather than
         # dropping the schema: it is one statement, and it keeps the foreign
@@ -554,7 +554,7 @@ class PgStoreTest(StoreGuarantees, unittest.TestCase):
     def test_the_dsn_never_carries_a_password(self):
         """`db_path` is the seam's "which store am I", and it ends up in health
         endpoints and log lines. On this store it is a DSN."""
-        self.assertNotIn("studio:studio@", self.c.db_path)
+        self.assertNotIn("record:record@", self.c.db_path)
         self.assertIn("***", self.c.db_path)
 
     def test_zero_norm_vectors_are_stored_as_null_not_as_zeros(self):

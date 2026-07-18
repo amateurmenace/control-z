@@ -11,8 +11,8 @@ So: plain `.sql` files, numbered, applied in order inside a transaction, each
 recorded in `schema_migrations`. No Alembic — it drags SQLAlchemy in for a
 schema that is hand-shaped and means to stay that way.
 
-    python -m studio.migrate            # apply what is pending
-    python -m studio.migrate --status   # say what is applied without applying
+    python -m record.migrate            # apply what is pending
+    python -m record.migrate --status   # say what is applied without applying
 """
 
 from __future__ import annotations
@@ -91,9 +91,9 @@ def status(dsn: str = "") -> List[Tuple[int, str, bool]]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="python -m studio.migrate",
-        description="Apply the Studio's schema migrations.")
-    ap.add_argument("--dsn", default="", help="override STUDIO_DSN")
+        prog="python -m record.migrate",
+        description="Apply publicrecord's schema migrations.")
+    ap.add_argument("--dsn", default="", help="override RECORD_DSN")
     ap.add_argument("--status", action="store_true",
                     help="report what is applied, change nothing")
     args = ap.parse_args(argv)

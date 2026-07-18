@@ -104,7 +104,7 @@ the change.
   adapter and swaps when A announces the landing (in "state of main" below).
 - **Store seam.** `memory/store.py` grew an interface (`memory/seam.py`, the
   `CorpusStore` Protocol) and a policy module (`memory/policy.py`) so the desk's
-  SQLite `Corpus` and the Studio's Postgres store (specs/17) run the same
+  SQLite `Corpus` and publicrecord's Postgres store (specs/17) run the same
   engine. The SQLite implementation is unchanged in behavior and every existing
   `tests/test_memory*.py` passes untouched — that is the acceptance test, not a
   hope. Nobody reaches through `corpus._con()` any more: the two escapes in
@@ -157,23 +157,23 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-18 (latest) — **the Studio, wave 1: the record moves in.
-  `studio/` joins the tree; `memory/` grows a store seam. 648 tests green
+- 2026-07-18 (latest) — **publicrecord, wave 1: the record moves in.
+  `record/` joins the tree; `memory/` grows a store seam. 648 tests green
   (39 skip without a Postgres).** On branch `lane/studio`, not yet merged.
   Nothing is provisioned on GCP and no bill has started — the whole wave was
-  built and proven against a local Postgres, and `studio/INFRA.md` is the
+  built and proven against a local Postgres, and `record/INFRA.md` is the
   runbook for the day that changes.
   - **`memory/seam.py` + `memory/policy.py` NEW — the store seam.** One
     interface, two implementations: the desk's SQLite `Corpus` and
-    `studio/store.py`'s `PgCorpus`. `tests/test_studio_store_parity.py`
+    `record/store.py`'s `PgCorpus`. `tests/test_record_store_parity.py`
     states 73 guarantees once and runs them against both.
-  - **`studio/` NEW — the hosted record.** FastAPI (`app.py`), Postgres +
+  - **`record/` NEW — the hosted record.** FastAPI (`app.py`), Postgres +
     pgvector (`store.py`, `migrations/`), Google Sign-In on an allowlist
     (`auth.py`), the eight curation verbs with an audit log (`steward.py`),
     the nightly YouTube poll (`connectors/youtube.py`), the press
     (`press.py`), the neural search seam (`embed_neural.py`), and the
     `corpus.db → studio` import (`import_desk.py`).
-  - **`docker-compose.yml` + `studio/Dockerfile` NEW.** In-a-Box v2's shape,
+  - **`docker-compose.yml` + `record/Dockerfile` NEW.** In-a-Box v2's shape,
     and how wave 1 was proven.
   - **`pyproject.toml`** gains the `studio` package, its `migrations/*.sql`
     package-data, and a server-only `studio` extra. **Deliberately NOT added

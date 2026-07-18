@@ -1,6 +1,6 @@
-"""Community AI Studio — the record, hosted (specs/17).
+"""publicrecord.studio — the record, hosted (specs/17).
 
-The desk presses editions; the Studio keeps the record. Meetings arrive nightly
+The desk presses editions; publicrecord keeps the record. Meetings arrive nightly
 from the towns' own channels, the corpus lives in Postgres with pgvector,
 search understands meaning as well as words, and a steward tends it from a
 browser. No Mac in the loop — and the reader still never logs in.
@@ -8,7 +8,7 @@ browser. No Mac in the loop — and the reader still never logs in.
 What this package is *not* is a second engine. `memory/` is the civic-record
 engine and stays that way: the issue clustering, the dedupe tiers, the vote
 reader, the analysis passes are imported here, not reimplemented, so the
-hand-audited logic produces the same record on both stores. What `studio/` adds
+hand-audited logic produces the same record on both stores. What `record/` adds
 is the half a desk never needed — a Postgres store behind the same seam, an
 HTTP surface, connectors that poll, steward auth, and a press job.
 
@@ -18,7 +18,7 @@ Layout:
   store.py        — PgCorpus: memory.seam.CorpusStore over Postgres + pgvector.
   migrate.py      — numbered plain-SQL migrations, applied once, recorded.
   embed_neural.py — the neural half of search (Gemini, server-side, batched).
-  import_desk.py  — corpus.db → the Studio, transliterated, never re-derived.
+  import_desk.py  — corpus.db → publicrecord, transliterated, never re-derived.
   app.py          — the FastAPI service: search, submissions, freshness.
   auth.py         — Google Sign-In, allowlist, stewards only.
   steward.py      — the eight curation verbs, behind auth, with an audit log.

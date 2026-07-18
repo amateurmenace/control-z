@@ -1,8 +1,14 @@
-# studio/ — handoff
+# record/ — handoff
+
+**The package was `studio/` until 2026-07-18.** It is `record/` now: the brand
+split made "studio" name three things (communityai.studio, civicmedia.studio,
+publicrecord.studio) plus a directory, and the ambiguity had already cost two
+sessions. Env vars are `RECORD_*`, the local database is `record`, and
+`specs/17`'s numbering is untouched so citations still resolve.
 
 **Wave 1 of specs/17, on branch `lane/studio`.** Built and proven against a
 local Postgres; **nothing is provisioned on GCP** and no bill has started.
-`studio/INFRA.md` is the exact runbook for the day that changes.
+`record/INFRA.md` is the exact runbook for the day that changes.
 
 ---
 
@@ -10,7 +16,7 @@ local Postgres; **nothing is provisioned on GCP** and no bill has started.
 
 | Deliverable (specs/17 §13) | State |
 |---|---|
-| `studio/` package — FastAPI + PG schema | **done** — `app.py`, `store.py`, `auth.py`, `steward.py`, `settings.py`, `migrate.py`, `migrations/001_corpus.sql` |
+| `record/` package — FastAPI + PG schema | **done** — `app.py`, `store.py`, `auth.py`, `steward.py`, `settings.py`, `migrate.py`, `migrations/001_corpus.sql` |
 | Store seam — one interface, two impls | **done** — `memory/seam.py` + `memory/policy.py`; 73 parity cases run against both stores |
 | Connectors — nightly YouTube poll | **done** — `connectors/youtube.py`, RSS + captions-first, polite backoff. **Not scheduled** (no GCP) |
 | Semantic search — blended, provenance chips | **API done**; neural half is a seam with no key. **Reader not wired** — see below |
@@ -23,7 +29,7 @@ local Postgres; **nothing is provisioned on GCP** and no bill has started.
 
 **1. The reader's search field still uses the static index.** The API serves
 blended search and the exact honest line specs/17 §8 asks for
-(*"meaning-search needs the Studio; words still work"*), and returns it in
+(*"meaning-search needs publicrecord; words still work"*), and returns it in
 every response — but the baked reader does not call it yet. Its search page
 still says *"(Vector search stays at the desk.)"*, which is true of a desk
 edition and wrong of a Studio one. Wiring it means editing `web/static/app.js`,
@@ -61,11 +67,11 @@ not survive an attempt to refute them and were not acted on.
    Studio's primary home, per the spec's assumption. It currently redirects to
    `community.weirdmachine.org` at Squarespace.
 2. **Brookline's YouTube channel id** for `towns.sources`.
-3. **AGPL on `studio/`.** specs/17 §9 asserts AGPL-3.0; the repo is MIT with no
+3. **AGPL on `record/`.** specs/17 §9 asserts AGPL-3.0; the repo is MIT with no
    per-file headers anywhere, and specs/12 §9 still lists ratification as an
    open legal question. **Wave 1 ships under the repo licence and says so here
    rather than in silence.** When ratified it lands as its own commit —
-   `studio/LICENSE`, a docstring line, a NOTICE entry — in the shape of *"The
+   `record/LICENSE`, a docstring line, a NOTICE entry — in the shape of *"The
    licence travels with the download."*
 4. **The load balancer line.** INFRA.md §7 finds a cost specs/17 §10 did not
    count: an HTTPS LB is ~$18/mo, and the edition and API must share an origin
@@ -92,7 +98,7 @@ acceptance test. What is new:
 
 ## Fragments (changelog-ready, house voice)
 
-- **The record got its own address, and its own heartbeat.** `studio/` is the
+- **The record got its own address, and its own heartbeat.** `record/` is the
   Studio: a Postgres store behind the same seam the desk uses, an HTTP surface
   small enough to reason about, connectors that poll the towns' own channels,
   and a steward console behind one Google sign-in. The engine is not forked —

@@ -1,4 +1,4 @@
-"""corpus.db → the Studio. A transliteration, never a re-derivation.
+"""corpus.db → publicrecord. A transliteration, never a re-derivation.
 
 specs/17 §11.3 is explicit: *nothing is re-derived that was hand-audited*. The
 Brookline corpus this imports was measured — 41 issues over two Select Board
@@ -13,7 +13,7 @@ re-assign, and it does not tidy. The 41 names come across as they are — includ
 `Anti Semitic`, which reads oddly as a label for what its member segments show
 is a vandalism response. Those are wrong, and they are also the record as it
 stands. The steward console's rename verb is the tool for them; fixing them here
-would make the import the Studio's first unaudited edit, which is exactly the
+would make the import publicrecord's first unaudited edit, which is exactly the
 thing this file exists not to be.
 
 Four conversions are unavoidable, and each is mechanical:
@@ -32,8 +32,8 @@ compared bit-for-bit against the source blobs, and the issue rollups diffed
 between the two stores. An import that cannot prove it landed is a backup nobody
 has restored.
 
-    python -m studio.import_desk --corpus ~/Movies/control-z/memory/corpus.db
-    python -m studio.import_desk --corpus <path> --verify-only
+    python -m record.import_desk --corpus ~/Movies/control-z/memory/corpus.db
+    python -m record.import_desk --corpus <path> --verify-only
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ def _vec_or_none(blob: Optional[bytes]):
 
 
 def import_corpus(src_path: str, corpus, verbose: bool = True) -> Dict[str, int]:
-    """Carry a desk corpus into the Studio. Returns a count per table."""
+    """Carry a desk corpus into publicrecord. Returns a count per table."""
     counts: Dict[str, int] = {}
     say = print if verbose else (lambda *a, **k: None)
     src = _open_source(src_path)
@@ -272,7 +272,7 @@ def verify(src_path: str, corpus, sample: int = 200,
                 except sqlite3.OperationalError:
                     continue
                 got = con.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
-                out["tables"][name] = {"source": want, "studio": got}
+                out["tables"][name] = {"source": want, "record": got}
                 mark = "ok" if want == got else "MISMATCH"
                 if want != got:
                     out["ok"] = False
@@ -363,10 +363,10 @@ def verify(src_path: str, corpus, sample: int = 200,
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="python -m studio.import_desk",
-        description="Carry a desk corpus into the Studio, and prove it landed.")
+        prog="python -m record.import_desk",
+        description="Carry a desk corpus into publicrecord, and prove it landed.")
     ap.add_argument("--corpus", required=True, help="path to the desk's corpus.db")
-    ap.add_argument("--dsn", default="", help="override STUDIO_DSN")
+    ap.add_argument("--dsn", default="", help="override RECORD_DSN")
     ap.add_argument("--verify-only", action="store_true",
                     help="check an import that already ran; write nothing")
     ap.add_argument("--sample", type=int, default=200,

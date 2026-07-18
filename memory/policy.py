@@ -1,7 +1,7 @@
 """The record's rules, held apart from the SQL that stores them.
 
 Everything here was inside `store.py` when there was one store. A second store
-is arriving (specs/17: the desk keeps SQLite, the Studio gets Postgres), and
+is arriving (specs/17: the desk keeps SQLite, publicrecord gets Postgres), and
 the day two stores exist, every rule left inside one of them is a fork waiting
 to happen — the merge-never-shrink policy was already written out three times
 in one file, and a Postgres port would have made it four.

@@ -2,14 +2,14 @@
 
 ## unreleased
 
-### The Studio — wave 1: the record moves in (specs/17) — 2026-07-18
+### Publicrecord — wave 1: the record moves in (specs/17) — 2026-07-18
 
 The public record has been breathing through one Mac: a steward presses a
 static edition and pushes it. This is the record given a home of its own — a
 Postgres corpus behind the same seam the desk uses, a small service in front of
 it, connectors that watch the towns' own channels, and a steward console behind
 one Google sign-in. Nothing is provisioned yet and no bill has started; all of
-it was built and proven against `docker compose up`, and `studio/INFRA.md` is
+it was built and proven against `docker compose up`, and `record/INFRA.md` is
 the exact runbook for the day that changes.
 
 - **One engine, two stores.** `memory/store.py` was the record and the SQLite
@@ -22,8 +22,8 @@ the exact runbook for the day that changes.
   existing test passed without a line edited — that was the constraint, and it
   is the acceptance test.
 
-- **The Studio's store, and the proof it agrees.** `studio/store.py` is the
-  same record in Postgres with pgvector. `tests/test_studio_store_parity.py`
+- **Publicrecord's store, and the proof it agrees.** `record/store.py` is the
+  same record in Postgres with pgvector. `tests/test_record_store_parity.py`
   states 73 guarantees once and runs them twice, and most had never been tested
   anywhere, because they are the failures only a second implementation can
   expose: bm25 is negative where `ts_rank_cd` is positive (port the ORDER BY
@@ -50,7 +50,7 @@ the exact runbook for the day that changes.
   a cross-tenant leak the moment a second town arrives. The neural half is a
   seam pinned to `gemini-embedding-001` at 768 dimensions, stored *beside* the
   lexical vector and never instead of it. With no key, search is lexical and
-  the reader is told: *meaning-search needs the Studio; words still work.*
+  the reader is told: *meaning-search needs publicrecord; words still work.*
 
 - **A console with a name against every edit.** The eight curation verbs over
   HTTP, each inside one transaction and each writing an audit row; a review
@@ -63,7 +63,7 @@ the exact runbook for the day that changes.
   claim was tested the only way worth testing it: Postgres was stopped, the API
   returned its honest 503s, and the reader went on searching all 16,443
   segments and never noticed. The redirect stubs that will point
-  `control-z.org/app/*` at the Studio are written and deliberately **not run** —
+  `control-z.org/app/*` at publicrecord are written and deliberately **not run** —
   redirecting a working edition at a Studio that does not exist yet would break
   every civic citation minted so far to fix a problem nobody has.
 

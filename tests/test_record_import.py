@@ -1,4 +1,4 @@
-"""corpus.db → the Studio, and the proof that nothing was re-derived.
+"""corpus.db → publicrecord, and the proof that nothing was re-derived.
 
 specs/17 §11.3: the Brookline corpus was hand-audited, so the import carries it
 rather than recomputing it. What that means concretely is testable — the
@@ -10,9 +10,9 @@ awkward cases the real record actually contains: a segment whose text is pure
 filler (a 1024-byte blob of zeros that must become NULL, because cosine
 distance against a zero vector is undefined under pgvector), and an issue whose
 name is a caption garble, which comes across unchanged because fixing it here
-would make the import the Studio's first unaudited edit.
+would make the import publicrecord's first unaudited edit.
 
-Skips loudly without STUDIO_TEST_PG_DSN — a skip is a gate that lost its
+Skips loudly without RECORD_TEST_PG_DSN — a skip is a gate that lost its
 inputs, not routine.
 """
 
@@ -24,7 +24,7 @@ from pathlib import Path
 from memory import embed
 from memory.store import Corpus
 
-PG_DSN = os.environ.get("STUDIO_TEST_PG_DSN", "").strip()
+PG_DSN = os.environ.get("RECORD_TEST_PG_DSN", "").strip()
 
 SELECT = [
     {"start": 0.0, "end": 5.0, "speaker": "Speaker 1",
@@ -86,11 +86,11 @@ def build_desk_corpus(path: str) -> Corpus:
     return c
 
 
-@unittest.skipUnless(PG_DSN, "STUDIO_TEST_PG_DSN unset — the import is UNPROVEN "
+@unittest.skipUnless(PG_DSN, "RECORD_TEST_PG_DSN unset — the import is UNPROVEN "
                              "in this run")
 class ImportTest(unittest.TestCase):
     def setUp(self):
-        from studio.store import PgCorpus
+        from record.store import PgCorpus
         self.td = tempfile.TemporaryDirectory(prefix="cz-studio-import-")
         self.addCleanup(self.td.cleanup)
         self.src = str(Path(self.td.name) / "corpus.db")
@@ -104,11 +104,11 @@ class ImportTest(unittest.TestCase):
                 "submissions, asr_tasks, audit, spend, towns RESTART IDENTITY CASCADE")
 
     def _import(self):
-        from studio import import_desk
+        from record import import_desk
         return import_desk.import_corpus(self.src, self.pg, verbose=False)
 
     def test_import_is_lossless_and_verifies_itself(self):
-        from studio import import_desk
+        from record import import_desk
         counts = self._import()
         self.assertEqual(counts["meetings"], 2)
         self.assertEqual(counts["segments"], 6)
@@ -212,7 +212,7 @@ class ImportTest(unittest.TestCase):
     def test_the_source_corpus_is_opened_read_only(self):
         """The source is somebody's actual record. Opening it read-write would
         let SQLite create a journal beside a file the desk may also have open."""
-        from studio import import_desk
+        from record import import_desk
         con = import_desk._open_source(self.src)
         self.addCleanup(con.close)
         import sqlite3
