@@ -2,6 +2,46 @@
 
 ## unreleased
 
+### 1.7.1: one timeline everywhere, the record drawn readable, and the spend in view — 2026-07-18
+
+- **The reel timeline rides every page.** Moments picked anywhere — the
+  analyzer's grids, the record's search hits, an issue's beads — land on
+  one persistent timeline along the bottom of the screen. Pin it open
+  (📌) and it stays across pages and relaunches; fold it and it waits as
+  a count. Reorder, drop, jump any chip back to its second on the tape,
+  and **▶ Render reel** cuts one montage across every meeting on it —
+  URL sessions fetch only the picked seconds, nothing re-downloads.
+- **The Library moved in, and learned to draw.** The standalone Library
+  page retires; its cross-meeting analytics now live where the work is —
+  at the end of Highlighter's Meeting Analyzer (tonight held against the
+  record) and behind 📊 Analytics on Memory's landing (the whole shelf).
+  Redrawn from scratch: topics as per-1,000-words lines over time,
+  framing as a lens-by-meeting heatmap, recurring names as dot-strips —
+  readable type, room to breathe, a tooltip on every mark, and every
+  mark opens its receipts. The chart colors are the suite's own hues,
+  chroma-lifted and **validated for color-vision safety** (worst
+  adjacent-pair ΔE 24.9, twice the accessibility target); magnitude
+  always rides one violet ramp, identity never repaints. Every receipt
+  carries ▶ (land the tape on the second) and ⊕ (join the reel
+  timeline) — the pictures are doors now, not decoration.
+- **The spend is never a mystery.** Every API call on your key is
+  counted from the provider's own token numbers and attributed to the
+  tool whose job spent it — no tool had to change a line to be counted.
+  Settings grows an **AI audit**: calls, tokens in/out, estimated
+  dollars (labeled estimates; your bill is the truth), the fullest
+  single call as a percent of the model's context window, and a
+  per-tool table. AI surfaces say what each call cost inline (🪙 tokens
+  + window share) the moment it lands.
+- **czcore/llm.py grows the multimodal door.** `complete_vision()` —
+  Narrator's request shape, moved in — so vision drafts ride the same
+  guarded key, the same honest errors, and the same ledger as every
+  text call.
+- **A page can always come home.** A long inner box (a seven-hour
+  transcript is 280k pixels of scroll) used to eat every upward wheel
+  that crossed it. Now an inner scroller owns the wheel only after you
+  step into it; until then the gesture stays with the page. And the
+  footer finally reads **designed** + developed.
+
 ### 1.7.0: the wing lands — the record, the languages, the voice — 2026-07-18
 
 Three tools in one release — **Community Memory**, **Community
