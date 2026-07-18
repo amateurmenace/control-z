@@ -102,6 +102,9 @@ _PERMANENT = {400, 401, 403, 404, 413}
 _CLIENT = None
 _LEDGER_WARNED = False
 
+# One vector per input text, position for position, None where there is none.
+_Vecs = List[Optional[List[float]]]
+
 
 # -- availability ----------------------------------------------------------
 
@@ -172,7 +175,7 @@ def _reason(exc) -> str:
     return f"{exc.__class__.__name__} {code}" if code else exc.__class__.__name__
 
 
-def _call(texts: Sequence[str], task: str) -> List[Optional[List[float]]]:
+def _call(texts: Sequence[str], task: str) -> _Vecs:
     """One request. Raises on anything at all — the retry ladder above is the
     only place failure is interpreted."""
     cfg = genai_types.EmbedContentConfig(
@@ -189,7 +192,7 @@ def _call(texts: Sequence[str], task: str) -> List[Optional[List[float]]]:
     return vecs
 
 
-def _attempt(texts: Sequence[str], task: str) -> Optional[List[Optional[List[float]]]]:
+def _attempt(texts: Sequence[str], task: str) -> Optional[_Vecs]:
     """The ladder. Returns the vectors, or None when the call could not be
     made at all — the caller distinguishes "no vector for this text" from "no
     answer for any of them", because only the second is worth stopping for."""
@@ -231,7 +234,7 @@ def _log_spend(corpus, units: int, purpose: str, town: str = "",
 # -- the public seam -------------------------------------------------------
 
 def embed_batch(texts: List[str], purpose: str = "embed", town: str = "",
-                corpus=None, target: str = "") -> List[Optional[List[float]]]:
+                corpus=None, target: str = "") -> _Vecs:
     """Vectors for many texts at once — the ingest path.
 
     Returns a list the same length as `texts`, position for position, each
@@ -243,7 +246,7 @@ def embed_batch(texts: List[str], purpose: str = "embed", town: str = "",
     A plain list rather than an array because the caller writes it through an
     explicit `::vector` cast; the query path below has a different consumer
     and hands back a different shape for a reason given there."""
-    out: List[Optional[List[float]]] = [None] * len(texts)
+    out: _Vecs = [None] * len(texts)
     if not texts or not available():
         return out
     # Blank and whitespace-only texts never reach the API: they cost money,

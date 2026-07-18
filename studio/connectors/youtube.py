@@ -68,6 +68,8 @@ from typing import List, Optional
 from memory import policy
 from web.canon import canon
 
+from ..store import submission_id
+
 # A user agent that says who is calling and where to complain. An anonymous
 # poller is indistinguishable from a scraper, and gets treated like one.
 UA = ("CommunityAIStudio/0.1 (+https://communityai.studio; civic record; "
@@ -134,7 +136,8 @@ class Throttled(RuntimeError):
 def _pause(seconds: float) -> None:
     """Sleep with jitter. Every town's job is on the same Cloud Scheduler
     minute, so a fixed backoff would march them into the wall in lockstep."""
-    time.sleep(max(0.0, min(BACKOFF_CAP, seconds)) * (0.8 + 0.4 * random.random()))
+    capped = max(0.0, min(BACKOFF_CAP, seconds))
+    time.sleep(capped * (0.8 + 0.4 * random.random()))
 
 
 def _retry_after(headers) -> Optional[float]:
@@ -353,15 +356,16 @@ def captions_probe(video_id: str, timeout: float = 20.0) -> dict:
     try:
         from czcore import captions as ctext
     except ImportError as e:      # pragma: no cover - czcore is always present
-        out["note"] = f"captions were not checked — czcore.captions is not importable ({e})"
+        out["note"] = ("captions were not checked — czcore.captions is not "
+                       f"importable ({e})")
         return out
     try:
         html = _fetch(WATCH_BASE + video_id, timeout=timeout,
                       cap=MAX_PAGE_BYTES, what=f"the watch page for {video_id}")
-    except Throttled as e:
-        out["note"] = f"captions were not checked — {e}"
-        return out
     except RuntimeError as e:
+        # `Throttled` lands here too, and deliberately reads the same: from a
+        # caption probe's point of view "we were turned away" and "we could not
+        # reach it" are the same answer, which is *not the one below*.
         out["note"] = f"captions were not checked — {e}"
         return out
     if not html.strip():
@@ -497,7 +501,12 @@ def discover(corpus, town: str, body: str, source: str, limit: int = 25,
 
         try:
             filed = _file_submission(corpus, {
-                "id": "sub:" + key, "url": it["url"], "url_canon": key,
+                # An opaque digest, not the canonical URL: canon falls back to
+                # `url:<the whole thing>` for anything it cannot reduce, and an
+                # id carrying slashes and a query string cannot be a path
+                # segment — the steward's approve route would 404 on exactly
+                # the submissions unusual enough to need a human.
+                "id": submission_id(key), "url": it["url"], "url_canon": key,
                 "town": town, "body": body, "date": "",
                 "note": " · ".join(n for n in notes if n)})
         except Exception as e:
@@ -535,7 +544,8 @@ def poll_town(corpus, town_row: dict, limit: int = 25) -> dict:
     first = True
     for src in sources:
         if not isinstance(src, dict):
-            out["errors"].append({"kind": "bad_source", "detail": repr(src)[:120]})
+            out["errors"].append({"kind": "bad_source",
+                                  "detail": repr(src)[:120]})
             continue
         if str(src.get("kind", "")).strip().lower() != "youtube":
             continue
@@ -564,7 +574,8 @@ def poll_town(corpus, town_row: dict, limit: int = 25) -> dict:
 def _print_run(r: dict) -> None:
     print(f"  polled {r['polled']} · known {r['known']} · filed {r['filed']}")
     for e in r["errors"]:
-        print(f"  [{e['kind']}] {e.get('title') or e.get('url') or e.get('source', '')}")
+        what = e.get("title") or e.get("url") or e.get("source", "")
+        print(f"  [{e['kind']}] {what}")
         print(f"      {e['detail']}")
 
 

@@ -215,7 +215,8 @@ def press(corpus, out_dir: str, version: str = "",
     print(f"  {len(meetings)} meetings · {len(issues)} issues · "
           f"{idx['segments']} segments indexed ({idx['terms']} terms) · "
           f"{stats['counts']['documents']} documents · "
-          f"{stats['counts']['votes']} roll calls · {len(officials)} officials")
+          f"{stats['counts']['votes']} roll calls · "
+          f"{len(officials)} officials")
     print("  no sidecar tracks: nothing has been translated or described on "
           "this machine (specs/17 §6.4 — the drain fills this in)")
     rep = b.report()
@@ -313,15 +314,20 @@ def corpus_fingerprint(corpus) -> str:
                     key=lambda r: str(r.get("id", ""))):
         stamp = float(m.get("updated_at") or 0)
         newest = max(newest, stamp)
+        # `or ""` everywhere a string is read, not `get(k, "")`: a column that
+        # is NULL on one store and '' on the other hands back a key that
+        # exists holding None, and the default never fires. That single
+        # difference would make the two stores fingerprint the same record
+        # differently, which is the one thing this function may not do.
         h.update(("m|%s|%s|%s|%d|%.0f\n" % (
-            m.get("id", ""), m.get("status", ""), m.get("date", ""),
+            m.get("id") or "", m.get("status") or "", m.get("date") or "",
             int(m.get("n_segments") or 0), stamp)).encode())
 
     for i in sorted(corpus.list_issues(status="active", limit=_ISSUE_LIMIT),
                     key=lambda r: str(r.get("id", ""))):
         h.update(("i|%s|%s|%d|%d|%s\n" % (
-            i.get("id", ""), i.get("name", ""), int(i.get("n_meetings") or 0),
-            int(i.get("n_segments") or 0),
+            i.get("id") or "", i.get("name") or "",
+            int(i.get("n_meetings") or 0), int(i.get("n_segments") or 0),
             ",".join(str(a) for a in (i.get("aliases") or [])))).encode())
 
     # Documents and roll calls hang off a meeting without touching its row, so
@@ -331,7 +337,7 @@ def corpus_fingerprint(corpus) -> str:
         stamp = float(d.get("updated_at") or 0)
         newest = max(newest, stamp)
         h.update(("d|%s|%s|%d|%.0f\n" % (
-            d.get("id", ""), d.get("status", ""),
+            d.get("id") or "", d.get("status") or "",
             int(d.get("n_chunks") or 0), stamp)).encode())
 
     votes = corpus.all_votes()
@@ -340,13 +346,14 @@ def corpus_fingerprint(corpus) -> str:
         stamp = float(v.get("updated_at") or 0)
         newest = max(newest, stamp)
         h.update(("v|%s|%.2f|%s|%s|%.0f\n" % (
-            v.get("meeting_id", ""), float(v.get("t") or 0),
-            v.get("outcome", ""), v.get("tally", ""), stamp)).encode())
+            v.get("meeting_id") or "", float(v.get("t") or 0),
+            v.get("outcome") or "", v.get("tally") or "", stamp)).encode())
 
     # The resurfacing feed on Home is the first forty events, newest first —
     # exactly this read, in `bake_stats`.
     for e in corpus.list_events(limit=_EVENT_LIMIT):
-        h.update(("e|%s|%s\n" % (e.get("id", ""), e.get("kind", ""))).encode())
+        h.update(("e|%s|%s\n" % (e.get("id") or "",
+                                 e.get("kind") or "")).encode())
 
     h.update(("t|%.0f\n" % newest).encode())
     return h.hexdigest()[:16]

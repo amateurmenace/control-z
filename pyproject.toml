@@ -36,8 +36,12 @@ packaging = ["pyinstaller>=6.21"]
 # runtime extra, and deliberately absent from packaging/suite.spec: a signed
 # desktop DMG has no business carrying a Postgres driver or a cloud SDK. The
 # desk stays local-first and BYO-key; this is the Studio's own bill.
+# google-auth alone imports and then fails on its transport, so the extra
+# names the transport too — otherwise the console's own error message tells
+# an operator to install a package they already have.
 studio = ["psycopg[binary,pool]>=3.2", "pgvector>=0.3",
-          "fastapi", "uvicorn[standard]"]
+          "fastapi", "uvicorn[standard]",
+          "google-auth[requests]>=2.30"]
 
 [project.scripts]
 suite = "suite.__main__:main"

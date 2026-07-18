@@ -951,3 +951,21 @@ class PgCorpus:
 def Settings_redacted(dsn: str) -> str:
     from .settings import Settings
     return Settings(dsn=dsn).redacted()
+
+
+def submission_id(key: str) -> str:
+    """A short, opaque, path-safe id for a submission.
+
+    The obvious id is the canonical URL, and it works right up until the URL is
+    one `web.canon` could not reduce — canon falls back to `url:<the whole
+    thing>`, slashes and query string included, and an id like that cannot
+    survive being a path segment: `/api/steward/submissions/<id>/approve`
+    silently 404s, so a steward's approve button stops working for exactly the
+    submissions that were unusual enough to need review.
+
+    So the id is a digest and the URL lives in its own column, where the unique
+    index does the deduping. Stable across processes (blake2b, not Python's
+    salted hash), because it is written down."""
+    import hashlib
+    digest = hashlib.blake2b((key or "").encode("utf-8"), digest_size=8).hexdigest()
+    return f"sub:{digest}"
