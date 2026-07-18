@@ -127,8 +127,17 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
+- 2026-07-17 (late) — **Detection seam LANDED: `czcore/moments.py`** —
+  `score_segments`, `blend_energy`, `audio_energy`, `build_reel`, plus the
+  VTT/transcript helpers (`parse_vtt`, `transcript_dict`).
+  `highlighter/highlights.py` is now a re-export shim; import
+  `czcore.moments` directly in new code (B: swap your adapter when
+  convenient). Also landed: Home's wire (chain UX), and **cache-busted
+  statics** — every include carries `?v={{v}}` substituted by the server,
+  so hard-refresh rituals are dead; if you add your script tag, carry the
+  `?v={{v}}` suffix like the others.
 - 2026-07-17 — specs 12–15 committed; four community tools stubbed on the
   rail as coming-pages (core.js entries + accent vars); this agreement
-  ratified. Detection extraction: **not started**. Publisher: not started.
-  Home redesign: not started. B is clear to begin Memory wave 1 (ingest →
-  pipeline → store → meeting pages → search, per specs/14 P0 №1–3, 5).
+  ratified. Publisher: in build (lane A). B is clear to begin Memory wave
+  1 (ingest → pipeline → store → meeting pages → search, per specs/14 P0
+  №1–3, 5).
