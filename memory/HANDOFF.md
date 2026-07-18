@@ -5,11 +5,20 @@ pages → cross-corpus search with jump-to-timestamp playback, working end to en
 in the suite UI on two real meetings, with tests. Per PARALLEL, lane A merges
 `lane/memory` → main.
 
-Re-merged `origin/main` (1.6.0, Publisher live): the three slots reconciled
-(server.py import/register kept; `memory.js` tag carries the new `?v={{v}}`
-cache-bust; core.js flip kept beside Publisher's). Detection seam **swapped** to
-`czcore.moments` now that it landed — `memory/detect.py` and `memory/ingest.py`
-import it directly. Suite green at 320 tests.
+Re-merged `origin/main` through the rebrand (Community AI Project), Publisher's
+ready-pass, and the Grabber search desk: the three slots reconciled (server.py
+import/register kept; `memory.js` tag carries the `?v={{v}}` cache-bust; core.js
+`ready:true` flip kept, `when` dropped — safe, lane A only reads `m.when` on the
+not-ready branch). Detection seam **swapped** to `czcore.moments`.
+
+**Cross-tool integration is live and verified against the contracts.** With
+`ready:true` merged, lane A's Send-to-the-Record buttons (Highlighter +
+Publisher) and Highlighter's prior-appearances line went live with zero
+lane-A edits, exactly as promised in state-of-main. Exercised end to end in the
+browser: `sendToRecord({url})` → `POST /api/memory/submissions` → `{meeting_id,
+status:"exists"}`; the prior panel → `POST /api/memory/context {texts:[…]}` →
+12 real prior appearances with `.text`. Shapes unchanged. Suite green at 334
+tests; adversarial review's 8 confirmed findings all fixed (see git log).
 
 ## landed (what works, how to see it)
 
@@ -46,9 +55,9 @@ actually pulls transcripts here.)
 - **Verified on two real meetings:** Brookline Select Board, May 19 (7,312
   segments) and May 12 (9,131), 12.1 hours, via captions. Searching "affordable
   housing" / "climate" lands inside the embed at the moment they're discussed.
-- **Tests:** `tests/test_memory_{embed,store,ingest,analyze,api}.py` — 36 tests,
+- **Tests:** `tests/test_memory_{embed,store,ingest,analyze,api}.py` — 40 tests,
   offline (no ASR, no network; media root monkeypatched, llm mocked for the
-  generative branch). Full suite: 307 green.
+  generative branch). Full suite: 334 green.
 
 ## next (what B starts after merge)
 
@@ -61,9 +70,11 @@ actually pulls transcripts here.)
 ## asks (changes in A-owned files — exact, minimal)
 
 1. **`pyproject.toml` `[tool.setuptools] packages`:** add `"memory"` to the list
-   (alongside the other tool packages). Until then `suite/tools/memory.py`
-   inserts the repo root on `sys.path` as a guarded fallback so `import memory`
-   resolves regardless of cwd — delete that block once `memory` is declared.
+   (you added `"publisher"` there; `"memory"` is still missing). Until then
+   `suite/tools/memory.py` inserts the repo root on `sys.path` as a guarded
+   fallback so `import memory` resolves regardless of cwd — delete that block
+   once `memory` is declared. This is the one thing that would break a packaged
+   (PyInstaller) build; dev-serve and tests already work via the fallback.
 2. **Detection seam:** ✅ done — swapped `memory/detect.py` + `memory/ingest.py`
    to `czcore.moments` after it landed on main.
 3. **The buttons** (optional, when convenient): Highlighter's / Publisher's
