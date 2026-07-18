@@ -63,6 +63,7 @@ const SlatePage = (() => {
               <button class="btn" id="sl-card">PNG + 10s still</button>
             </div>
           </div>
+          <div class="progmsg" id="sl-genmsg" style="margin:0 16px"></div>
           <div class="report" id="sl-genreport" style="margin:0 16px 18px"></div>
         </div>
       </div>
@@ -247,14 +248,20 @@ const SlatePage = (() => {
     if (!formats.length) { toast("pick at least one format", true); return; }
     const btn = $("#sl-render", el);
     btn.disabled = true;
+    $("#sl-bar", el).style.width = "0%"; $("#sl-msg", el).textContent = "";  // fresh render
     try {
       const job = await api("/api/slate/render", { params: params(), formats });
       watchJob(job.id, j => {
         $("#sl-msg", el).textContent = j.message || j.status;
-        $("#sl-bar", el).style.width = `${Math.max(0, j.progress) * 100}%`;
+        // one bar for the whole render — cap it below full until the job is
+        // actually done, so a per-format progress reset (ProRes → GIF) never
+        // reads as "done, then restarted"
+        const frac = Math.max(0, j.progress || 0);
+        $("#sl-bar", el).style.width = j.status === "done" ? "100%" : `${Math.min(96, frac * 100)}%`;
       });
       const done = await jobDone(job.id);
       btn.disabled = false;
+      $("#sl-bar", el).style.width = done.status === "done" ? "100%" : "0%";
       if (done.status === "done") {
         const rep = $("#sl-report", el);
         rep.classList.add("show");
@@ -267,11 +274,19 @@ const SlatePage = (() => {
 
   async function generate(kind, body, btn) {
     btn.disabled = true;
+    const gm = $("#sl-genmsg", el);
+    gm.textContent = "queued…";
     try {
       const job = await api("/api/slate/generate", { kind, ...body });
-      watchJob(job.id, j => { $("#sl-msg", el).textContent = j.message || j.status; });
+      // status beside the button that launched it, not only in the far-right
+      // export inspector where a long encode's feedback went unseen
+      watchJob(job.id, j => {
+        const m = j.status === "queued" ? "queued" : (j.message || j.status);
+        gm.textContent = m; $("#sl-msg", el).textContent = m;
+      });
       const done = await jobDone(job.id);
       btn.disabled = false;
+      gm.textContent = "";
       if (done.status === "done") {
         const rep = $("#sl-genreport", el);
         rep.classList.add("show");
@@ -289,9 +304,12 @@ const SlatePage = (() => {
       $("#sl-outdir", el).textContent = st.out.replace(/^\/Users\/[^/]+/, "~");
       const sel = $("#sl-font", el);
       const prefer = ["HelveticaNeue", "Helvetica", "Arial", "SFNS"];
+      // preselect the first preferred house font that's actually installed
+      const names = st.fonts.map(f => f.name);
+      const pick = prefer.find(p => names.includes(p)) || "";
       sel.innerHTML = `<option value="">system default</option>` +
         st.fonts.map(f => `<option value="${esc(f.name)}"
-          ${prefer[0] === f.name ? "" : ""}>${esc(f.name)}</option>`).join("");
+          ${f.name === pick ? "selected" : ""}>${esc(f.name)}</option>`).join("");
       sel.onchange = () => schedulePreview();
       // the station brand: adopt it as defaults, once, when it exists
       S.brand = st.brand || null;

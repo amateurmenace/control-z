@@ -290,8 +290,12 @@ const PivotPage = (() => {
       renderShots(); updateScopes();
       $("#pv-viewsec", el).style.display = "none";
       $("#pv-exportsec", el).style.display = "none";
+      $("#pv-amsg", el).classList.remove("err");   // a fresh clip is not last clip's error
       const side = await api("/api/pivot/load", { path: r.path });
       if (side.analysis) { applyAnalysis(side.analysis); $("#pv-amsg", el).textContent = "sidecar found — solved paths loaded"; }
+      // a present-but-unparseable sidecar carries a remedy sentence — say it,
+      // don't blank it as if the prior analysis were simply absent
+      else if (side.warning) { $("#pv-amsg", el).textContent = side.warning; $("#pv-amsg", el).classList.add("err"); }
       else $("#pv-amsg", el).textContent = r.sidecars.pivot ? "" : "ready to analyze";
       try { P.backends = (await api("/api/rise/probe", { path: r.path })).backends; } catch (e) { P.backends = []; }
       renderEnhance();

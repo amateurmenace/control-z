@@ -289,6 +289,12 @@ const ClearPage = (() => {
 
   async function process() {
     const custom = $("#cl-loudcustom", el).value.trim();
+    // a custom target is free text — reject a typo now, not after minutes of
+    // dehum/declick/isolate/deess are thrown away on a late float() failure
+    if (custom && !isFinite(parseFloat(custom))) {
+      toast("custom loudness target must be a number in LUFS, e.g. -20", true);
+      return;
+    }
     const btn = $("#cl-process", el);
     btn.disabled = true;
     $("#cl-bar", el).style.width = "10%";
@@ -302,12 +308,17 @@ const ClearPage = (() => {
         loudness: custom || $("#cl-loudsel", el).value || null,
         remux: $("#cl-remux", el).checked,
       });
+      // the rescue pass reports text per stage but no fraction — an honest
+      // indeterminate bar, not a frozen 55% that pretends to measure
       watchJob(job.id, j => {
         $("#cl-msg", el).textContent = j.status === "queued" ? "queued" : (j.message || j.status);
-        $("#cl-bar", el).style.width = j.status === "running" ? "55%" : "10%";
+        const bar = $("#cl-bar", el);
+        if (j.status === "running") { bar.classList.add("indet"); bar.style.width = ""; }
+        else { bar.classList.remove("indet"); bar.style.width = "10%"; }
       });
       const done = await jobDone(job.id);
       btn.disabled = false;
+      $("#cl-bar", el).classList.remove("indet");
       $("#cl-bar", el).style.width = done.status === "done" ? "100%" : "0%";
       if (done.status === "error") { $("#cl-msg", el).textContent = done.error; $("#cl-msg", el).classList.add("err"); return; }
       if (done.status === "cancelled") { $("#cl-msg", el).textContent = "cancelled"; return; }
@@ -345,6 +356,20 @@ const ClearPage = (() => {
     $("#cl-play", el).onclick = () => { audio.paused ? audio.play() : audio.pause(); };
     audio.addEventListener("play", () => { $("#cl-play", el).textContent = "⏸"; });
     audio.addEventListener("pause", () => { $("#cl-play", el).textContent = "▶"; });
+    // transport keys — Space plays/pauses, ←/→ seek ±5s (the house grammar;
+    // the playhead repaints off the audio's own timeupdate)
+    addEventListener("keydown", e => {
+      if (CZ.current !== "clear" || !C.ov) return;
+      const a = document.activeElement;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(a?.tagName) || a?.isContentEditable) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        audio.paused ? audio.play() : audio.pause();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        audio.currentTime = Math.max(0, audio.currentTime + (e.key === "ArrowLeft" ? -5 : 5));
+      }
+    });
     audio.addEventListener("timeupdate", () => {
       $("#cl-time", el).textContent = fmtTime(audio.currentTime);
       drawWaves(); drawSpecPlayhead();

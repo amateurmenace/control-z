@@ -412,6 +412,17 @@ const ScribePage = (() => {
       const r = await api("/api/media/open", { path, tool: "scribe" });
       S.path = r.path;
       $("#sc-path", el).value = r.path;
+      // a fresh clip starts clean — no prior clip's sections, pull rows,
+      // report, tighten list or filled bar bleeding onto this one
+      ["#sc-exportsec", "#sc-pullsec", "#sc-tightensec"].forEach(
+        s => $(s, el).style.display = "none");
+      $("#sc-pulls", el).innerHTML = "";
+      $("#sc-ttlist", el).innerHTML = "";
+      $("#sc-ttwrite", el).style.display = "none";
+      const rep0 = $("#sc-report", el);
+      rep0.classList.remove("show"); rep0.innerHTML = "";
+      $("#sc-bar", el).style.width = "0%";
+      $("#sc-msg", el).classList.remove("err");
       const v = r.video;
       $("#sc-meta", el).innerHTML = `<b>${esc(r.name)}</b>` +
         (v ? ` · ${v.width}×${v.height} @ ${v.fps.toFixed(2)}` : "") +
@@ -596,6 +607,22 @@ const ScribePage = (() => {
     $$("#sc-ttopts .chip", el).forEach(c => c.onclick = () => c.classList.toggle("on"));
     $("#sc-ttgap", el).oninput = () =>
       $("#sc-ttgapv", el).textContent = (+$("#sc-ttgap", el).value).toFixed(2) + "s";
+
+    // transport keys — Space plays/pauses, ←/→ seek ±5s (the house grammar,
+    // cf. Highlighter), skipped while typing or editing a paragraph
+    addEventListener("keydown", e => {
+      if (CZ.current !== "scribe" || $("#sc-play", el).disabled) return;
+      const a = document.activeElement;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(a?.tagName) || a?.isContentEditable) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        audio.paused ? audio.play() : audio.pause();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        audio.currentTime = Math.max(0, audio.currentTime + (e.key === "ArrowLeft" ? -5 : 5));
+        tick();
+      }
+    });
 
     const insp = $("#sc-insp", el);
     const dens = $$(".density button", insp);

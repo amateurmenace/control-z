@@ -1356,3 +1356,21 @@ button.ix-kind:disabled { opacity: .45; cursor: default; }
 .sc-tttime { flex: 1; font-family: var(--mono); font-size: 10.5px; }
 .sc-ttdur { flex: 0 0 auto; font-family: var(--mono); font-size: 10.5px;
   color: var(--cream-faint); }
+
+/* === the coherence walk: honest progress, contrast, affordances ======= */
+/* Honest indeterminate for the .prog bars — Stencil's SAM pass and Clear's
+   rescue emit text but no fraction, so the bar animates "working" instead of
+   freezing at a fake 50/55%. Reuses czProgress's slide keyframe. */
+.prog i.indet { width: 34%;
+  animation: czprog-slide 1.3s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) {
+  .prog i.indet { animation: none; width: 100%; opacity: .5; }
+  .czprog-bar i.indet { animation: none; }   /* the higher-specificity indet override needs gating too */
+}
+/* Slate's preview HUD sits over a light checker, not dark footage — a solid
+   dark panel and light text so the readout, and especially a "couldn't draw
+   that…" error, clear AA contrast (the shared .viewer-hud is tuned for dark). */
+#sl-hud { background: rgba(13, 13, 18, .93); color: var(--cream); }
+/* Clear's pre-pass monitor chips read as not-yet-available before a rescue,
+   like the deferred "after" button already does. */
+.chip[data-off] { opacity: .5; cursor: not-allowed; }

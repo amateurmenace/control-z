@@ -108,7 +108,15 @@ const DepthPage = (() => {
         img.onload = () => { if (id !== D.reqId) return; D.fcImg = img; viewer.draw(); };
         img.src = r.falsecolor;
         drawHist(); drawStab();
-      } catch (e) { /* frame may be past EOF while scrubbing — quiet */ }
+      } catch (e) {
+        // a decode-past-EOF while scrubbing is normal and stays quiet; but if
+        // we never got a first frame, the engine itself failed (e.g. the depth
+        // model isn't downloaded) — say so once, with the remedy, not silence
+        if (id === D.reqId && !D.prev && !D.warned) {
+          D.warned = true;
+          toast(`the depth preview didn't run — ${e.message}`, true);
+        }
+      }
     }, delay);
   }
 
@@ -205,7 +213,7 @@ const DepthPage = (() => {
       $("#dp-path", el).value = r.path;
       $("#dp-meta", el).innerHTML =
         `<b>${esc(r.name)}</b> · ${r.video.width}×${r.video.height} @ ${r.video.fps.toFixed(2)}`;
-      D.prev = null; D.fcImg = null; D.probe = null; D.reqId = 0;
+      D.prev = null; D.fcImg = null; D.probe = null; D.reqId = 0; D.warned = false;
       viewer.setClip(D.clip);
       strip.setClip(viewer.clip);
       $("#dp-render", el).disabled = false;

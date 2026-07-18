@@ -135,6 +135,10 @@ const IndexPage = (() => {
                  `(yours is ${hrs.toFixed(1)}h) can take a long while.`)) return;
     const btn = $("#ix-batchwords", el);
     if (btn) btn.disabled = true;
+    // "Words for ticked" launches this too — guard it against re-entry, like
+    // the scan and road buttons guard theirs
+    const selBtn = $("#ix-selwords", el);
+    if (selBtn) selBtn.disabled = true;
     try {
       const job = await api("/api/index/transcribe-missing",
                             paths ? { paths } : {});
@@ -155,6 +159,8 @@ const IndexPage = (() => {
     } catch (e) {
       toast(e.message, true);
       if (btn) btn.disabled = false;
+    } finally {
+      selMeta();   // re-evaluates "Words for ticked" from the current selection
     }
   }
 
@@ -279,7 +285,10 @@ const IndexPage = (() => {
       await loadStanding();
       await loadStatus();
       $("#ix-q", el).value.trim() ? search() : browse();
-    } catch (e) { toast(e.message, true); if (btn) btn.disabled = false; }
+    } catch (e) {
+      toast(e.message, true);
+      if (btn) { btn.disabled = false; btn.textContent = "run now"; }
+    }
   }
 
   function renderNewOrder() {

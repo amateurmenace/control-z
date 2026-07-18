@@ -128,11 +128,56 @@ Run `.venv/bin/python -m suite --serve` → `/#index`, right rail.
   here for transparency — reshape freely; `llm.status()` already returns
   `provider`. No other shell file touched.
 
+## landed (wave 5 — the coherence walk, thrust 1)
+
+Walked all eight production pages against the civic wing's bar. The finding
+list came from a fan-out audit (one reader per page) + an adversarial verify
+pass (each candidate re-checked against the code, false-positives dropped):
+**21 confirmed findings, every one fixed.** No page ships a control that
+pretends. Grouped:
+
+- **Honest progress.** Stencil's SAM pass and Clear's rescue emitted per-frame
+  text but no fraction, yet pinned their bars at a fake 50%/55% — now they show
+  an honest indeterminate bar (reuses czProgress's slide keyframe, reduced-
+  motion gated). Slate's render bar resets each run and caps below full until
+  the job is actually done, so a per-format reset (ProRes→GIF) never reads as
+  "done, then restarted." Added the missing reduced-motion gate on
+  `.czprog-bar i.indet` (a higher-specificity override the guard had missed).
+- **Errors that name a remedy, not silence.** Stencil's runtime probe and
+  Depth's preview catch swallowed real failures (a dead Propagate button; a
+  blank overlay when the model isn't downloaded) — both now say what broke and
+  what to do. Rise's batch failures surfaced only a bare "error" chip — now the
+  reason and clip name land in a toast and the report. Pivot surfaces a
+  corrupt-sidecar warning instead of blanking it, and clears the stale `.err`
+  red on the next clip. Clear validates a custom LUFS target *before* running
+  the whole pass, not after a late float() throws the work away.
+- **`toast(…, true)` was crying wolf.** Stencil's low-confidence heads-up on a
+  *successful* run rendered as a red error toast — now neutral.
+- **Keyboard grammar.** Scribe and Clear gained the house transport keys —
+  Space plays/pauses, ←/→ seek ±5s — guarded against typing/editing, matching
+  Highlighter. (Proven live: ←/→ seek the transcript clock; Space is blocked
+  only by the headless browser's autoplay policy.)
+- **Fresh clip, clean slate.** Scribe's `open()` now resets the export/pull/
+  tighten sections, the pull rows, the report and the progress bar, so clip B
+  never inherits clip A's UI.
+- **Affordance + contrast.** Clear's pre-pass monitor chips read as
+  not-yet-available (a real `[data-off]` style). Slate's preview HUD got a
+  solid dark panel + light text so its readout — and its "couldn't draw that…"
+  error — clear AA contrast over the light checker. Slate's dead font-preselect
+  ternary now actually preselects the first installed house font. My own Index
+  additions were in the audit too: "Words for ticked" now guards against
+  re-entry, and a failed standing-order "run now" resets its button label.
+
+**530 green**, no regressions (JS/CSS + the new `scribe/tighten.py` route from
+wave 4 are the only moving parts). Verified live: no console errors on the
+reloaded pages; the reset + keyboard proven in the browser.
+
 ## next
 
-- The coherence pass (thrust 1): walk the eight production pages in the
-  browser against the civic wing's bar; fix what the walk finds.
-- The local model cards (thrust 3) and the drain client (thrust 5, gated).
+- The drain client (thrust 5, gated — build to a proposed AsrTask contract,
+  flag every field for the Studio session).
+- The local model cards (thrust 3 — scaffold + conversion recipe; hosting is
+  an external human step).
 
 ## asks (A-owned files; single lines, in your hands)
 
@@ -172,3 +217,8 @@ Run `.venv/bin/python -m suite --serve` → `/#index`, right rail.
   every long silence, lists them with their timecodes first, and — only when
   you say so — leaves a cut list of what's left. A proposal you import, never
   a cut to your footage.
+- **The desk walks its own eight pages.** A page-by-page coherence pass in the
+  house voice: progress bars that no longer pretend to measure, errors that
+  name a remedy instead of going quiet, transport keys (space, arrows) on the
+  players that lacked them, a fresh clip that never wears the last clip's UI,
+  and a handful of contrast and affordance fixes. No control that pretends.

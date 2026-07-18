@@ -323,12 +323,17 @@ const StencilPage = (() => {
         prompts: ST.prompts,
         height: +$("#st-height", el).value,
       });
+      // SAM 2.1 emits per-frame text but no numeric fraction — an honest
+      // indeterminate bar, never a frozen 50% that pretends to measure
       watchJob(job.id, j => {
         $("#st-msg", el).textContent = j.status === "queued" ? "queued" : (j.message || j.status);
-        $("#st-bar", el).style.width = j.status === "running" ? "50%" : "5%";
+        const bar = $("#st-bar", el);
+        if (j.status === "running") { bar.classList.add("indet"); bar.style.width = ""; }
+        else { bar.classList.remove("indet"); bar.style.width = "5%"; }
       });
       const done = await jobDone(job.id);
       btn.disabled = false;
+      $("#st-bar", el).classList.remove("indet");
       $("#st-bar", el).style.width = done.status === "done" ? "100%" : "0%";
       if (done.status === "error") { $("#st-msg", el).textContent = done.error; $("#st-msg", el).classList.add("err"); return; }
       if (done.status === "cancelled") { $("#st-msg", el).textContent = "cancelled"; return; }
@@ -339,7 +344,7 @@ const StencilPage = (() => {
       $("#st-msg", el).textContent = done.result.note;
       drawConf(); drawCov(); viewer.draw();
       if (done.result.low_confidence.length)
-        toast(`low confidence at frames ${done.result.low_confidence.slice(0, 5).join(", ")}${done.result.low_count > 5 ? "…" : ""} — scrub those`, true);
+        toast(`low confidence at frames ${done.result.low_confidence.slice(0, 5).join(", ")}${done.result.low_count > 5 ? "…" : ""} — scrub those`);
     } catch (e) { btn.disabled = false; toast(e.message, true); }
   }
 
@@ -462,7 +467,13 @@ const StencilPage = (() => {
       } else {
         $("#st-run", el).disabled = !ST.clip;
       }
-    }).catch(() => {});
+    }).catch(() => {
+      // the probe failing leaves Propagate disabled — say why instead of a
+      // dead, mute button (its whole reason to exist is honesty)
+      warn.style.display = "";
+      $("#st-runtimehint", el).textContent =
+        "couldn't reach Stencil's runtime check — reload the app, or run from a source checkout";
+    });
   }
 
   let inited = false;

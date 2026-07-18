@@ -330,6 +330,16 @@ const RisePage = (() => {
         R.batch[k].jobId = j.id;
         watchJob(j.id, job => {
           renderBatch();
+          if (job.status === "error" && !R.reported.has(job.id)) {
+            // a failed upscale showed only a bare "error" chip — name the
+            // reason and the clip, and write it to the report like a success
+            R.reported.add(job.id);
+            const nm = (R.batch[k]?.path || "").split("/").pop();
+            toast(`${nm} — ${job.error || "upscale failed"}`, true);
+            const rep = $("#rs-report", el);
+            rep.classList.add("show");
+            rep.innerHTML += `<b>✗</b> ${esc(nm)} — ${esc(job.error || "upscale failed")}\n`;
+          }
           if (job.status !== "done" || !job.result) return;
           if (R.reported.has(job.id)) return;
           R.reported.add(job.id);
