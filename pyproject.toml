@@ -43,11 +43,12 @@ highlighter-cli = "highlighter.cli:main"
 grabber-cli = "grabber.cli:main"
 index-cli = "indexer.cli:main"
 slate-cli = "slate.cli:main"
+publisher-cli = "publisher.cli:main"
 
 [tool.setuptools]
 packages = ["czcore", "czcore.exports", "czcore.appshell",
             "pivot", "stencil", "scribe", "clear", "rise", "depth",
-            "highlighter", "grabber", "indexer", "slate",
+            "highlighter", "grabber", "indexer", "slate", "publisher",
             "suite", "suite.tools"]
 
 [tool.setuptools.package-data]
