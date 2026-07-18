@@ -147,7 +147,54 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-17 (latest) — **The suite is wired for you, B.** Highlighter
+- 2026-07-18 (latest) — **THE WING IS HOME. Version 1.7.0 on both
+  truths; 423 tests green.** Both lanes merged clean (one script-tag
+  slot conflict, resolved by keeping every line — the law worked).
+  What landed with the merge, by handoff ask:
+  - **pyproject truths:** `memory`, `interpreter`, `narrator` in
+    packages; `interpreter/glossaries/*.json` in package-data. B's
+    sys.path fallback in `suite/tools/memory.py` retired as requested.
+  - **C's voice ask went further than asked:** czcore/models.py grew
+    an `archive_dir` mechanism (a model can be a DIRECTORY, kept from
+    a tarball member-dir, manifest-hashed — one `relpath\0sha256`
+    line per file, sorted — same pinned covenant; tests in
+    test_models.py) and **vits-ljs has its registry card** — pin
+    verified against a fresh upstream download AND the installed
+    voice; the Models page shows it present. C: `czcore/tts.py`'s
+    manual-install sentence is yours to retire for a "the Models page
+    installs it" sentence whenever you like.
+  - **B's issues door is live:** Highlighter's record line renders
+    `r.issues` as pills — each opens Memory at the issue timeline via
+    `go("memory", {openIssue: id})`. Dark until a record holds enough
+    meetings to draw issues; wiring is in.
+  - **A walk-found fix you should know about:** the first ⬛ Send to
+    the Record from a URL session filed it as a *file* (S.source is a
+    session path whose stem is the video id; meta lacked webpage_url)
+    and ingest errored at the Scribe road. Fixed A-side twice over —
+    `sendToRecord()` renames a link-shaped `path` to `url`, and
+    Highlighter's button names URL sessions
+    `youtube.com/watch?v=<ytId()>`. B: nothing needed, but if you want
+    `resolve_input` to treat a URL-shaped `path` as a `url` too,
+    that's a one-line hardening on your side.
+  - **Floor-walked on this machine:** Home reads 4 of 4 + seen-and-
+    heard 3 of 3 with zero home edits; June 18 School Committee sent
+    from Highlighter → landed as captions (7,790 segments, Brookline,
+    2026-06-18); "METCO program" answers 60 timed moments; the prior-
+    appearances line reads 6 back; Interpreter's seven-track kit +
+    reviewer-corrected es VTT NOTE verified; Narrator's zoo AD pass
+    plays — narration measured at 14.625s, in the elephant's pause;
+    June 18 still reads English in Highlighter (the `translated.`
+    infix holds).
+  - **Next:** B — live cross-time proof (a post-May meeting fires a
+    real resurfacing), then Documents/Vote Ledger (P1 №11–12). C —
+    the full-meeting AD proof; a full recording fetched via Grabber →
+    Highlighter is the target; measure the ≤15-min-per-hour review
+    honestly. Both: re-merge main at session start. A holds: site
+    cards for the four community tools + RELEASE-NOTES-1.7.0.md at
+    the signing ritual (deferred deliberately — the site is
+    undeployed and unsigned releases don't get notes).
+
+- 2026-07-17 — **The suite is wired for you, B.** Highlighter
   and Publisher both render ⬛ Send to the Record buttons and Highlighter
   renders a prior-appearances line — all gated on `toolById("memory")
   .ready` and calling the §Contracts routes exactly (`/api/memory/
