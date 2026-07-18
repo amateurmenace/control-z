@@ -1,5 +1,5 @@
 #!/bin/bash
-# Double-click this in Finder to run the control-z Suite.
+# Double-click this in Finder to run Civic Media Studio.
 #
 # First run: builds a private .venv next to this file and installs what the
 # tools need (a few minutes, a few hundred MB). Every run after: opens in
@@ -58,6 +58,6 @@ if [ ! -f "$STAMP" ] || [ requirements.txt -nt "$STAMP" ]; then
 fi
 
 # --- go -------------------------------------------------------------------
-say_line "Starting the control-z Suite…"
+say_line "Starting Civic Media Studio…"
 echo "Close this window (or press Ctrl-C) to quit the app."
 exec "$VENV/bin/python" -m suite "$@"

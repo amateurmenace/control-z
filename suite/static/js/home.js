@@ -135,7 +135,7 @@ const HomePage = (() => {
     }).join("");
 
     el.innerHTML = `<div class="page-pad wide">
-      <div class="tag">the community ai project</div>
+      <div class="tag">civicmedia.studio</div>
       <h1 style="margin-top:6px">Make Something.</h1>
       <div class="chains">
         <div class="tag">the wire — where one tool hands to the next</div>

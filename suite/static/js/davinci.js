@@ -17,7 +17,7 @@ const DavinciPage = (() => {
         made <span class="mark">even better</span>.</h1>
       <p style="color:var(--cream-dim);margin-top:8px;font-size:13.5px;max-width:640px;line-height:1.65">
         Free DaVinci Resolve is already a professional cutting room. Everything
-        in the control-z suite and in this toolkit exists to help amateurs
+        in Civic Media Studio and in this toolkit exists to help amateurs
         level up to pros <b>without the paywall</b> — no Studio license, no
         expensive third-party plugins. Whether you're an aspiring filmmaker, a
         journalist, an advocate, an artist, or just someone who wants the form

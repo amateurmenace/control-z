@@ -1,13 +1,13 @@
 #!/bin/bash
-# control-z Suite — freeze the app (specs/09 §5). Produces
-# packaging/dist/control-z Suite.app, UNSIGNED — packaging/sign_suite.sh is
+# Civic Media Studio — freeze the app (specs/09 §5). Produces
+# packaging/dist/Civic Media Studio.app, UNSIGNED — packaging/sign_suite.sh is
 # the next step. Every gate here fails loudly: a guard around a release step
 # fails loudly or it doesn't exist (specs/09 §2's lesson, paid for twice).
 set -euo pipefail
 cd "$(dirname "$0")"
 REPO="$(cd .. && pwd)"
 VENV="$REPO/.venv"
-APP="dist/control-z Suite.app"
+APP="dist/Civic Media Studio.app"
 
 echo "== preflight =="
 [ -x "$VENV/bin/python" ] || { echo "FATAL: $VENV missing"; exit 1; }

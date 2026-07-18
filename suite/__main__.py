@@ -1,4 +1,4 @@
-"""python -m suite — the Community AI Project (add --serve for a browser)."""
+"""python -m suite — Civic Media Studio (add --serve for a browser)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from .server import create_suite_app, run
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         prog="suite",
-        description="Community AI Project — the civic media suite, with the "
+        description="Civic Media Studio — the civic media suite, with the "
                     "control-z workbench inside. Local only; no accounts, "
                     "no telemetry.")
     p.add_argument("--port", type=int, default=8300)

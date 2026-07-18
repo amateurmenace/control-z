@@ -495,7 +495,7 @@ const SettingsPage = (() => {
     $("#se-about", el).innerHTML =
       `<div class="tag" style="margin-bottom:6px">about</div>
        <div class="hint" style="line-height:1.8">
-         control-z Suite ${esc(d.version)} · python ${esc(d.python)}<br>
+         Civic Media Studio ${esc(d.version)} · python ${esc(d.python)}<br>
          model store: ${esc(d.model_store.path)} (${fmtBytes(d.model_store.size)})<br>
          app data: ${esc(d.app_support)}<br>
          free forever · local only · shows its work · honest limitations</div>`;

@@ -1,0 +1,8 @@
+:root{
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px; --space-7:48px; --space-8:64px;
+  /* sharp, flat system: radius only on keycaps + small controls */
+  --radius-none:0; --radius-sm:4px; --radius-keycap:23%; /* 22/96 of mark box */
+  --border-w:1px; --border-w-strong:2px;
+  --shadow-none:none; /* flat vector aesthetic: no drop shadows */
+  --dot-grid:radial-gradient(#cbd5e1 1px,transparent 1px); --dot-grid-inverse:radial-gradient(rgba(148,163,184,.28) 1px,transparent 1px); --dot-gap:18px 18px;
+}

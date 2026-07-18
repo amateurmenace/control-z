@@ -637,7 +637,7 @@ class Bake:
                  for m in sorted(meetings, key=lambda x: x["date"] or "",
                                  reverse=True)[:30]]
         _write(self.out / "feeds" / "firehose.xml",
-               rss("Community AI Project — the record",
+               rss("publicrecord.studio — the record",
                    "New on the record, and issues that resurfaced.",
                    f"{site_base}/app/", items))
         for i in issues:

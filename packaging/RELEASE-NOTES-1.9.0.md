@@ -1,4 +1,4 @@
-# control-z Suite 1.9.0 — the record grows teeth, and learns to draw
+# Civic Media Studio 1.9.0 — the record grows teeth, and learns to draw
 
 Sign and ship **THIS** one. It supersedes the unreleased **1.8.0** (whose
 changelog entry stays for the record; don't tag or sign it). Everything since

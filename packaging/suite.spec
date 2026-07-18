@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# control-z Suite — PyInstaller onedir spec (specs/09 §5).
+# Civic Media Studio — PyInstaller onedir spec (specs/09 §5).
 #
 # Build via packaging/build_suite.sh, from the repo's OWN .venv (a foreign
 # venv is "ALWAYS the wrong thing to do" per PyInstaller and a hard error in
@@ -97,21 +97,21 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="control-z Suite",
+    name="Civic Media Studio",
     console=False,
     target_arch="arm64",   # the stack has no universal2 wheels (specs/09 §1)
 )
 
-coll = COLLECT(exe, a.binaries, a.datas, name="control-z Suite")
+coll = COLLECT(exe, a.binaries, a.datas, name="Civic Media Studio")
 
 app = BUNDLE(
     coll,
-    name="control-z Suite.app",
-    bundle_identifier="org.control-z.suite",
+    name="Civic Media Studio.app",
+    bundle_identifier="org.civicmedia.studio",
     icon=str(REPO / "packaging" / "icon.icns"),   # make_icon.py, committed
     version=VERSION,
     info_plist={
-        "CFBundleDisplayName": "control-z Suite",
+        "CFBundleDisplayName": "Civic Media Studio",
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.video",
         # LSMinimumSystemVersion is MEASURED and patched in by

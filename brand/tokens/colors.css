@@ -1,0 +1,15 @@
+:root{
+  /* base palette */
+  --green-emerald:#059669; --green-deep:#052e16; --green-bright:#22c55e; --green-soft:#4ade80;
+  --pop-fuchsia:#d946ef; --pop-purple:#a855f7;
+  --ink:#0f172a; --slate:#475569; --slate-soft:#94a3b8; --offwhite:#f8fafc; --white:#ffffff;
+  /* semantic */
+  --surface-page:var(--offwhite); --surface-card:var(--white); --surface-inverse:var(--ink); --surface-brand:var(--green-emerald);
+  --text-primary:var(--ink); --text-secondary:var(--slate); --text-muted:var(--slate-soft); --text-inverse:var(--offwhite); --text-brand:var(--green-emerald);
+  --border-hairline:#e2e8f0; --border-strong:var(--slate-soft); --border-inverse:var(--slate);
+  --focus-ring:var(--green-emerald);
+  /* per-brand accents (volume: quiet -> loud) */
+  --accent-publicrecord:var(--green-deep);
+  --accent-communityai:var(--green-emerald); --accent-communityai-pop:var(--pop-fuchsia);
+  --accent-civicmedia:var(--pop-purple); --accent-civicmedia-live:var(--green-bright);
+}
