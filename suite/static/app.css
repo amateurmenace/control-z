@@ -310,6 +310,39 @@ h2 { font-family: var(--head); font-size: 15px; font-weight: 600; letter-spacing
 .covenant-line { margin-top: 34px; font-family: var(--mono); font-size: 10px;
   color: var(--cream-faint); letter-spacing: .08em; }
 
+/* grabber — the search desk */
+.gb-hero { background: rgba(255,255,255,.5); border: 1px solid var(--line-soft);
+  border-radius: var(--r); padding: 16px 18px 14px; }
+.gb-searchrow { display: flex; gap: 10px; margin-top: 10px; }
+.gb-searchrow input { flex: 1; background: #fff; border: 1.5px solid var(--line);
+  border-radius: 10px; padding: 11px 15px; font-size: 14.5px;
+  font-family: var(--ui); color: var(--cream); }
+.gb-searchrow input:focus { outline: none; border-color: var(--grabber); }
+.gb-searchrow .btn { width: auto; padding: 10px 22px; font-size: 13.5px; }
+.gb-scope { display: flex; gap: 8px; align-items: center; margin-top: 10px;
+  flex-wrap: wrap; }
+.gb-scope input[type="text"] { width: 110px; background: #fff;
+  border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px;
+  font-size: 11.5px; font-family: var(--mono); color: var(--cream); }
+.gb-scope select { background: #fff; border: 1px solid var(--line);
+  border-radius: 7px; padding: 4px 6px; font-size: 11.5px; }
+.gb-sweep { display: flex; gap: 10px; align-items: center; margin-top: 14px;
+  font-family: var(--mono); font-size: 11px; color: var(--cream-dim); }
+.gb-sweepbar { flex: 0 0 120px; height: 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--grabber) 15%, transparent); overflow: hidden; }
+.gb-sweepbar i { display: block; height: 100%; width: 34%; border-radius: 999px;
+  background: var(--grabber);
+  animation: czprog-slide 1.1s ease-in-out infinite alternate; }
+.gb-direct { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.gb-direct input[type="text"] { flex: 1; background: var(--ink);
+  border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px;
+  font-size: 12px; font-family: var(--mono); color: var(--cream); }
+.gb-yt { display: flex; gap: 10px; align-items: center;
+  background: rgba(255,255,255,.55); border: 1px solid var(--line-soft);
+  border-radius: 9px; padding: 8px 12px; margin-top: 7px; }
+.gb-ytbody { flex: 1; min-width: 0; }
+.badge.zoom { color: var(--grabber); border-color: var(--grabber); }
+
 /* index browse */
 .ix-chips { display: flex; gap: 7px; align-items: baseline; margin: 2px 0 10px; }
 .ix-folderhead { margin: 16px 0 2px; display: flex; gap: 4px; align-items: baseline; }
