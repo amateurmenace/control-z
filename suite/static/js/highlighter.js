@@ -40,9 +40,19 @@ const HighlighterPage = (() => {
           <h1 style="margin-top:6px">Turn long public meetings into
             <span class="mark">useful moments</span> in minutes.</h1>
           <p style="color:var(--cream-dim);margin-top:6px;font-size:13.5px">
-            Every resident deserves to know what was decided and why. Paste a link —
-            the meeting becomes readable before a single frame downloads.</p>
-          <div class="hl-urlrow">
+            Every resident deserves to know what was decided and why. Find the
+            meeting — or paste its link — and it becomes readable before a
+            single frame downloads.</p>
+          <div style="margin-top:14px">
+            <span class="tag">civic meeting finder</span>
+            <div class="hl-searchrow">
+              <input type="text" id="hl-findq" placeholder="town + board — “brookline select board”, “cambridge school committee”…" spellcheck="false">
+              <button class="btn cta" id="hl-findgo" style="padding:8px 16px">Search</button>
+            </div>
+            <div id="hl-findout" class="hl-results"></div>
+          </div>
+          <div class="tag" style="margin-top:12px">or the link, straight in</div>
+          <div class="hl-urlrow" style="margin-top:6px">
             <input type="text" id="hl-url" placeholder="Paste a YouTube / meeting URL here" spellcheck="false">
             <button class="btn cta" id="hl-load">Load Meeting</button>
           </div>
@@ -66,15 +76,6 @@ const HighlighterPage = (() => {
           <div class="hl-card"><h2><span class="nub" style="background:var(--grabber)"></span>Analyze &amp; Discover</h2>
             <p>Decisions with outcomes, who spoke, question flow, topics, money.
               Everything clickable, everything sourced to its moment.</p></div>
-        </div>
-
-        <div class="hl-panel" style="margin-top:18px">
-          <span class="tag">civic meeting finder</span>
-          <div class="hl-searchrow">
-            <input type="text" id="hl-findq" placeholder="town + board — “brookline select board”, “cambridge school committee”…" spellcheck="false">
-            <button class="btn cta" id="hl-findgo" style="padding:8px 16px">Search</button>
-          </div>
-          <div id="hl-findout" class="hl-results"></div>
         </div>
 
         <div class="hl-panel" style="margin-top:14px">
