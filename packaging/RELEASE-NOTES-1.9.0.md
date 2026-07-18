@@ -52,15 +52,25 @@ already had.
 
 ## Build notes for the signing operator
 
-**One new required dependency since 1.7.1: `pypdf`** — pure-Python, no native
-libraries, MIT. It powers Memory's document ingestion (extract + chunk agendas/
-minutes/packets). It is declared in `requirements.txt`, the pyproject `suite`
-extra, and — because Memory imports it lazily inside a function — as a
+**One new required dependency since 1.7.1: `pypdf` 6.14.2** — pure-Python (the
+published wheel is `py3-none-any`; no native libraries, no LGPL/GPL exposure),
+**BSD-3-Clause**. It powers Memory's document ingestion (extract + chunk
+agendas/minutes/packets). It is declared in `requirements.txt`, the pyproject
+`suite` extra, and — because Memory imports it lazily inside a function — as a
 `suite.spec` hiddenimport. No other required dep changed: the local-model
 engines ride runtimes already present (`ctranslate2` and `tokenizers` came in
 with faster-whisper; `onnxruntime`, `pillow`, `numpy` were already suite deps).
 `sentencepiece` was deliberately NOT added — the local translator reads a
 `tokenizer.json` fast tokenizer instead.
+
+**A hiddenimport is not an installation.** `build_suite.sh` freezes with
+`.venv`'s interpreter, so a dependency that is declared in three files but
+missing from that venv freezes into a dead feature: PyInstaller logs the
+unresolvable hiddenimport and still exits 0, and Documents fails *soft* (an
+honest HTTP 422, not a crash), so a casual smoke test sails past it. Run both
+installs above, then require **zero skips** from the suite — the
+`pypdf not installed` skip disappearing is the proof — and after the freeze
+confirm `grep -i pypdf packaging/build/suite/warn-suite.txt` comes back empty.
 
 **Spec changes already in this tree** (`packaging/suite.spec`): the hiddenimports
 list gained `pypdf`, `czcore.vision`, and `czcore.mt_local` (all lazy,
@@ -99,5 +109,9 @@ already deployed at control-z.org/app for this release.
 
 If `build_suite.sh` stops with a FATAL, it is telling you exactly which asset
 didn't make it — that is the guard doing its job, not a bug to route around.
-Two `tests/test_packaging.py` skips are environmental (an unbuilt vendor FFmpeg
-in a fresh checkout) and clear once `build_ffmpeg.sh` has run.
+
+**On the release machine `tests/test_packaging.py` should report six tests and
+no skips at all.** Treat any skip there as a gate that lost its inputs, not as
+routine: an unbuilt vendor FFmpeg skips one test, but a missing `otool` skips
+all four GPL-linkage gates silently, and a run where the whole licence sweep
+never happened looks identical to a clean one.
