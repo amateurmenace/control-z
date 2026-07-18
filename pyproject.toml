@@ -63,7 +63,8 @@ packages = ["czcore", "czcore.exports", "czcore.appshell",
             "highlighter", "grabber", "indexer", "slate", "publisher",
             "memory", "interpreter", "narrator",
             "web",
-            "studio", "record.connectors",
+            "record", "record.connectors",
+            "brand",
             "suite", "suite.tools"]
 
 [tool.setuptools.package-data]
@@ -71,6 +72,9 @@ pivot = ["static/*.html"]
 depth = ["templates/*.setting"]
 interpreter = ["glossaries/*.json"]
 web = ["static/*"]
+# The vendored logo set and the shared token sheets. web/emit.py imports
+# brand at press time, so a wheel without these presses a nameless edition.
+brand = ["logos/*.svg", "tokens/*.css"]
 # The migrations are data, not code — setuptools will not carry .sql for free.
 record = ["migrations/*.sql"]
 # static/* alone misses static/js/*.js — the whole UI. Both globs, explicitly.
