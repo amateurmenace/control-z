@@ -167,5 +167,12 @@
   await loadSession();
   connectWS();
   try { CZ.appInfo = await api("/api/app"); } catch (e) {}
-  go("home");
+  /* deep links: /#kb opens the Library, /#clear opens Clear — shareable,
+     and how the site's slide captures find each room */
+  const dest = (location.hash || "").slice(1);
+  go(CZ.pages[dest] ? dest : "home");
+  addEventListener("hashchange", () => {
+    const d = (location.hash || "").slice(1);
+    if (CZ.pages[d]) go(d);
+  });
 })();

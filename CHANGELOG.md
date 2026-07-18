@@ -140,6 +140,17 @@
   key, labeled generative): one button sends the counted digest — dates,
   lens counts, topics, names, tallies — never a transcript, and the
   answer names meetings by their dates.
+- **The suite answers deep links now** — `/#kb` opens the Library,
+  `/#clear` opens Clear, and the hash keeps working after load. Small
+  feature, two real uses: rooms are shareable, and the site's slide
+  captures can find them.
+- **The hero carousel shows all thirteen tools** — the five new slides
+  (Highlighter, Grabber, Index, Library, Slate) are the real app,
+  captured headlessly through its own deep links with the pages driven
+  to show their work: the Grabber mid-search on the town portal, Index
+  answering "school committee" with thumbnails, the Library's grids
+  live. make_slides.py owns the capture (suite_slides — needs the dev
+  server and Chrome; skips itself politely without them).
 - **The site tells the truth about what shipped.** control-z.org's
   suitebar now reads v1.1.0 shipped / v1.5.0 in signing with all ten
   tools + the Library chipped on it, the six originals flipped to

@@ -236,6 +236,100 @@ def audio_slides():
     cv2.imwrite(str(A / "slide-clear.jpg"), img, Q)
 
 
+SUITE_URL = "http://127.0.0.1:8301"   # a running dev server (suite-8301)
+CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CDP_PORT = 9333
+# per-page setup clicks so the slide shows the tool DOING something, not
+# an empty form: (javascript, seconds to wait after)
+SUITE_PAGES = {
+    "highlighter": [],
+    "grabber": [("document.querySelector('#gb-search').click()", 14)],
+    "index": [("document.querySelector('#ix-q').value='school committee';"
+               "document.querySelector('#ix-go').click()", 4)],
+    "slate": [],
+    "kb": [],
+}
+
+
+def suite_slides():
+    """The suite pages' slides are the real app, driven headlessly: Chrome
+    opens each room through its /#page deep link, clicks what makes the
+    page show its work, and screenshots at 2× the slide canvas. Needs the
+    dev server up (python -m suite --serve --port 8301) and Chrome."""
+    import asyncio
+    import base64
+    import subprocess
+    import time
+    import urllib.request
+
+    import websockets
+
+    try:
+        urllib.request.urlopen(SUITE_URL + "/api/settings/info", timeout=3)
+    except Exception:
+        raise FileNotFoundError(f"no suite server at {SUITE_URL}")
+    if not Path(CHROME).exists():
+        raise FileNotFoundError("Chrome not installed — suite slides need "
+                                "its headless mode")
+
+    async def cap(name, steps):
+        with urllib.request.urlopen(urllib.request.Request(
+                f"http://127.0.0.1:{CDP_PORT}/json/new?{SUITE_URL}/%23{name}",
+                method="PUT")) as r:
+            tab = json.load(r)
+        async with websockets.connect(tab["webSocketDebuggerUrl"],
+                                      max_size=50_000_000) as ws:
+            mid = 0
+
+            async def send(method, params=None):
+                nonlocal mid
+                mid += 1
+                await ws.send(json.dumps({"id": mid, "method": method,
+                                          "params": params or {}}))
+                while True:
+                    msg = json.loads(await ws.recv())
+                    if msg.get("id") == mid:
+                        return msg.get("result", {})
+
+            await send("Page.enable")
+            await send("Emulation.setDeviceMetricsOverride",
+                       {"width": 1760, "height": 1240,
+                        "deviceScaleFactor": 1, "mobile": False})
+            await asyncio.sleep(7)      # app boot + first data
+            for js, wait_s in steps:
+                await send("Runtime.evaluate", {"expression": js})
+                await asyncio.sleep(wait_s)
+            shot = await send("Page.captureScreenshot", {"format": "png"})
+            png = cv2.imdecode(
+                np.frombuffer(base64.b64decode(shot["data"]), np.uint8),
+                cv2.IMREAD_COLOR)
+            cv2.imwrite(str(A / f"slide-{name}.jpg"),
+                        cv2.resize(png, (W, H),
+                                   interpolation=cv2.INTER_AREA), Q)
+            print(f"  slide-{name}.jpg (live capture)")
+        urllib.request.urlopen(urllib.request.Request(
+            f"http://127.0.0.1:{CDP_PORT}/json/close/{tab['id']}",
+            method="GET"))
+
+    proc = subprocess.Popen(
+        [CHROME, "--headless=new", f"--remote-debugging-port={CDP_PORT}",
+         "--disable-gpu", "--hide-scrollbars",
+         f"--user-data-dir={SCRATCH}/chrome-prof", "about:blank"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            try:
+                urllib.request.urlopen(
+                    f"http://127.0.0.1:{CDP_PORT}/json/version", timeout=1)
+                break
+            except Exception:
+                time.sleep(0.3)
+        for name, steps in SUITE_PAGES.items():
+            asyncio.run(cap(name, steps))
+    finally:
+        proc.terminate()
+
+
 def main():
     slide_hush()
     slide_rise()
@@ -247,6 +341,10 @@ def main():
         audio_slides()
     except (FileNotFoundError, ImportError) as e:
         print(f"  (audio slides skipped: {e})")
+    try:
+        suite_slides()
+    except (FileNotFoundError, ImportError) as e:
+        print(f"  (suite slides skipped: {e})")
     sizes = {f.name: f.stat().st_size // 1024 for f in sorted(A.glob("slide-*.jpg"))}
     print("slides:", sizes, f"→ total {sum(sizes.values())} KB")
 
