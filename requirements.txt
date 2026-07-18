@@ -29,9 +29,20 @@ pyloudnorm
 faster-whisper
 sherpa-onnx
 
+# --- local model engines (Interpreter's translator, Narrator's eyes) ---
+# czcore/mt_local.py and czcore/vision.py import these DIRECTLY; until now
+# they arrived only as faster-whisper's transitive deps, which held exactly
+# as long as faster-whisper never re-scoped its own requirements. Named
+# dependencies don't vanish when a neighbor cleans house.
+ctranslate2
+tokenizers
+
 # --- Community Memory: the town's own paper (PDF ingestion) ---
-# pure-python, no native deps — extracts + chunks agendas, minutes and packets
-pypdf
+# pure-python, no native deps — extracts + chunks agendas, minutes and packets.
+# Floor, not bare: a signed artifact should not inherit whatever PyPI resolves
+# on build day from an unbounded range (the shipped version is recorded in the
+# release notes).
+pypdf>=6.14
 
 # Stencil's runtime is an OPTIONAL heavy (~1 GB) — the app runs fine without
 # it and its page says exactly this. It stays out of this file on purpose:

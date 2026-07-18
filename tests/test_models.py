@@ -163,3 +163,25 @@ class TestArchiveDir(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLicenceRuleIsCode(unittest.TestCase):
+    """The permissive-only covenant, enforced at registry definition — not
+    prose. The NLLB decision (CC-BY-NC) is the live case it exists for."""
+
+    def test_every_registered_model_passes(self):
+        for name, spec in models.REGISTRY.items():
+            self.assertTrue(models._licence_is_permissive(spec.license),
+                            f"{name}: {spec.license}")
+
+    def test_a_noncommercial_card_refuses_at_definition(self):
+        with self.assertRaises(ValueError):
+            models.ModelSpec(
+                name="nllb-200-distilled-600m", filename="nllb",
+                url=None, sha256=None,
+                license="CC-BY-NC-4.0 (Meta)", card="the tempting one")
+
+    def test_gpl_refuses_too(self):
+        with self.assertRaises(ValueError):
+            models.ModelSpec(name="x", filename="x", url=None, sha256=None,
+                             license="GPL-3.0", card="no")

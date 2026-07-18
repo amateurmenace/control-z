@@ -131,7 +131,16 @@ def _load_tokenizer(d: Path):
         return _HFTok(hf)
     spm = d / "sentencepiece.bpe.model"
     if spm.exists():
-        import sentencepiece as spmlib
+        try:
+            import sentencepiece as spmlib
+        except ImportError:
+            # the suite deliberately doesn't ship sentencepiece — reaching
+            # this path means someone installed a model folder by hand, and
+            # they deserve the real sentence, not a bare ModuleNotFoundError
+            raise RuntimeError(
+                "this model uses a sentencepiece tokenizer the suite doesn't "
+                "ship — prefer a model that carries tokenizer.json, or "
+                "pip install sentencepiece in the suite's venv")
         sp = spmlib.SentencePieceProcessor()
         sp.load(str(spm))
         return _SPTok(sp)

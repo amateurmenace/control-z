@@ -25,6 +25,29 @@ class ModelUnusable(FileNotFoundError):
     """
 
 
+# The covenant's licence rule, executable. Every registered model must name a
+# licence containing one of these permissive markers, and none of the
+# forbidden ones — so the day someone reaches for NLLB-200 (CC-BY-NC) the
+# registry refuses at import time with a sentence, instead of the rule living
+# only in a docstring nobody re-reads. (That exact decision is on the books:
+# packaging/RELEASE-NOTES-1.9.0.md defers the MT card because of this rule.)
+_PERMISSIVE_MARKS = ("MIT", "BSD", "Apache-2.0", "MPL-2.0", "CC0",
+                     "ISC", "Unlicense", "public domain", "public-domain")
+_FORBIDDEN_MARKS = ("NC", "NonCommercial", "non-commercial", "GPL",
+                    "research only", "no commercial")
+
+
+def _licence_is_permissive(text: str) -> bool:
+    # GPL check must not trip on "LGPL"-free registry (models never link), and
+    # NC must not trip on words like "once" — match the marks as tokens.
+    low = text.lower()
+    if any(m.lower() in low for m in _FORBIDDEN_MARKS if len(m) > 2):
+        return False
+    if "nc" in low.replace("-nc", " nc ").split() or "-nc-" in low:
+        return False
+    return any(m.lower() in low for m in _PERMISSIVE_MARKS)
+
+
 @dataclass(frozen=True)
 class ModelSpec:
     name: str
@@ -38,6 +61,15 @@ class ModelSpec:
     archive_dir: str = ""  # url is a .tar.*: keep every file under this member
     #                        directory; `filename` then names a DIRECTORY (a
     #                        voice is model + tokens + lexicon, not one file)
+
+    def __post_init__(self):
+        if not _licence_is_permissive(self.license):
+            raise ValueError(
+                f"model {self.name!r} declares licence {self.license!r}, "
+                "which the covenant doesn't allow — every shipped model is "
+                "permissive (MIT/BSD/Apache/MPL/CC0). A non-commercial or "
+                "GPL model needs a deliberate covenant amendment, not a "
+                "registry entry.")
 
 
 REGISTRY = {

@@ -15,7 +15,8 @@ suite = ["numpy", "av", "opencv-python",
          "onnxruntime",
          "scipy", "soundfile", "pyloudnorm",
          "faster-whisper", "sherpa-onnx",
-         "pypdf",
+         "ctranslate2", "tokenizers",
+         "pypdf>=6.14",
          "pillow"]
 # Stencil's click-to-matte runtime: optional by design, ~700 MB on Apple
 # silicon (more where torch's wheels bundle CUDA). SAM 2 comes from Meta's repo

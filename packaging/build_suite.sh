@@ -76,13 +76,19 @@ done
 # template count must match the SOURCE tree (the pack's size belongs to
 # specs/10 and has already grown once); the freeze contract is "all of them
 # made it in", not a number.
-find "$FW" "$RS" -path "*suite/static/app.css" | grep -q . || { echo "FATAL: suite/static missing"; exit 1; }
-# Interpreter's seed glossary: absent = the Brookline names/terms never load
-# and every town opens empty (glossary.py resolves interpreter/glossaries/
-# by package path, which pyproject package-data covers for a wheel but the
-# freeze must carry as datas — suite.spec does).
-find "$FW" "$RS" -path "*interpreter/glossaries/*.json" | grep -q . || {
-    echo "FATAL: interpreter glossary seeds missing (every town would open empty)"; exit 1; }
+# The whole UI, count-matched against source — a one-file spot check can't
+# detect what it's named for (a page's js missing = that tool opens dead).
+N_UI_SRC=$(find "$REPO/suite/static" -type f | wc -l | tr -d ' ')
+N_UI=$(find "$FW" "$RS" -path "*suite/static/*" -type f | wc -l | tr -d ' ')
+[ "$N_UI" -ge "$N_UI_SRC" ] && [ "$N_UI_SRC" -ge 20 ] || {
+    echo "FATAL: suite/static: $N_UI_SRC files in source, $N_UI in bundle"; exit 1; }
+# Interpreter's seed glossaries, count-matched: "any one JSON exists" held
+# only while Brookline was the only town (glossary.py resolves the package
+# dir; pyproject package-data covers a wheel, the freeze carries datas).
+N_GL_SRC=$(find "$REPO/interpreter/glossaries" -name "*.json" | wc -l | tr -d ' ')
+N_GL=$(find "$FW" "$RS" -path "*interpreter/glossaries/*.json" | wc -l | tr -d ' ')
+[ "$N_GL" -ge "$N_GL_SRC" ] && [ "$N_GL_SRC" -ge 1 ] || {
+    echo "FATAL: glossary seeds: $N_GL_SRC in source, $N_GL in bundle (a town would open empty)"; exit 1; }
 N_SRC=$(find "$REPO/depth/templates" -name "*.setting" | wc -l | tr -d ' ')
 N_SETTINGS=$(find "$FW" "$RS" -path "*depth/templates/*.setting" | wc -l | tr -d ' ')
 [ "$N_SETTINGS" -eq "$N_SRC" ] && [ "$N_SRC" -ge 5 ] || {

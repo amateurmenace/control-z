@@ -30,11 +30,11 @@ def runtime_status() -> dict:
             # them would be an instruction they physically cannot follow
             # (specs/09 §5). The on-demand runtime component is v1.1.
             return {"available": False,
-                    "hint": "Stencil's GPU runtime (torch + SAM 2, ~900 MB) "
-                            "isn't bundled in this app, and this build can't "
-                            "download it yet — that lands in v1.1. To use "
-                            "Stencil today, run the suite from a source "
-                            "checkout: github.com/amateurmenace/control-z "
+                    "hint": "Stencil's GPU runtime (torch + SAM 2, ~1 GB) "
+                            "isn't bundled in this app, and a signed build "
+                            "can't install it. To use Stencil today, run the "
+                            "suite from a source checkout: "
+                            "github.com/amateurmenace/control-z "
                             "(README: 'Stencil runtime'). Every other tool "
                             "in this app is fully functional without it."}
         return {"available": False,

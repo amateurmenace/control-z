@@ -33,6 +33,11 @@ datas = [
     # (glossary.SEEDS.is_dir() False -> towns() empty, load() an empty
     # scaffold). Ship them by name.
     (str(REPO / "interpreter" / "glossaries"), "interpreter/glossaries"),
+    # The web edition's reader shell. web/emit.py reads these at press time;
+    # today the frozen press path refuses earlier (no site/ to press into),
+    # so this is insurance, not a live dependency — but the day the desk
+    # presses an edition from the frozen app, absence here becomes a crash.
+    (str(REPO / "web" / "static"), "web/static"),
 ]
 # faster-whisper ships silero_vad_v6.onnx as package data and hooks-contrib
 # 2026.6 has NO hook for it; without this Scribe dies on the FIRST transcribe
