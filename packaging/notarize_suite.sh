@@ -86,6 +86,13 @@ ln -s /Applications "$STAGE/Applications"
 # -srcfolder create (measured) — build RW, set the bit on the mounted root,
 # convert to the compressed read-only image.
 cp icon.icns "$STAGE/.VolumeIcon.icns"
+# The LGPL travels WITH the download, not just with the repo. We bundle an
+# LGPL-2.1 FFmpeg, so the licence text and the written offer for source have
+# to reach whoever receives the DMG — a user who never sees this repository.
+# They sit BESIDE the .app, never inside it: the app is already signed and
+# stapled by this point, and staging a sibling file needs no re-sign.
+cp ../NOTICE "$STAGE/NOTICE.txt"
+cp vendor/src/ffmpeg-8.1.2/COPYING.LGPLv2.1 "$STAGE/LICENSE-FFmpeg-LGPL-2.1.txt"
 rm -f "$DMG" dist/_rw.dmg
 hdiutil create -volname "control-z Suite" -srcfolder "$STAGE" -ov -format UDRW -quiet dist/_rw.dmg
 hdiutil attach -quiet dist/_rw.dmg

@@ -70,7 +70,16 @@ unresolvable hiddenimport and still exits 0, and Documents fails *soft* (an
 honest HTTP 422, not a crash), so a casual smoke test sails past it. Run both
 installs above, then require **zero skips** from the suite — the
 `pypdf not installed` skip disappearing is the proof — and after the freeze
-confirm `grep -i pypdf packaging/build/suite/warn-suite.txt` comes back empty.
+confirm the module actually got baked in:
+
+    grep -c pypdf packaging/build/suite/PYZ-00.toc              # expect ~100, not 0
+    grep -E "^missing module named pypdf" packaging/build/suite/warn-suite.txt  # expect no match
+
+Do **not** grep the warnings file for a bare `pypdf` and expect silence: it
+legitimately reports pypdf's *optional* backends (`fontTools`, `Crypto`,
+`cryptography`), none of which we ship. The consequence of that, worth knowing:
+an AES-encrypted municipal PDF can't be read — Memory records it as an errored
+document with a sentence and moves on, rather than crashing the pipeline.
 
 **Spec changes already in this tree** (`packaging/suite.spec`): the hiddenimports
 list gained `pypdf`, `czcore.vision`, and `czcore.mt_local` (all lazy,
