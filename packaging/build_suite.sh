@@ -77,6 +77,12 @@ done
 # specs/10 and has already grown once); the freeze contract is "all of them
 # made it in", not a number.
 find "$FW" "$RS" -path "*suite/static/app.css" | grep -q . || { echo "FATAL: suite/static missing"; exit 1; }
+# Interpreter's seed glossary: absent = the Brookline names/terms never load
+# and every town opens empty (glossary.py resolves interpreter/glossaries/
+# by package path, which pyproject package-data covers for a wheel but the
+# freeze must carry as datas — suite.spec does).
+find "$FW" "$RS" -path "*interpreter/glossaries/*.json" | grep -q . || {
+    echo "FATAL: interpreter glossary seeds missing (every town would open empty)"; exit 1; }
 N_SRC=$(find "$REPO/depth/templates" -name "*.setting" | wc -l | tr -d ' ')
 N_SETTINGS=$(find "$FW" "$RS" -path "*depth/templates/*.setting" | wc -l | tr -d ' ')
 [ "$N_SETTINGS" -eq "$N_SRC" ] && [ "$N_SRC" -ge 5 ] || {
