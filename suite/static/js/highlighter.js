@@ -788,6 +788,9 @@ const HighlighterPage = (() => {
     $("#hl-recordslot", el).innerHTML = recordBtnHTML("hl-record");
     $("#hl-record", el).onclick = ev => sendToRecord(
       S.meta && S.meta.webpage_url ? { url: S.meta.webpage_url }
+        // a URL session is a link even when its meta forgot to say so — the
+        // same id the embed plays is the record's canonical name for it
+        : S.session ? { url: `https://www.youtube.com/watch?v=${ytId()}` }
         : { path: S.source }, ev.currentTarget);
     if (!m.ready) {
       box.innerHTML = `<span class="hint">⬛ when Memory joins (${m.when}),

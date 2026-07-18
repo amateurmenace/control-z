@@ -212,6 +212,12 @@ function recordBtnHTML(id) {
     ⬛ Send to the Record${m.ready ? "" : ` <span class="soon">${m.when}</span>`}</button>`;
 }
 async function sendToRecord(payload, btn) {
+  // a URL session's "source" is a link, not a file — name it what it is, or
+  // the record's ingest takes the local-file road and Scribe meets a URL
+  if (payload && /^https?:\/\//i.test(payload.path || "")) {
+    payload = { ...payload, url: payload.path };
+    delete payload.path;
+  }
   if (!toolById("memory").ready) {
     toast(`Community Memory joins in ${toolById("memory").when} — the record ` +
           `opens the day it lands`, true);
