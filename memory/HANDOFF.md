@@ -1,103 +1,117 @@
 # Community Memory — HANDOFF (lane B)
 
-Wave 1 is landed on `lane/memory`: ingest → pipeline → corpus store → meeting
-pages → cross-corpus search with jump-to-timestamp playback, working end to end
-in the suite UI on two real meetings, with tests. Per PARALLEL, lane A merges
-`lane/memory` → main.
+**Wave 2 (the issue engine) is landed on `lane/memory`.** The telescope now sees:
+the record clusters the topics that recur across meetings, names them, tracks
+every appearance, and lets a resident follow a thread and catch up on an arc in
+one sitting — the long view, end to end. Wave 1 (ingest → corpus → search →
+meeting pages → jump-to-timestamp playback) is underneath it, unchanged. Per
+PARALLEL, lane A merges `lane/memory` → main.
 
-Re-merged `origin/main` through the rebrand (Community AI Project), Publisher's
-ready-pass, and the Grabber search desk: the three slots reconciled (server.py
-import/register kept; `memory.js` tag carries the `?v={{v}}` cache-bust; core.js
-`ready:true` flip kept, `when` dropped — safe, lane A only reads `m.when` on the
-not-ready branch). Detection seam **swapped** to `czcore.moments`.
-
-**Cross-tool integration is live and verified against the contracts.** With
-`ready:true` merged, lane A's Send-to-the-Record buttons (Highlighter +
-Publisher) and Highlighter's prior-appearances line went live with zero
-lane-A edits, exactly as promised in state-of-main. Exercised end to end in the
-browser: `sendToRecord({url})` → `POST /api/memory/submissions` → `{meeting_id,
-status:"exists"}`; the prior panel → `POST /api/memory/context {texts:[…]}` →
-12 real prior appearances with `.text`. Shapes unchanged. Suite green at 334
-tests; adversarial review's 8 confirmed findings all fixed (see git log).
+No shared-file edits this wave: the three single-line slots were already in from
+wave 1 (server.py register pair, index.html `?v={{v}}` tag, core.js `ready:true`).
+Everything new lives in lane-B-owned files (`memory/`, `suite/tools/memory.py`,
+`suite/static/js/memory.js`, `tests/test_memory*.py`). New issue/thread routes
+are new `/api/memory/*` endpoints; the two stable contracts kept their shapes.
 
 ## landed (what works, how to see it)
 
-Run `.venv/bin/python -m suite --serve` → http://127.0.0.1:8300/#memory.
-(Live caption fetch needs SSL working — see **asks** #4; the relay is what
-actually pulls transcripts here.)
+Run `.venv/bin/python -m suite --serve` → http://127.0.0.1:8300/#memory, press
+**↻ rebuild** on "the long view" panel (a JobManager job — shows in the Queue).
 
-- **The tool exists on the rail.** `core.js` memory entry flipped `ready:true`;
-  `server.py` registers `register_memory`; `index.html` loads `memory.js`. The
-  three single-line slots PARALLEL names, nothing else in A's files.
-- **The corpus** — one SQLite file at `media_dir("memory")/corpus.db`: meetings
-  + diarized segments (FTS5 for words), a local lexical vector per segment
-  beside them (Qdrant → "embeddings beside the store"), three-tier dedupe
-  (deterministic id → canonical URL → media hash → transcript-shingle Jaccard).
-- **Ingest, captions-first** (as Stephen asked, like Highlighter): a URL's
-  published captions come straight in (watch page → yt-dlp → BIG's relay if the
-  Settings switch is on); Scribe ASR runs only for a **local file** the user
-  brings in. A URL with no captions is a calm `no_transcript`, never a runaway
-  6-hour download. Every stage is one `JobManager` job → it shows in the Queue.
-- **`POST /api/memory/submissions`** `{url|path, town?, body?, date?}` →
-  `{meeting_id, status:"exists"|"queued"}`, dedupe as specified. This is the
-  "Send to the Record" endpoint. **`POST /api/memory/context`** `{texts:[…]}` →
-  `{issues:[], prior:[…], stats}` (prior = related-language search; `issues`
-  stays empty, honestly, until the issue engine).
-- **The long view** — cross-corpus keyword + related-language search, every hit
-  time-coded; click → the meeting opens and **jumps to that second**: a YouTube
-  embed seeked by postMessage for caption meetings, the audio+canvas viewer for
-  local ASR files.
-- **Meeting page** — follow-along transcript, the extractive reading (brief,
-  entities, topics, motions/decisions, participation, moments), and a summary
-  card that is generative *only* with the user's key (labeled with its model)
-  and extractive otherwise — the fallback stands alone. BETA badge + "supplements
-  the official record, never replaces it" on every surface.
-- **Verified on two real meetings:** Brookline Select Board, May 19 (7,312
-  segments) and May 12 (9,131), 12.1 hours, via captions. Searching "affordable
-  housing" / "climate" lands inside the embed at the moment they're discussed.
-- **Tests:** `tests/test_memory_{embed,store,ingest,analyze,api}.py` — 40 tests,
-  offline (no ASR, no network; media root monkeypatched, llm mocked for the
-  generative branch). Full suite: 334 green.
+- **The issue engine** (`memory/issues.py`). Issues are **phrase-anchored**, not
+  vector-partitioned — a measured choice: the suite's embedding is lexical and
+  civic meetings share too much baseline vocabulary, so a cosine threshold
+  collapses everything into one "a public meeting" blob (I measured it). Instead
+  the *sticky* phrases that recur across meetings (PMI-filtered: `vision zero`,
+  `short term rentals`, `golf course lighting`, not `important work`) are the
+  anchors; phrases that co-occur merge into one issue; each carries a **keyword
+  set** that is the visible, auditable reason a segment belongs. Assignment is
+  keyword-first (precise, high-recall); the cosine fallback sits high, so an
+  unmatched segment waits in a **candidate queue** for a steward — the spec's
+  design. Person-shaped anchors never open an issue (the no-person-aggregation
+  non-goal, kept in code).
+- **The long view page.** The landing grew a "long view" issue rail (every issue,
+  sorted by reach, follow ☆) and "still watching" (your threads + a copyable
+  digest). Open an issue → a **horizontal timeline**: a time axis, one node per
+  meeting, moments as beads, votes as ◆ milestones — and **every bead deep-links
+  into playback** (reuses the search→seek path: YouTube embed by postMessage,
+  the audio+canvas viewer for local files). Verified in a browser: a bead on the
+  Legislative Agenda timeline lands the May-12 tape at 2:03:34.
+- **Threads + resurfacings.** Follow from a star or straight from a search
+  ("follow this" → `mint_from_query`, which attaches to a near issue or mints a
+  new one seeded from the search). On a new meeting the pipeline assigns it to
+  the existing issues (a new stage in `ingest.run`) and, for any *followed* issue
+  it reopens with a newer meeting, writes a **resurfacing event** with a
+  one-paragraph "what changed since last time" delta (generative with a key,
+  extractive otherwise). Notifications are in-app: a bell counts unseen
+  resurfacings; the **"still watching" digest** is the local covenant for the
+  spec's email — a plain markdown roundup you copy, nothing sent anywhere.
+- **Steward tools.** merge (folds aliases + segments, tombstones the source →
+  `merged_into`), split (lifts one meeting into its own issue), rename (+ aliases
+  → re-assigns), promote a candidate, forget. All as `/api/memory/issue/*`.
+- **`/api/memory/context` now fills `issues`.** Same shape, `prior` unchanged;
+  `issues` carries the tracked topics a meeting's agenda/transcript language lands
+  on, scored keyword-first (Highlighter's panel currently reads `r.prior` — see
+  **asks** #2 to light up `r.issues`).
+- **Acceptance MET.** On the two real Brookline meetings, recall of literal true
+  appearances: **Vision Zero 100%, Golf Course 100%, short-term rentals 83%** —
+  all ≥ the spec's 80% (hand-audited). Rebuild draws 41 real issues (vision zero,
+  overlay zoning, sewer rates, permit fees, immigration enforcement, blue bikes,
+  dark skies…) from 12.1 hours.
+- **Tests:** `tests/test_memory_issues.py` (18: anchors/PMI/name-filter,
+  discover, incremental assign, resurfacing+delta, merge/split/rename, mint,
+  digest) + issue/thread/steward/context routes in `test_memory_api.py`. Full
+  suite **359 green** (was 334; +25). Offline: no key (extractive paths), no
+  network, throwaway SQLite.
 
 ## next (what B starts after merge)
 
-- **The issue engine** (specs/14 P0 №4): cluster segments per town → LLM-labeled
-  canonical Issues with aliases → incremental assignment → steward merge/split →
-  **threads + resurfacings** and **the long view** issue timeline. Then fill in
-  `context.issues`. After that: documents (PDF), the Vote Ledger, cross-meeting
-  reels, the infographic maker.
+- **Live cross-time proof.** Resurfacings are unit-tested but haven't fired on
+  real data: both meetings are May 2026 a week apart, so rebuild's baseline is
+  already the latest. Ingesting a Brookline meeting dated *after* May 19 (captions
+  permitting — see **asks** #3) would fire a real resurfacing + delta on a
+  followed thread. The engine already auto-assigns every new ingest, so this is
+  "add meetings," not "add code."
+- **P1 №11 Documents** (PDF warrants/plans/budgets → chunk, embed, link to
+  issues, interleave on the timeline with page cites). **№12 Vote Ledger** — the
+  timeline already surfaces votes-as-milestones (decisions within ~90s of an
+  issue's beads); the ledger is the per-issue / per-member roll-call grid on top.
+  **№13 cross-meeting reels**, **№14 the infographic maker**.
 
 ## asks (changes in A-owned files — exact, minimal)
 
-1. **`pyproject.toml` `[tool.setuptools] packages`:** add `"memory"` to the list
-   (you added `"publisher"` there; `"memory"` is still missing). Until then
-   `suite/tools/memory.py` inserts the repo root on `sys.path` as a guarded
-   fallback so `import memory` resolves regardless of cwd — delete that block
-   once `memory` is declared. This is the one thing that would break a packaged
-   (PyInstaller) build; dev-serve and tests already work via the fallback.
-2. **Detection seam:** ✅ done — swapped `memory/detect.py` + `memory/ingest.py`
-   to `czcore.moments` after it landed on main.
-3. **The buttons** (optional, when convenient): Highlighter's / Publisher's
-   "Send to the Record" → `POST /api/memory/submissions` with `{url}` or
-   `{path}`. The endpoint is stable and live now.
-4. **Not a code ask — a machine note:** on this box Python `urllib` SSL fails
-   (`CERTIFICATE_VERIFY_FAILED`), which kills `fetch_vtt` and the relay, and
-   yt-dlp's `--skip-download` caption path has no JS runtime (deno) — so live
-   caption fetch fell through until I set `SSL_CERT_FILE=<certifi>` for the
-   server (in `.claude/launch.json`, which is gitignored — local only). Fix on
-   the machine: install Python's certs (the "Install Certificates" step) or
-   point `SSL_CERT_FILE` at certifi. With SSL working, BIG's relay pulls full
-   transcripts; nothing in Memory's code needs to change.
+1. **`pyproject.toml` `[tool.setuptools] packages`:** add `"memory"` (still
+   missing; `"publisher"` is there). Until then `suite/tools/memory.py` inserts
+   the repo root on `sys.path` as a guarded fallback so `import memory` resolves —
+   delete that block once `memory` is declared. The one thing that would break a
+   packaged (PyInstaller) build; dev-serve and tests already work via the fallback.
+2. **(Optional) Light up prior-appearance *issues* in Highlighter.** `POST
+   /api/memory/context` now returns real `issues: [{id, name, n_meetings,
+   n_segments, first_seen, last_seen, score, following}]` alongside `prior`.
+   Highlighter's panel reads `r.prior` today; rendering `r.issues` too would give
+   the spec's "this topic: N appearances across M bodies since YYYY" line and a
+   door into the issue timeline (open Memory with `{openIssue: id}` — the page's
+   onshow already routes it). Zero lane-B edits needed; the shape is stable.
+3. **Machine note (unchanged from wave 1):** live caption fetch needs working SSL
+   — `urllib` fails `CERTIFICATE_VERIFY_FAILED` on this box, yt-dlp's caption path
+   has no JS runtime (deno), and the community relay is opt-in (off by default).
+   `.claude/launch.json` sets `SSL_CERT_FILE`=certifi for `-m suite` (gitignored,
+   local). With SSL working + the relay switch on, more meetings come straight in
+   and nothing in Memory's code changes.
 
 ## fragments (changelog-ready, house voice)
 
-- The telescope opens: Community Memory keeps the record — a meeting's captions
-  come straight in, the whole corpus is searchable, and every hit is a second to
-  jump to.
-- Captions first, like the analyzer: Memory reads a meeting's published words
-  the moment you paste the link, and only asks Scribe to listen when a file has
-  no transcript of its own.
-- One search across every meeting, and the video lands on the moment — the long
-  view learns to point back at the tape.
-- Every reading shows its receipts and says it's beta: Memory supplements the
-  official record, and never pretends to be it.
+- The telescope learns to see: Memory finds the issues that recur across
+  meetings — vision zero, the golf course lighting, short-term rentals — names
+  each from the record's own words, and tracks every appearance. Anchored in the
+  words a meeting actually says, never a guess about anyone's position.
+- Follow a thread and the record keeps watch: star an issue (or a search), and
+  when it resurfaces on a new agenda Memory tells you what changed since last
+  time — a paragraph, generative with your key, extractive without one.
+- The long view is a line you can walk: an issue's timeline lays every meeting
+  along a time axis, its moments as beads and its votes as milestones, and every
+  one is a second to jump to — the tape lands on the moment.
+- Steward-tended, not machine-final: merge two issues, split one that was fused,
+  rename or promote a candidate — and the record remembers its own edits.
+- Still watching, on your terms: a plain digest of your threads you can copy and
+  paste anywhere. No email, no account, nothing sent — the covenant, kept.
