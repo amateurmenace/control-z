@@ -1,6 +1,8 @@
 # 20 — The newspaper: the record gets its own face
 
-**Status:** Draft v1.0 · **Stage:** adopted as the next build's contract ·
+**Status:** v1.1 · **Stage:** **P0 shipped — publicrecord.studio serves the
+newspaper (2026-07-19)**; P1 (the reel composer) and P2 (kits, dark mode) not
+started, per the roadmap's finish-before-feature rule ·
 **Owner:** Stephen Walter (Weird Machine) · **Related:**
 `.claude/rules/branding.md` and `brand/` (the brand law and its vendored
 assets), specs/16 (the reader — restyled here, and partly superseded on this

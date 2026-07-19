@@ -2,6 +2,62 @@
 
 ## unreleased
 
+### The record gets its own face: specs/20 P0 ships the newspaper — 2026-07-19
+
+publicrecord.studio was live wearing the desk's clothes — cream paper, oxblood
+accents, and a sidebar of thirteen locked tool doors given equal billing with
+the record's own surfaces, several showing a demo image the container never
+carried. The brand architecture had since settled: civicmedia is the press;
+publicrecord is the newspaper. This is the paper. All of specs/20 P0, pressed
+from the cloud and served at publicrecord.studio, image `record/api:r21`.
+
+- **The coat** (§20.1). The edition stops borrowing `suite/`'s tokens and takes
+  its own, composed byte-faithfully from `brand/` (the single source now, for
+  this product) — neutrals and deep green only; no cream, oxblood, amber,
+  fuchsia or purple survives the press, and a test proves it. Real Inter and
+  JetBrains Mono, subset-latin woff2 self-hosted under `web/static/fonts/` with
+  their OFL texts (~157 KB, the only new bytes; CSP gains `font-src 'self'`).
+  A nameplate masthead — the publicrecord keycap read byte-equal from
+  `brand/logos`, the mono lockup, the classic double rule — over a folio and
+  the paper's own section line. The thirteen doors leave the masthead.
+
+- **The front page** (§20.2). A lead story (the latest meeting: a big
+  `i.ytimg` still, a mono headline, a deck, its two strongest moments as
+  pull-links into the tape), a briefs column, by-the-numbers (every figure a
+  link), the long view, what-changed, an access ledger that says its zeros out
+  loud, and a roll-calls teaser. Column rules, not boxes; reads linearly with
+  JS off.
+
+- **The moments plane** (§6). `web/bake.py` presses, per meeting, the analyzer's
+  scored moments as one ranked list — VOTE, DECISION, TENSION, QUESTION, each
+  {t, end, kind, score, reason, quote}, scored by `czcore.moments.score_segments`
+  — a pure function of the transcript, so the edition stays byte-idempotent.
+
+- **The meeting page** (§20.3). The Moments panel renders those cards, JS-off,
+  each seeking the tape. A right-margin minimap (a mark per moment, a line at
+  the playhead) and a sticky mini-header arrive as pure enhancement.
+
+- **Search** (§20.4). Instant (debounced, never under three chars), hover peeks
+  (±1 segment from the segs plane already in hand — no extra request), and
+  keyboard paths (j/k/Enter, `/` to focus). The R1.6 live-first/static-always
+  machine is untouched; its degradation proofs still run the real code.
+
+- **The press page + the quiet doors** (§20.5). `/app/press` is one honest page
+  about Civic Media Studio — the tool list, the DMG, the cross-link to
+  communityai.studio. The thirteen `/app/t/<tool>/` URLs survive as CSP-safe
+  redirect stubs into `/app/press#<tool>`; the broken slide images leave the
+  domain structurally (a test proves no pressed file references `site/`).
+
+- **Tombstones** (§20.6, closing R1.7's debt). A steward-forgotten issue's URL
+  renders *"removed from the record by a steward on {date}"* — the date read
+  from the audit ledger (stored state, never a wall clock), so it presses
+  idempotently. `PgCorpus.list_forgotten` reads the audit table; the desk store
+  returns nothing, because it keeps no such ledger.
+
+The covenant holds throughout: readers are uncounted, every page reads with the
+API dark, the bake is byte-idempotent, and the edition stays under its budgets
+(fonts are the only new bytes; thumbnails are remote). 816 tests green.
+
 ### The record breathes: R1 closes the switches between deployed and alive — 2026-07-19
 
 The wave-1 backend was proven and inert. This is the run that turned it on, and

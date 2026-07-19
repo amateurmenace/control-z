@@ -179,14 +179,30 @@ gcloud run jobs execute record-press --region=us-east1 --wait
 #    → writes gs://publicrecord-edition/app, with RECORD_API_BASE baked in
 
 # 2. sync that edition into the Pages repo and push
-git clone https://github.com/amateurmenace/publicrecord /tmp/pr && cd /tmp/pr
-gcloud storage rsync -r -d gs://publicrecord-edition/app app
+gh repo clone amateurmenace/publicrecord /tmp/pr -- --depth 1 && cd /tmp/pr
+gcloud storage rsync -r --delete-unmatched-destination-objects \
+  gs://publicrecord-edition/app app
+# the bucket stores text objects gzipped (Content-Encoding: gzip, for the CDN
+# path); this gcloud version's rsync downloads them RAW, so decompress in place
+# before pushing — Pages serves the bytes as-is and gzips on the wire itself,
+# so gzip bytes in the repo would reach the browser as garbage:
+python3 - <<'PY'
+import gzip, pathlib
+for p in pathlib.Path("app").rglob("*"):
+    if p.is_file():
+        b = p.read_bytes()
+        if b[:2] == b"\x1f\x8b":            # gzip magic → the real text is inside
+            p.write_bytes(gzip.decompress(b))
+PY
 git add -A && git commit -m "Deploy: <what changed>" && git push
 ```
 
-The `-d` on the rsync deletes what the press dropped, so a steward's `forget`
-propagates. The repo keeps `CNAME`, `.nojekyll` and the root `index.html`
-redirect at its top level — the rsync only touches `app/`, so those survive.
+`--delete-unmatched-destination-objects` deletes what the press dropped, so a
+steward's `forget` propagates (older gcloud spelled this `-d`). The decompress
+step is not optional on this toolchain: without it every `.html`/`.css`/`.js`
+over 1 KB lands as gzip bytes and the live site serves binary. The repo keeps
+`CNAME`, `.nojekyll` and the root `index.html` redirect at its top level — the
+rsync only touches `app/`, so those survive.
 **Before pushing, if the edition dropped a page that is cited on
 `control-z.org/app`** (a steward deleted an issue — see §9 item 1), decide
 whether that page needs a tombstone rather than a 404; the two editions are

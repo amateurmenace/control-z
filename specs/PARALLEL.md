@@ -157,7 +157,34 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-19 (latest) — **publicrecord R1: the record breathes.** The wave-1
+- 2026-07-19 (latest) — **specs/20 P0: the record gets its own face.**
+  publicrecord.studio now serves an ink-on-white newspaper, pressed from the
+  cloud (image `record/api:r21`, corpus `66c05a95`) and live. The edition takes
+  publicrecord's own tokens from `brand/` (the single source for this product;
+  no cream/oxblood/amber/fuchsia survives the press) with self-hosted Inter +
+  JetBrains Mono; a newspaper front page (lead story, briefs, by-the-numbers,
+  the long view, access ledger, roll-calls teaser); a Moments panel + minimap +
+  sticky header on every meeting; instant search with hover peeks and keyboard
+  paths; one `/app/press` page with the thirteen doors quiet as redirect stubs;
+  and tombstones for forgotten issues. 816 tests green.
+  - **`web/emit.py`, `web/bake.py`, `web/static/app.web.css`, `web/static/app.js`
+    CHANGED** — the whole edition restyled; a moments plane pressed per meeting
+    (`czcore.moments.score_segments`, idempotent); the press page + door stubs;
+    `page_tombstone`. **`web/static/fonts/` NEW** (6 subset woff2 + OFL). The
+    R1.6 live-first/static-always machine is untouched; its degradation proofs
+    still pass. **`brand/` joins the Dockerfile COPY**; the dead
+    `suite/static/app.css` copy leaves.
+  - **`record/store.py`, `memory/store.py`, `memory/seam.py` CHANGED** —
+    `list_forgotten()` on the seam (audit ledger on Postgres, `[]` at the desk),
+    powering tombstones. **`record/press.py` CHANGED** — mirrors the bake's new
+    `bake_tombstones` stage, so the hosted press emits tombstones too.
+  - **Deploy**: `record/OPERATING.md` §5 corrected — this gcloud version's
+    `storage rsync` uses `--delete-unmatched-destination-objects` (not `-d`) and
+    downloads the bucket's gzip objects RAW, so the Pages sync must decompress
+    in place before pushing. Both `record-api` (rev 00010) and `record-press`
+    now run `r21`.
+
+- 2026-07-19 — **publicrecord R1: the record breathes.** The wave-1
   backend went from deployed to alive. Live on Cloud Run in project
   `publicrecord-studio`: 11 meetings, 80,856 segments, the neural half embedded,
   the console signing a steward in, hosted ingest having carried one meeting end
