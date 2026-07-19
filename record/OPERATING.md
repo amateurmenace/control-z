@@ -4,7 +4,7 @@ Everything you need to run the record, find out what it is doing, and fix it
 when it stops. Written to be read at 11pm by someone who did not build it.
 
 **Provisioned 2026-07-19.** Project `publicrecord-studio`, region `us-east1`,
-billed to *Firebase Payment*, budget $60/mo scoped to this project alone.
+billed to *Firebase Payment*, budget **$100/mo** scoped to this project alone.
 
 ---
 
@@ -41,8 +41,9 @@ It is deliberately honest about **halves**. A green light over a dead neural
 index is how a degraded search ships for a month, so this never reports one.
 
 - `ok: true` and a `record` block with counts — the corpus is reachable
-- `neural.available: false` — meaning-search is off. **Normal right now**;
-  no Gemini key is set. Search still works on words, and the reader is told.
+- `neural.available: true` — the key is wired. If this ever reads `false`, the
+  `reason` names the cause, and search silently falls back to words with an
+  honest line rather than erroring.
 - `steward_console: "RECORD_GOOGLE_CLIENT_ID is not set"` — the console is
   configured-off. **Normal right now.** Every steward route returns 503; it
   fails *closed*, never open.
@@ -214,11 +215,68 @@ correctly shows an unchanged date.
 | Cloud Run `record-api` | $0–5 | min-instances 0; idle costs nothing |
 | Cloud Run jobs | ~$0 | seconds per run |
 | GCS + egress | $1–5 | |
-| Gemini embeddings | $1–5 | only once a key is set; currently $0 |
+| Gemini embeddings | <$1 one-time, then pennies | see below |
 | Artifact Registry | <$1 | |
-| **Budget alert** | **$60** | 50 / 90 / 100%, this project only |
+| **Project budget alert** | **$100** | 50 / 90 / 100%, this project only |
 
-**Turning it off** — and it is worth knowing this is safe:
+### The Gemini key, and where it actually lives
+
+**It is not in AI Studio, and it will not appear there.** AI Studio's key page
+is a filtered view of keys created through its own flow, for projects it has
+synced; this key was created with `gcloud` in a project AI Studio has not
+picked up. Same underlying resource, different front door. The authoritative
+view is the Cloud console:
+
+<https://console.cloud.google.com/apis/credentials?project=publicrecord-studio>
+
+It is listed as **`publicrecord gemini`**, and it is **restricted to
+`generativelanguage.googleapis.com` only** — if it leaked it could call
+nothing else. The value lives in Secret Manager as `record-gemini-key` and has
+never been printed to a terminal or a chat.
+
+To rotate it:
+
+```bash
+gcloud services api-keys create --display-name="publicrecord gemini 2" \
+  --api-target=service=generativelanguage.googleapis.com \
+  --project=publicrecord-studio
+# then write the new string into a new secret version, redeploy, and delete the old key
+```
+
+### Two ceilings, and they are different things
+
+**The GCP budget ($100)** alerts. It does not stop anything. It watches every
+service in this project and emails at 50%, 90% and 100%.
+
+**The embedding cap (`RECORD_SPEND_CAP_USD`, default $100)** stops. It is
+checked at the top of every backfill batch — before a row is read, let alone
+bought — and measured against the `spend` ledger rather than a counter held in
+memory, so it survives a restart, a second job, and a job somebody ran last
+week.
+
+The arithmetic it uses is pinned and checkable:
+
+| | |
+|---|---|
+| rate | **$0.15 per 1M input tokens**, `gemini-embedding-001` paid tier, verified against ai.google.dev on 2026-07-19 |
+| assumption | 60 tokens per civic segment (deliberately generous — an estimate that undercounts is a cap that does not hold) |
+| **the whole imported record** | 72,816 segments ≈ **$0.66** |
+| the cap is reached at | ~11.1 million segments |
+
+So the cap is a runaway brake, not a budget: the real backfill costs less than
+a coffee, and $100 is roughly a hundred and fifty times it. If the estimate and
+the invoice ever disagree, the ledger is the arbiter —
+`/api/steward/spend` shows units actually bought, and the conversion above is
+only an estimate over them. A drifting price shows up as that divergence.
+
+Lower it for a run:
+
+```bash
+gcloud run jobs update record-embed --region=us-east1 \
+  --update-env-vars=RECORD_SPEND_CAP_USD=5
+```
+
+**Turning it all off** — and it is worth knowing this is safe:
 
 ```bash
 gcloud sql instances patch record-pg --activation-policy=NEVER
@@ -229,12 +287,6 @@ meaning-search and intake, not reading. To stop everything:
 `gcloud projects delete publicrecord-studio`. The record itself is not in
 there — it is in `corpus.db` on the desk and in every pressed edition anyone
 has downloaded, which is what the anti-lock-in promise was for.
-
-Spend on AI is also tracked *inside* the app: `/api/steward/spend` totals every
-call by model and purpose. The number is meant to be visible to the person
-making the decision, not only to whoever opens the invoice.
-
----
 
 ## 8. What is not done yet
 
@@ -247,8 +299,9 @@ Honest list. None of it is broken; all of it is unfinished.
    domain is still `control-z.org`.** Until that swaps, the domain resolves to
    GitHub and GitHub does not yet know which site to serve. The swap waits on
    moving the tools site to its own repo so control-z.org never goes dark.
-3. **No Gemini key**, so search is lexical. Set `RECORD_GEMINI_KEY` as a secret
-   and redeploy; the reader is already told, in a sentence, which half is out.
+3. ~~No Gemini key~~ — **done.** `neural.available: true`. Nothing has been
+   embedded yet because the corpus is empty; the backfill job is created after
+   the import lands, and it runs under the cap in §7.
 4. **The steward console is configured-off.** It needs an OAuth web client id
    (`RECORD_GOOGLE_CLIENT_ID`) and `RECORD_STEWARD_ALLOWLIST` with your email.
    Until then every steward route is 503 — deliberately, and it fails closed.

@@ -202,3 +202,52 @@ class ConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpendCapTest(unittest.TestCase):
+    """The cap is the one number standing between a loop and a bill.
+
+    It is tested because a documented ceiling that nothing enforces is exactly
+    the failure this project keeps naming — a hiddenimport is not an
+    installation, and a number in a runbook is not a limit.
+    """
+
+    def test_the_rate_is_pinned_and_the_arithmetic_is_right(self):
+        from record import embed_neural as en
+        self.assertEqual(en.USD_PER_MILLION_TOKENS, 0.15)   # verified 2026-07-19
+        # 1M segments x 60 tokens = 60M tokens = $9.00
+        self.assertAlmostEqual(en.estimate_usd(1_000_000), 9.0, places=4)
+        self.assertEqual(en.estimate_usd(0), 0.0)
+
+    def test_the_real_backfill_is_nowhere_near_the_cap(self):
+        """72,816 segments — the whole imported record — costs well under a
+        dollar. If this ever approaches the cap, either the corpus grew by two
+        orders of magnitude or the pinned rate went stale."""
+        from record import embed_neural as en
+        self.assertLess(en.estimate_usd(72_816), 1.0)
+
+    def test_the_cap_defaults_to_a_hundred_and_reads_the_environment(self):
+        from unittest import mock
+        from record.settings import Settings
+        self.assertEqual(Settings().spend_cap_usd, 100.0)
+        with mock.patch.dict("os.environ", {"RECORD_SPEND_CAP_USD": "5"}):
+            self.assertEqual(Settings().spend_cap_usd, 5.0)
+
+    def test_backfill_refuses_before_buying_when_the_ledger_is_over(self):
+        """Checked BEFORE the batch, against the ledger rather than a local
+        counter — so it survives a restart and two jobs running at once. A cap
+        enforced after the purchase is a receipt."""
+        from unittest import mock
+
+        from record import embed_neural as en
+
+        class Ledger:
+            """A corpus whose ledger already shows more spent than the cap."""
+            def _con(self):
+                raise AssertionError("must not reach the database to decide")
+
+        with mock.patch.object(en, "available", lambda: True), \
+             mock.patch.object(en, "spent_usd", lambda c: 999.0):
+            out = en.backfill(Ledger(), verbose=False, cap_usd=1.0)
+        self.assertTrue(out["available"])
+        self.assertEqual(out["embedded"], 0)

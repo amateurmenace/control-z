@@ -209,6 +209,45 @@ def _attempt(texts: Sequence[str], task: str) -> Optional[_Vecs]:
 
 # -- the ledger ------------------------------------------------------------
 
+# What an embedding costs, pinned the way czcore/models.py pins hashes.
+#
+# $0.15 per 1M input tokens for gemini-embedding-001, paid tier, verified
+# against ai.google.dev/gemini-api/docs/pricing on 2026-07-19. A price is not a
+# constant of nature: when this drifts, the ledger drifts silently with it,
+# because `spend.units` records what was actually bought and this only converts.
+# The console shows both, so a divergence between the estimate and the invoice
+# is visible rather than inferred.
+USD_PER_MILLION_TOKENS = 0.15
+
+# A civic segment averages about forty-five words; tokens run a little above
+# words. Deliberately generous — an estimate that undercounts is a cap that
+# does not hold.
+TOKENS_PER_SEGMENT = 60
+
+
+def estimate_usd(units: int) -> float:
+    """Dollars for a number of embedded segments. Rounded up in spirit: this
+    is what a cap is measured against, so it should never flatter itself."""
+    return (units * TOKENS_PER_SEGMENT / 1_000_000.0) * USD_PER_MILLION_TOKENS
+
+
+def spent_usd(corpus) -> float:
+    """What this record has spent on embeddings so far, from the ledger rather
+    than from a counter this process happens to hold — so a cap survives a
+    restart, a second job, and a job someone ran last week."""
+    if corpus is None:
+        return 0.0
+    try:
+        with corpus._con() as con:
+            row = con.execute(
+                "SELECT COALESCE(SUM(units),0) AS n FROM spend "
+                "WHERE model=%s", (NEURAL_MODEL,)).fetchone()
+        return estimate_usd(int(row["n"] or 0))
+    except Exception:
+        # A cap that cannot read the ledger must not silently become no cap.
+        raise
+
+
 def _log_spend(corpus, units: int, purpose: str, town: str = "",
                target: str = "") -> None:
     """Every call the project paid for, written down where a steward can see
@@ -298,7 +337,7 @@ def embed_query(q: str, corpus=None, town: str = ""):
 # -- the backfill ----------------------------------------------------------
 
 def backfill(corpus, town: str = "", limit: int = 0,
-             verbose: bool = True) -> dict:
+             verbose: bool = True, cap_usd: float = 0.0) -> dict:
     """Fill `segments.emb_neural` wherever it is NULL, in batches.
 
     Returns `{"embedded", "skipped", "failed", "available"}`. When the
@@ -311,7 +350,10 @@ def backfill(corpus, town: str = "", limit: int = 0,
     API refuses stays NULL and would otherwise be handed back forever. Those
     rows are simply picked up again by the next run, when the refusal may have
     been temporary after all."""
-    out = {"embedded": 0, "skipped": 0, "failed": 0, "available": available()}
+    from .settings import settings
+    cap = cap_usd if cap_usd > 0 else settings.spend_cap_usd
+    out = {"embedded": 0, "skipped": 0, "failed": 0, "available": available(),
+           "cap_usd": cap, "spent_usd": 0.0, "stopped_at_cap": False}
     if not out["available"]:
         if verbose:
             print(f"neural embeddings unavailable: {status()['reason']}")
@@ -323,6 +365,22 @@ def backfill(corpus, town: str = "", limit: int = 0,
         want = BATCH_MAX if remaining < 0 else min(BATCH_MAX, remaining)
         if want <= 0:
             break
+        # The cap is checked at the top of the loop — before a row is read, let
+        # alone bought — and it is measured against the `spend` ledger rather
+        # than a counter this process holds. That is what makes it survive a
+        # restart, a second job running beside this one, and a job somebody ran
+        # last week. A cap enforced after the purchase is a receipt.
+        if cap > 0:
+            already = spent_usd(corpus)
+            out["spent_usd"] = round(already, 4)
+            if already + estimate_usd(want) > cap:
+                out["stopped_at_cap"] = True
+                if verbose:
+                    print(f"  stopping: ${already:.2f} already spent against a "
+                          f"${cap:.2f} cap. {out['embedded']:,} embedded this "
+                          f"run; the rest stay NULL and search stays lexical "
+                          f"for them, which is a degradation and not a loss.")
+                break
         sql = ("SELECT id, text FROM segments "
                "WHERE emb_neural IS NULL AND id > %s")
         args: list = [after]

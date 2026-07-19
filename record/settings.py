@@ -43,6 +43,16 @@ class Settings:
     pool_min: int = field(default_factory=lambda: int(_env("RECORD_POOL_MIN", "1")))
     pool_max: int = field(default_factory=lambda: int(_env("RECORD_POOL_MAX", "8")))
 
+    # -- the spend ceiling -------------------------------------------------
+    # A hard stop on embedding, checked against the `spend` ledger before each
+    # batch is bought rather than after — so it survives a restart, a second
+    # job, and a job somebody ran last week. The full Brookline+Boston backfill
+    # at present scale estimates well under a dollar; this is a runaway brake,
+    # not a budget. The GCP project budget ($100, alerting at 50/90/100%) is
+    # the backstop underneath it, and it watches every service, not just this.
+    spend_cap_usd: float = field(default_factory=lambda: float(
+        _env("RECORD_SPEND_CAP_USD", "100") or 100))
+
     # -- the neural half ---------------------------------------------------
     # Absent by design: with no key publicrecord still runs, search still works,
     # and the reader is told which half is missing rather than shown a blank.
