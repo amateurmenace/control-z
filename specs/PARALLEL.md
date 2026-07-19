@@ -157,7 +157,37 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-18 (latest) — **publicrecord, wave 1: the record moves in.
+- 2026-07-19 (latest) — **publicrecord R1: the record breathes.** The wave-1
+  backend went from deployed to alive. Live on Cloud Run in project
+  `publicrecord-studio`: 11 meetings, 80,856 segments, the neural half embedded,
+  the console signing a steward in, hosted ingest having carried one meeting end
+  to end, and a nightly poll+ingest per town. On `main`, 801 tests green (Postgres
+  cases skip without `RECORD_TEST_PG_DSN`).
+  - **`record/pipeline.py` NEW** — drains the approved submissions queue through
+    `memory/ingest` (store-agnostic; the parity suite is what lets it reuse the
+    desk's engine). Files `asr_tasks` for caption-less meetings; embeds the one
+    new meeting, never the town.
+  - **`record/store.py`, `record/app.py`, `web/emit.py`, `web/bake.py`,
+    `web/static/app.js` CHANGED** — live-first search. The bake takes `--api`;
+    the reader calls it and falls back to its static index when it is dark;
+    `/api/search` gained `body` and CORS (`RECORD_READER_ORIGINS`, allowlist, no
+    credentials). A desk edition stays byte-identical. Vector search moved into
+    a segments-only subquery so the HNSW index is actually used (45s → 0.4s).
+  - **`record/connectors/youtube.py` CHANGED** — the poll now applies the intake
+    rules it never called (default-deny restored), and gained `--all-towns` for
+    the nightly scheduler.
+  - **Cloud Run jobs**: `record-pipeline`, `record-poll`, `record-embed`,
+    `record-press` created; `record-nightly-poll`/`-ingest` schedulers.
+
+  **Two facts to carry forward.** The desk→Postgres import arrived with 215
+  issues where the desk has 216 (`issue_brookline_callahan-town-council` missing;
+  re-run `import_desk`). And R1.7 (domain) is blocked on making `control-z-tools`
+  public — so the live-first edition is pressed into `gs://publicrecord-edition/app`
+  and served nowhere public yet; `control-z.org/app` still serves the desk's
+  static 1.9.0 edition, deliberately un-overwritten because the cloud press drops
+  the missing issue's page.
+
+- 2026-07-18 — **publicrecord, wave 1: the record moves in.
   `record/` joins the tree; `memory/` grows a store seam. 648 tests green
   (39 skip without a Postgres).** On branch `lane/studio`, not yet merged.
   Nothing is provisioned on GCP and no bill has started — the whole wave was

@@ -2,6 +2,53 @@
 
 ## unreleased
 
+### The record breathes: R1 closes the switches between deployed and alive — 2026-07-19
+
+The wave-1 backend was proven and inert. This is the run that turned it on, and
+almost everything it fixed was found by running it against the live channels
+rather than by reading — which is the whole argument for walking one meeting end
+to end before turning a nightly poll loose.
+
+- **Hosted ingest carries meetings now** (specs/19 R1.4). `record/pipeline.py`
+  drains the approved queue: a steward's yes → captions-first ingest → embed →
+  issue-assign, calling the same `memory/ingest` the desk calls because it is
+  store-agnostic and the parity suite proves it. The first real meeting —
+  Boston City Council, July 8 — is on the record: 8,040 segments, through the
+  queue with a human in the middle. Three bugs only a real meeting could show:
+  the meeting shell has to exist before `ingest.run` writes segments (Postgres
+  enforces a foreign key SQLite did not); the embed stage scopes to the one new
+  meeting or a nightly job embeds the whole town and times out; and the link is
+  written before the embed, so a meeting is never live-and-unlinked.
+
+- **Search reads the record two ways at once** (specs/19 R1.6). The reader asks
+  the Studio first and falls back to its own prebuilt index the instant the
+  Studio does not answer — one timed attempt, no retry, and the page stops
+  promising meaning-search the moment it cannot deliver it. Provenance rides
+  every live hit: *word*, *meaning*, *both*, *related*. The wiring that makes
+  this possible is three-sided — the edition names the API it may call, the API
+  names the readers that may call it (CORS, an allowlist, no credentials ever),
+  and both go quiet for a desk edition, which stays byte-identical.
+
+- **The neural half is on** (specs/19 R1.2). The whole record embeds as a Cloud
+  Run job under a hard spend cap that stops before a batch is bought; the ledger
+  proves the $0.66 estimate. Before it ran, a neural query answered `lexical`
+  with the honest line "this corpus has not been embedded yet" — the degradation
+  verified before the thing it degrades to was switched on.
+
+- **Intake is default-deny again** (found by running it). The first hosted poll
+  filed all 45 entries from three channels, PSAs and ribbon cuttings included,
+  because the connector had never called the intake rules — the console's
+  preview was their only caller. Now the poll files what the preview promised:
+  45 polled, 21 filed, the rest excluded or unmatched.
+
+- **Meaning-search stopped scanning the whole table.** At the reader's page size
+  a neural query took 45 seconds because the join blocked the vector index; the
+  ordering now runs in a subquery over segments alone and answers in 0.4s.
+
+- **Nightly, per town, 03:00 and 03:30 America/New_York** (specs/19 R1.5). The
+  poll files submissions; the pipeline ingests what a human approved. Safe to
+  leave alone because the pipeline reads `approved` and nothing else.
+
 ### 2.0.0: Civic Media Studio — the suite takes its own name — 2026-07-18
 
 A major number because macOS agrees it is one: the bundle identifier moved from

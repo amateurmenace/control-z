@@ -24,8 +24,12 @@ billed to *Firebase Payment*, budget **$100/mo** scoped to this project alone.
 
 **The API:** <https://record-api-907309358085.us-east1.run.app>
 **The steward console:** <https://record-api-907309358085.us-east1.run.app/steward>
-**The reader:** <https://publicrecord.studio> *(DNS points at GitHub Pages;
-the Pages custom domain is not switched over yet — see §9)*
+**The reader (static, live today):** <https://control-z.org/app> — the desk's
+edition, 10 meetings, static search.
+**The reader (live-first, pressed and waiting):** `gs://publicrecord-edition/app`,
+served at <https://publicrecord.studio> once §9 item 2's domain swap lands. It
+carries 11 meetings and calls the API for meaning-search, degrading to its own
+index when the API is dark.
 
 ---
 
@@ -395,28 +399,46 @@ identity change will want to compare against it.
 
 ## 9. What is not done yet
 
-Honest list. None of it is broken; all of it is unfinished.
+Honest list. Most of §9 closed on 2026-07-19 (specs/19 R1). What remains is
+named plainly, and one line is a finding, not a task.
 
-1. **The corpus is empty.** 0 meetings. The full record (10 meetings, 217
-   issues, 27 roll calls) lives on the other Mac and imports through the Cloud
-   SQL proxy — see §9.
-2. **`publicrecord.studio` DNS points at GitHub Pages, but the Pages custom
-   domain is still `control-z.org`.** Until that swaps, the domain resolves to
-   GitHub and GitHub does not yet know which site to serve. The swap waits on
-   moving the tools site to its own repo so control-z.org never goes dark.
-3. ~~No Gemini key~~ — **done.** `neural.available: true`. Nothing has been
-   embedded yet because the corpus is empty; the backfill job is created after
-   the import lands, and it runs under the cap in §7.
-4. ~~The steward console is configured-off~~ — **done.** Signed in with Google
-   against a server-side allowlist of one. `/api/steward/me` now answers 401
-   without a token rather than 503; the difference is "sign in" versus "there is
-   no console here", and both are honest.
-5. **The nightly scheduler is not created.** Polling is manual until it is.
-6. **The intake connector has never ingested a meeting end to end.** It polls,
-   classifies and files correctly against all three real channels — but
-   transcription, embedding and issue-assignment on a freshly-filed meeting has
-   only ever run at the desk. **Do one meeting and read it end to end before
-   turning a nightly poll loose on a backlog.**
+1. ~~The corpus is empty~~ — **landed, but not whole.** The record holds 11
+   meetings and 80,856 segments: the desk's 10 arrived through the Cloud SQL
+   proxy, and an eleventh (Boston City Council, July 8) came through hosted
+   ingest. **The import arrived with 215 issues where the desk has 216** — one
+   Brookline issue, `issue_brookline_callahan-town-council`, is not in Postgres
+   at all. It is still live on `control-z.org/app` (pressed from the desk), so
+   no citation is broken *there* — but a fresh press from the cloud drops it,
+   which is why the cloud edition has **not** been deployed over control-z.org.
+   The import "must end with *the record arrived whole*" and this one did not.
+   **Re-run `import_desk` from the desk Mac (§10)** and diff the issue rollups;
+   the desk holds the full corpus and this Mac's copy is thin.
+2. **`publicrecord.studio` has no site behind it yet** (specs/19 R1.7). DNS
+   points at GitHub Pages, the monorepo's Pages custom domain is still
+   `control-z.org`, and the swap is blocked on a step only Stephen can take:
+   `amateurmenace/control-z-tools` exists but is **private**, and it must serve
+   `control-z.org` from its own Pages before the monorepo's domain can move —
+   otherwise control-z.org goes dark during the cutover, which the rail forbids.
+   The live-first edition is pressed and waiting in `gs://publicrecord-edition/app`;
+   the moment the domain lands, it serves. Until then it is testable locally
+   (see the test script handed over with this session).
+3. ~~No Gemini key~~ — **done, and used.** `neural.available: true`, the whole
+   record embedded under the cap; `/api/steward/spend` shows the cost.
+4. ~~The steward console is configured-off~~ — **done.** Google sign-in against
+   a server-side allowlist of one; 401 without a token, 403 off the list.
+5. ~~The nightly scheduler is not created~~ — **done.** `record-nightly-poll`
+   at 03:00 and `record-nightly-ingest` at 03:30 America/New_York, verified to
+   trigger their jobs. The ingest job reads `approved` and nothing else, so a
+   scheduled ingest is not a covenant hole.
+6. ~~The intake connector has never ingested a meeting end to end~~ — **done.**
+   One meeting walked all the way through and read before any backlog. Three
+   bugs it surfaced are fixed and pinned (see the CHANGELOG). The queue holds
+   ~20 approved-or-waiting Boston/Brookline submissions a steward can now work.
+7. **The repo split has not run** (specs/19 R1.8). Pre-authorized but deferred:
+   it rewrites history, renames both repos, re-points both Macs, and its proof
+   step diffs a fresh DMG against the notarized 2.0.0 — which needs Stephen's
+   signing machine. It is also entangled with R1.7 (item 2). One risky thing at
+   a time; this is Stephen's to run from specs/18 §5 with a human at each step.
 
 ---
 

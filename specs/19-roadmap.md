@@ -13,6 +13,18 @@ specs/18 (the split), `record/OPERATING.md` (the live system), PARALLEL.md
 > by three commits. The roadmap's first job is not features. It is to make
 > both sentences false.
 
+> **R1 status, 2026-07-19.** The first sentence is now mostly false. The record
+> holds 11 meetings and 80,856 segments; the neural half is embedded and answers
+> meaning-search; the console signs a steward in; hosted ingest carried a meeting
+> end to end; the reader is live-first, static-always; and the nightly poll and
+> ingest run per town. **R1.1–R1.6 done. R1.7 (the domain) is blocked on making
+> `control-z-tools` public — Stephen's call — and R1.8 (the split) is deferred
+> behind it and needs the signing machine for its proof.** Two facts to carry
+> forward: the desk→Postgres import arrived with 215 issues where the desk has
+> 216 (one issue missing — re-run the import), and the live-first edition is
+> pressed into `gs://publicrecord-edition/app`, waiting only on the domain.
+> Details in `record/OPERATING.md` §9.
+
 ---
 
 ## 1. The rule this roadmap runs on
