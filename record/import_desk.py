@@ -125,16 +125,34 @@ def import_corpus(src_path: str, corpus, verbose: bool = True) -> Dict[str, int]
               for off in range(0, total, PAGE):
                   page = _rows(src, "SELECT * FROM segments ORDER BY id "
                                     "LIMIT ? OFFSET ?", (PAGE, off))
+                  rows = []
                   for s in page:
                       vec = _vec_or_none(s["emb"])
                       blanks += (vec is None)
-                      con.execute(
-                          "INSERT INTO segments (id, meeting_id, town, idx, start, "
-                          "end_s, text, speaker, emb) "
-                          "OVERRIDING SYSTEM VALUE VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                      rows.append(
                           (s["id"], s["meeting_id"], town_of.get(s["meeting_id"], ""),
                            s["idx"], s["start"], s["end"], s["text"] or "",
                            s["speaker"] or "", vec))
+                  # One statement per page, not per row. psycopg pipelines
+                  # executemany, so 2,000 segments cost one round trip instead
+                  # of 2,000 — which is invisible against a local socket and
+                  # decisive against the Cloud SQL proxy, where 37 ms of
+                  # latency per row turned a two-minute import into
+                  # forty-five. It also shrinks the window in which a dropped
+                  # connection rolls the whole transaction back.
+                  #
+                  # This is transport, not provenance. The bytes written are
+                  # identical, which is the only thing "transliterate, never
+                  # re-derive" was ever about.
+                  # executemany lives on the cursor in psycopg3, not on the
+                  # connection — Connection.execute() is the convenience that
+                  # does not have a plural.
+                  with con.cursor() as cur:
+                      cur.executemany(
+                          "INSERT INTO segments (id, meeting_id, town, idx, start, "
+                          "end_s, text, speaker, emb) "
+                          "OVERRIDING SYSTEM VALUE VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                          rows)
                   done += len(page)
                   say(f"  segments   {done:>7,} / {total:,}", end="\r")
               # The desk's ids are carried across verbatim (issue_segments points
