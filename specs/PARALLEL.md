@@ -179,13 +179,16 @@ section below, updated on main.
   - **Cloud Run jobs**: `record-pipeline`, `record-poll`, `record-embed`,
     `record-press` created; `record-nightly-poll`/`-ingest` schedulers.
 
-  **Two facts to carry forward.** The desk→Postgres import arrived with 215
-  issues where the desk has 216 (`issue_brookline_callahan-town-council` missing;
-  re-run `import_desk`). And R1.7 (domain) is blocked on making `control-z-tools`
-  public — so the live-first edition is pressed into `gs://publicrecord-edition/app`
-  and served nowhere public yet; `control-z.org/app` still serves the desk's
-  static 1.9.0 edition, deliberately un-overwritten because the cloud press drops
-  the missing issue's page.
+  **Two facts to carry forward.** The record shows 215 active issues, not because
+  the import was short (it arrived whole at 216) but because Stephen deleted one
+  through the console during the session (audited `forget`) — the console works
+  end to end, and hosted ingest carried two meetings, one Stephen approved
+  himself. And R1.7 (domain) is blocked on making `control-z-tools` public — so
+  the live-first edition is pressed into `gs://publicrecord-edition/app` and
+  served nowhere public yet; `control-z.org/app` still serves the frozen 1.9.0
+  edition, deliberately un-overwritten because it predates that deletion and a
+  cloud press would 404 the deleted issue's still-cited page. R1.7 owes a
+  tombstone for a steward-deleted issue.
 
 - 2026-07-18 — **publicrecord, wave 1: the record moves in.
   `record/` joins the tree; `memory/` grows a store seam. 648 tests green

@@ -402,17 +402,25 @@ identity change will want to compare against it.
 Honest list. Most of §9 closed on 2026-07-19 (specs/19 R1). What remains is
 named plainly, and one line is a finding, not a task.
 
-1. ~~The corpus is empty~~ — **landed, but not whole.** The record holds 11
-   meetings and 80,856 segments: the desk's 10 arrived through the Cloud SQL
-   proxy, and an eleventh (Boston City Council, July 8) came through hosted
-   ingest. **The import arrived with 215 issues where the desk has 216** — one
-   Brookline issue, `issue_brookline_callahan-town-council`, is not in Postgres
-   at all. It is still live on `control-z.org/app` (pressed from the desk), so
-   no citation is broken *there* — but a fresh press from the cloud drops it,
-   which is why the cloud edition has **not** been deployed over control-z.org.
-   The import "must end with *the record arrived whole*" and this one did not.
-   **Re-run `import_desk` from the desk Mac (§10)** and diff the issue rollups;
-   the desk holds the full corpus and this Mac's copy is thin.
+1. ~~The corpus is empty~~ — **landed and whole; then a steward curated it.**
+   The record holds 12 meetings and ~81k segments: the desk's 10 arrived through
+   the Cloud SQL proxy (with all 216 issues — the import *did* arrive whole), and
+   two more came through **hosted ingest** — Boston City Council July 8, and a
+   Brookline Select Board meeting **you approved yourself through the console**
+   mid-session (audited, `swalter4669@gmail.com`). The corpus now shows 215
+   active issues, not because the import dropped one but because you `forget`-ed
+   `issue_brookline_callahan-town-council` in the console — a steward deletion,
+   with your name and the time on it. The console works end to end; this is the
+   proof.
+   - **One consequence to know.** `control-z.org/app` still serves the frozen
+     desk edition (1.9.0), which was pressed *before* that deletion, so it still
+     carries `/app/i/…callahan-town-council`. A fresh cloud press correctly does
+     not — so deploying the cloud edition over control-z.org would 404 that one
+     page. That is the tension between steward curation (a real editorial delete)
+     and the citation-survival rail, and **R1.7 needs a tombstone for a deleted
+     issue, not a bare 404** — a page that says *this issue was removed by a
+     steward on <date>*, so a citation resolves to an explanation rather than a
+     dead end. Until then the cloud edition is not deployed over control-z.org.
 2. **`publicrecord.studio` has no site behind it yet** (specs/19 R1.7). DNS
    points at GitHub Pages, the monorepo's Pages custom domain is still
    `control-z.org`, and the swap is blocked on a step only Stephen can take:

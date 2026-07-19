@@ -14,7 +14,9 @@ to end before turning a nightly poll loose.
   issue-assign, calling the same `memory/ingest` the desk calls because it is
   store-agnostic and the parity suite proves it. The first real meeting —
   Boston City Council, July 8 — is on the record: 8,040 segments, through the
-  queue with a human in the middle. Three bugs only a real meeting could show:
+  queue with a human in the middle; a second followed, a Brookline Select Board
+  meeting the steward approved himself through the console. Three bugs only a
+  real meeting could show:
   the meeting shell has to exist before `ingest.run` writes segments (Postgres
   enforces a foreign key SQLite did not); the embed stage scopes to the one new
   meeting or a nightly job embeds the whole town and times out; and the link is

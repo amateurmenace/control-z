@@ -20,10 +20,13 @@ specs/18 (the split), `record/OPERATING.md` (the live system), PARALLEL.md
 > ingest run per town. **R1.1–R1.6 done. R1.7 (the domain) is blocked on making
 > `control-z-tools` public — Stephen's call — and R1.8 (the split) is deferred
 > behind it and needs the signing machine for its proof.** Two facts to carry
-> forward: the desk→Postgres import arrived with 215 issues where the desk has
-> 216 (one issue missing — re-run the import), and the live-first edition is
-> pressed into `gs://publicrecord-edition/app`, waiting only on the domain.
-> Details in `record/OPERATING.md` §9.
+> forward: the record now shows 215 active issues not because the import dropped
+> one but because a steward deleted one through the console mid-session (audited)
+> — the console works end to end, and hosted ingest carried two meetings, one
+> approved by the steward himself. The live-first edition is pressed into
+> `gs://publicrecord-edition/app`, waiting only on the domain; R1.7 owes a
+> tombstone for a deleted issue so a citation to it resolves to an explanation,
+> not a 404. Details in `record/OPERATING.md` §9.
 
 ---
 
