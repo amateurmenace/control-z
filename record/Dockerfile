@@ -5,10 +5,11 @@
 # the job ships an engine the API does not have.
 #
 # The repo is copied whole rather than pip-installed, deliberately: `web/emit.py`
-# reads `suite/static/app.css`, `web/static/app.web.css` and `web/static/app.js`
-# relative to the checkout to press an edition, so a container that carries only
-# the `record` package can serve search and cannot press. That is exactly the
-# sort of half-working deployment that looks fine until the nightly press runs.
+# reads `brand/tokens/*.css`, `brand/logos/publicrecord-mark.svg`,
+# `web/static/app.web.css`, `web/static/app.js` and `web/static/fonts/` relative
+# to the checkout to press an edition, so a container that carries only the
+# `record` package can serve search and cannot press. That is exactly the sort
+# of half-working deployment that looks fine until the nightly press runs.
 
 FROM python:3.12-slim
 
@@ -54,7 +55,7 @@ COPY czcore/    /app/czcore/
 COPY memory/    /app/memory/
 COPY web/       /app/web/
 COPY record/    /app/record/
-COPY suite/static/app.css /app/suite/static/app.css
+COPY brand/     /app/brand/
 COPY highlighter/ /app/highlighter/
 
 # Scale-to-zero on Cloud Run means this is also the cold-start path; keep it

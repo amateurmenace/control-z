@@ -350,6 +350,92 @@ class TestBakeEdition(unittest.TestCase):
             self.assertIn("Content-Security-Policy", html, f"{stub} lacks CSP")
             self.assertIn("script-src 'self'", html)
 
+    # -- the coat: publicrecord's own face, drawn from brand/ (specs/20 §20.1) --
+
+    def test_pressed_css_bans_the_desk_and_pop_palette(self):
+        """publicrecord is the quietest property: neutrals + deep green, and no
+        cream, oxblood, amber, fuchsia or purple may survive in the pressed
+        stylesheet — not even as an unused variable (specs/20 §4, the law).
+        Comments are stripped first so the word 'oxblood' in a note does not
+        count; only real values do."""
+        css = (self.out / "app.css").read_text()
+        css = re.sub(r"/\*.*?\*/", "", css, flags=re.S).lower()
+        FORBIDDEN = [
+            "#f3f0e7", "#8e4a55", "#a97a16", "#a97e22",   # cream, oxblood, amber
+            "#d946ef", "#a855f7",                          # fuchsia, purple
+            "#7e5b8e", "#c77ba6", "#b0542d", "#3fa9d0",    # the lens hues
+            "--cream", "--memory", "--amber", "--forest", "--ide-",
+        ]
+        for bad in FORBIDDEN:
+            self.assertNotIn(bad, css, f"forbidden token {bad!r} in the pressed CSS")
+        # and the record's own accents ARE there
+        for good in ("#052e16", "#059669", "#f8fafc"):
+            self.assertIn(good, css, f"{good} (brand) missing from the pressed CSS")
+
+    def test_pressed_css_draws_its_tokens_from_brand(self):
+        """The drift-guard, repointed at brand/ (specs/20 §8): the pressed
+        :root carries the brand's own values, byte-faithful — the accent is
+        green-deep, the state light is green-emerald, the page is off-white."""
+        brand = (REPO / "brand" / "tokens" / "colors.css").read_text()
+        val = lambda n: re.search(rf"--{n}:\s*(#[0-9A-Fa-f]{{6}})", brand).group(1)
+        css = (self.out / "app.css").read_text()
+        root = css[css.index(":root{"):css.index("}", css.index(":root{"))]
+        for token, source in [("--accent", "green-deep"),
+                              ("--state", "green-emerald"),
+                              ("--surface-page", "offwhite"),
+                              ("--text-primary", "ink"),
+                              ("--text-secondary", "slate")]:
+            self.assertIn(f"{token}:{val(source)}", root,
+                          f"{token} drifted from brand --{source}")
+
+    def test_fonts_are_vendored_and_within_budget(self):
+        """Real Inter + JetBrains Mono, self-hosted (specs/20 §4): six subset
+        woff2 with their OFL texts ship in the edition, the @font-face block is
+        pressed, the CSP stays font-src 'self', and the whole face set is under
+        its ~250 KB budget — thumbnails are remote, fonts are the only new
+        bytes."""
+        fonts = self.out / "fonts"
+        faces = ["inter-400", "inter-500", "inter-700",
+                 "jetbrains-mono-400", "jetbrains-mono-700", "jetbrains-mono-800"]
+        total = 0
+        for f in faces:
+            p = fonts / f"{f}.woff2"
+            self.assertTrue(p.is_file(), f"{f}.woff2 not vendored")
+            total += p.stat().st_size
+        self.assertTrue((fonts / "OFL-Inter.txt").is_file())
+        self.assertTrue((fonts / "OFL-JetBrainsMono.txt").is_file())
+        self.assertLess(total, 260_000, f"font set is {total//1024} KB (budget ~250)")
+        css = (self.out / "app.css").read_text()
+        self.assertIn("@font-face", css)
+        self.assertIn("font-display:swap", css.replace(" ", ""))
+        self.assertIn("/app/fonts/inter-400.woff2", css)
+        home = (self.out / "index.html").read_text()
+        self.assertIn("font-src 'self'", home)           # CSP unwidened
+        self.assertIn('rel="preload"', home)             # critical faces preloaded
+        self.assertNotIn("fonts.googleapis.com", home)   # nothing third-party
+        self.assertNotIn("fonts.gstatic.com", css)
+
+    def test_masthead_carries_the_brand_mark_byte_equal(self):
+        """The keycap is read from brand/logos and never redrawn (specs/20 §4).
+        Its three deep-green minute-lines, at their exact coordinates, appear in
+        the masthead of every page and in the favicon."""
+        mark = (REPO / "brand" / "logos" / "publicrecord-mark.svg").read_text().strip()
+        line = '<rect x="22" y="28" width="52" height="8" fill="#052e16">'
+        self.assertIn(line, mark, "the brand mark itself changed shape")
+        home = (self.out / "index.html").read_text()
+        self.assertIn(line, home, "the masthead mark is not the brand mark")
+        self.assertEqual((self.out / "favicon.svg").read_text().strip(), mark)
+
+    def test_the_thirteen_tool_doors_left_the_masthead(self):
+        """The desk tools no longer share the record's masthead: the rail is
+        gone and the section line is the paper's own (specs/20 §5). The tools
+        live on /app/press now, reachable from the section nav and the footer."""
+        home = (self.out / "index.html").read_text()
+        self.assertNotIn('class="rail-item"', home)
+        self.assertNotIn("civic media suite", home)   # the old rail heading
+        self.assertIn('class="sectionnav"', home)
+        self.assertIn('href="/app/press"', home)
+
     # -- documents, votes, officials, and the PWA (waves 2/3) --------------
 
     def test_meeting_carries_votes_and_documents(self):

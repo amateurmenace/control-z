@@ -23,7 +23,9 @@ from pathlib import Path
 from web import tools
 
 REPO = Path(__file__).resolve().parents[1]
+BRAND = REPO / "brand"
 DMG_LATEST = "https://github.com/amateurmenace/control-z/releases/latest"
+COMMUNITYAI = "https://communityai.studio"
 
 # Where a reader goes to read the program that pressed what they are reading.
 # The covenant page promises the source is published; a promise with a dead
@@ -34,6 +36,7 @@ LICENSING_DOC = SOURCE_REPO + "/blob/main/LICENSING.md"
 _CSP_BASE = ("default-src 'self'; base-uri 'self'; form-action 'self'; "
              "frame-src https://www.youtube-nocookie.com; "
              "img-src 'self' https://i.ytimg.com data:; "
+             "font-src 'self'; "
              "style-src 'self' 'unsafe-inline'; script-src 'self'; "
              "connect-src 'self'{extra}; object-src 'none'")
 CSP = _CSP_BASE.format(extra="")
@@ -118,6 +121,14 @@ def hms(t) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+def _brand_mark() -> str:
+    """The publicrecord keycap — the minutes on the record — read byte-equal
+    from brand/logos and never redrawn (specs/20 §4, branding law). One read,
+    used for both the masthead and the favicon, so the two can never drift."""
+    return (BRAND / "logos" / "publicrecord-mark.svg").read_text(
+        encoding="utf-8").strip()
+
+
 def _glyph(accent, square, ready=True):
     fill = f'fill="{accent}" fill-opacity=".28"' if ready else 'fill="none"'
     if square:
@@ -136,6 +147,12 @@ def head(title, desc, canonical, og_image="", version="0"):
           f'<meta name="twitter:card" content="summary_large_image">'
           if og_image else
           '<meta name="twitter:card" content="summary">')
+    # preload only the two faces first paint needs (Inter body, mono headline);
+    # the rest swap in. crossorigin is required on a font preload even for a
+    # same-origin fetch, or the browser fetches the face twice.
+    preload = "".join(
+        f'<link rel="preload" href="/app/fonts/{f}.woff2" as="font" '
+        f'type="font/woff2" crossorigin>' for f in _PRELOAD_FONTS)
     return f"""<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -148,11 +165,11 @@ def head(title, desc, canonical, og_image="", version="0"):
 <meta property="og:title" content="{esc(title)}">
 <meta property="og:description" content="{esc(desc)}">
 <meta property="og:url" content="{esc(canonical)}">{og}
-<meta name="theme-color" content="#F3F0E7">
+<meta name="theme-color" content="#f8fafc">
 <link rel="icon" href="/app/favicon.svg">
 <link rel="manifest" href="/app/manifest.webmanifest">
 <link rel="alternate" type="application/rss+xml" title="The record — new meetings and resurfacings" href="/app/feeds/firehose.xml">
-<link rel="stylesheet" href="/app/app.css?v={esc(version)}">
+{preload}<link rel="stylesheet" href="/app/app.css?v={esc(version)}">
 </head><body>"""
 
 
@@ -198,54 +215,54 @@ def scope_bar():
             f'</div></div>')
 
 
-def mark():
-    return f"""<header class="mark">
-  <a class="brand" href="/app/"><svg class="brandmark" viewBox="0 0 96 96" width="22" height="22" aria-hidden="true"><rect x="2" y="2" width="92" height="92" rx="20" fill="#ffffff" stroke="#94a3b8" stroke-width="3"/><rect x="22" y="28" width="52" height="8" fill="#052e16"/><rect x="22" y="44" width="52" height="8" fill="#052e16"/><rect x="22" y="60" width="34" height="8" fill="#052e16"/></svg><span class="wm">publicrecord<span class="tld">.studio</span></span></a>
-  <span class="webchip">WEB</span>
-  {scope_bar()}
-  <details class="mark-panel"><summary class="btn">Get the desktop app</summary>
-    <div class="mark-body">
-      <p><b>Civic Media Studio</b> (the desktop app) adds what a browser can't:</p>
-      <ul><li>work on your own footage</li>
-          <li>render, transcribe and cut with local AI</li>
-          <li>nothing ever uploads</li></ul>
-      <p class="hint">macOS 12+ · Apple silicon · signed &amp; notarized</p>
-      <a class="btn primary" href="{DMG_LATEST}">Download for macOS</a>
-    </div>
-  </details>
+# The record's own surfaces, as a newspaper's section line. The thirteen desk
+# tools that used to share this rail are gone from it — they live on /app/press
+# now (specs/20 §5). What is left is the paper's own sections, and nothing
+# borrows a masthead it did not earn.
+NAV = [("home", "The record", "/app/"),
+       ("search", "Search", "/app/s"),
+       ("officials", "The votes", "/app/officials"),
+       ("analytics", "The record drawn", "/app/analytics"),
+       ("graph", "The issue graph", "/app/graph"),
+       ("watching", "Still watching", "/app/watching"),
+       ("press", "The press", "/app/press")]
+
+
+def section_nav(current):
+    items = "".join(
+        f'<a class="navlink{" active" if k == current else ""}" href="{href}">'
+        f'{esc(label)}</a>'
+        for k, label, href in NAV)
+    return f'<nav class="sectionnav" aria-label="Sections">{items}</nav>'
+
+
+def folio(manifest):
+    """The line under the nameplate: the towns this edition holds, the dateline
+    (the edition date reading finally as what it is), and the covenant's six
+    words. It informs; unlike the old boxed banner, it does not interrupt."""
+    ed = manifest.get("edition_date") or ""
+    dateline = (f'<span class="dateline">pressed from the record of '
+                f'<b>{esc(ed)}</b></span>') if ed else ""
+    return (f'<div class="folio">{scope_bar()}{dateline}'
+            f'<a class="cov6" href="/app/covenant">'
+            f'no accounts · no tracking · yours</a></div>')
+
+
+def masthead(current, manifest):
+    """The nameplate — the publicrecord keycap (byte-equal from brand/logos)
+    and the lowercase mono lockup — over the classic masthead rule pair, then
+    the folio and the section line. 'Get the desktop app' is demoted off the
+    masthead to /app/press and the footer (specs/20 §5)."""
+    return f"""<header class="masthead">
+  <div class="nameplate">
+    <a class="brand" href="/app/" aria-label="publicrecord.studio — the record">
+      <span class="brandmark">{_brand_mark()}</span>
+      <span class="wm">publicrecord<span class="tld">.studio</span></span>
+    </a>
+  </div>
+  {folio(manifest)}
+  {section_nav(current)}
 </header>"""
-
-
-def rail(current=""):
-    def item(href, label, glyph, cls=""):
-        act = " active" if cls == current else ""
-        return (f'<a class="rail-item{act}" href="{href}">'
-                f'<span class="glyph">{glyph}</span>'
-                f'<span class="rlabel">{esc(label)}</span></a>')
-    civic = "".join(
-        item("/app/" if t["id"] == "memory" else f"/app/t/{t['id']}",
-             t.get("long", t["name"]).replace("Community ", ""),
-             _glyph(t["accent"], True), t["id"])
-        for t in tools.community())
-    bench = "".join(
-        item(f"/app/t/{t['id']}", t["name"], _glyph(t["accent"], False), t["id"])
-        for t in tools.workbench())
-    return f"""<nav class="rail">
-  <a class="rail-item{' active' if current=='home' else ''}" href="/app/">
-    <span class="glyph">⌂</span><span class="rlabel">Home</span></a>
-  <a class="rail-item{' active' if current=='search' else ''}" href="/app/s">
-    <span class="glyph">⌕</span><span class="rlabel">Search</span></a>
-  <a class="rail-item{' active' if current=='watching' else ''}" href="/app/watching">
-    <span class="glyph">☆</span><span class="rlabel">Still watching</span></a>
-  <a class="rail-item{' active' if current=='officials' else ''}" href="/app/officials">
-    <span class="glyph">⬡</span><span class="rlabel">The votes</span></a>
-  <a class="rail-item{' active' if current=='analytics' else ''}" href="/app/analytics">
-    <span class="glyph">◧</span><span class="rlabel">The record drawn</span></a>
-  <a class="rail-item{' active' if current=='graph' else ''}" href="/app/graph">
-    <span class="glyph">❋</span><span class="rlabel">The issue graph</span></a>
-  <div class="rail-sect">civic media suite</div>{civic}
-  <div class="rail-sect">control-z</div>{bench}
-</nav>"""
 
 
 def footer(manifest):
@@ -257,8 +274,11 @@ def footer(manifest):
     again = ('<a class="scopelink" href="#scope">town — change</a>'
              if len(_EDITION.get("towns") or []) > 1 else "")
     return f"""<footer class="foot">
-  <a class="cov" href="/app/covenant">no accounts · no tracking · yours</a>
+  <span class="foot-mark">{_brand_mark()}</span>
+  <a class="cov" href="/app/covenant">the covenant</a>
+  <a class="cov" href="/app/press">the press · get the desktop app</a>
   {again}
+  <a class="cov" href="{COMMUNITYAI}">a Community AI Project tool</a>
   <span class="ed">edition {esc(ed)} · v{esc(manifest.get('version',''))}</span>
 </footer>"""
 
@@ -271,8 +291,8 @@ def shell(title, desc, canonical, body, current, manifest,
     # claim to have warned them before they read.
     slot = '<div class="scopebanner" id="scopebanner" hidden></div>'
     return (head(title, desc, canonical, og_image, version)
-            + mark() + '<div class="layout">' + rail(current)
-            + f'<main class="main" id="app">{slot}{body}</main></div>'
+            + masthead(current, manifest)
+            + f'<main class="main paper" id="app">{slot}{body}</main>'
             + footer(manifest)
             + f'<script src="/app/app.js?v={esc(version)}"></script></body></html>')
 
@@ -463,9 +483,12 @@ def page_meeting(m, manifest, base):
     if framing.get("lenses"):
         mx = max((l["count"] for l in framing["lenses"]), default=1) or 1
         DRIFT = {"rising": "↑ rising", "fading": "↓ fading", "steady": "· steady"}
+        # no per-lens hue: publicrecord takes deep green only, so the bars are
+        # the accent and the labels are ink — the lens is named, not colour-coded
+        # (specs/20 §5). The counts and drift carry the difference.
         rows = "".join(
-            f'<div class="lensrow"><span class="lenslabel" style="color:{esc(l["color"])}">{esc(l["lens"])}</span>'
-            f'<span class="lensbar"><i style="width:{round(100*l["count"]/mx)}%;background:{esc(l["color"])}"></i></span>'
+            f'<div class="lensrow"><span class="lenslabel">{esc(l["lens"])}</span>'
+            f'<span class="lensbar"><i style="width:{round(100*l["count"]/mx)}%"></i></span>'
             f'<span class="lensn">{l["count"]}</span>'
             f'<span class="lensdrift">{DRIFT.get(l["drift"],"")}</span></div>'
             for l in framing["lenses"])
@@ -859,16 +882,20 @@ def page_analytics(analytics, manifest, base):
     color = analytics.get("lens_color", {})
     fm = analytics.get("framing", [])
     # framing heatmap: meetings × lenses, cell shade = share of that meeting
-    head = "".join(f'<th style="color:{esc(color.get(n,""))}">{esc(n)}</th>'
-                   for n in order)
+    head = "".join(f'<th>{esc(n)}</th>' for n in order)
     body_rows = []
     for r in fm:
         tot = r.get("total", 0) or 1
-        cells = "".join(
-            (lambda cnt: f'<td style="background:{esc(color.get(n,"#888"))};'
-             f'opacity:{0.12 + 0.85*min(1, cnt/tot*4):.2f}" '
-             f'title="{esc(n)}: {cnt}">{cnt or ""}</td>')(r["lenses"].get(n, 0))
-            for n in order)
+        # the green tint scale (specs/20 §5): a darker deep-green is a bigger
+        # share; the lens hues never come near this domain. Ink flips to white
+        # once the cell is dark enough to need it (AA on the count).
+        cells = ""
+        for n in order:
+            cnt = r["lenses"].get(n, 0)
+            a = round(0.05 + 0.9 * min(1, cnt / tot * 4), 2)
+            ink = "#ffffff" if a > 0.45 else "#0f172a"
+            cells += (f'<td style="background:rgba(5,46,22,{a});color:{ink}" '
+                      f'title="{esc(n)}: {cnt}">{cnt or ""}</td>')
         body_rows.append(
             f'<tr><th class="fmlbl"><a href="/app/m/{r["pid"]}">'
             f'{esc((r["date"] or "?")[:10])} · {esc((r["body"] or r["title"])[:26])}</a></th>{cells}</tr>')
@@ -896,8 +923,8 @@ def page_analytics(analytics, manifest, base):
       Counted from the record's own words; every mark opens its meeting.</p>
     <section class="card"><span class="tag">civic framing — meetings down, lenses across</span>
       <div class="heatwrap">{heat}</div>
-      <p class="hint">A darker cell is a bigger share of that meeting's framing.
-        Amber is measurement; these are measurements.</p></section>
+      <p class="hint">A darker cell is a bigger share of that meeting's framing —
+        the green scale is measurement, and these are measurements.</p></section>
     <div class="grid2">
       <section class="card"><span class="tag">topics that recur across the record</span>
         <div class="trows">{topics or '<p class="hint">nothing recurs yet</p>'}</div></section>
@@ -933,7 +960,7 @@ def page_graph(graph, manifest, base):
     lines = "".join(
         f'<line x1="{pos[idx[e["a"]]][0]}" y1="{pos[idx[e["a"]]][1]}" '
         f'x2="{pos[idx[e["b"]]][0]}" y2="{pos[idx[e["b"]]][1]}" '
-        f'stroke="#8E4A55" stroke-opacity="{0.12 + 0.5*e["weight"]/mxw:.2f}" '
+        f'stroke="#052e16" stroke-opacity="{0.12 + 0.5*e["weight"]/mxw:.2f}" '
         f'stroke-width="{0.5 + 2.5*e["weight"]/mxw:.1f}"/>'
         for e in edges if e["a"] in idx and e["b"] in idx)
     mxm = max((node["n_meetings"] for node in nodes), default=1) or 1
@@ -943,7 +970,7 @@ def page_graph(graph, manifest, base):
         x, y = pos[i]
         r = 3 + 7 * node["n_meetings"] / mxm
         dots += (f'<a href="/app/i/{esc(node["slug"])}">'
-                 f'<circle cx="{x}" cy="{y}" r="{r:.1f}" fill="#8E4A55" '
+                 f'<circle cx="{x}" cy="{y}" r="{r:.1f}" fill="#052e16" '
                  f'fill-opacity=".82"><title>{esc(node["name"])} · '
                  f'{node["n_meetings"]} meetings</title></circle></a>')
         # label just outside the ring, anchored by side
@@ -951,7 +978,7 @@ def page_graph(graph, manifest, base):
         ly = round(cy + (R + 14) * math.sin(-math.pi/2 + 2*math.pi*i/max(1, n)), 1)
         anchor = "start" if lx >= cx else "end"
         labels += (f'<text x="{lx}" y="{ly}" text-anchor="{anchor}" '
-                   f'font-size="10" fill="#5C5647" dominant-baseline="middle">'
+                   f'font-size="10" fill="#475569" dominant-baseline="middle">'
                    f'{esc(node["name"][:22])}</text>')
     svg = (f'<svg viewBox="0 0 {W} {W}" class="graphsvg" '
            f'xmlns="http://www.w3.org/2000/svg" role="img" '
@@ -1018,10 +1045,7 @@ def page_still(manifest, base):
 def page_door(t, manifest, base):
     beats = "".join(f'<div class="beat"><span>{i+1}</span>{esc(b)}</div>'
                     for i, b in enumerate(t["beats"]))
-    demo = ""
-    if t["slide"]:
-        demo = (f'<div class="demo"><img src="/app/assets/slide-{esc(t["slide"])}.jpg" '
-                f'alt="{esc(t["name"])} at work" loading="lazy"></div>')
+    demo = ""  # the demo slides never travelled to this domain; specs/20 §5
     lives = ""
     if t["lives_here"]:
         lives = (f'<a class="liveshere" href="{esc(t["lives_here"]["href"])}">'
@@ -1059,41 +1083,87 @@ def page_door(t, manifest, base):
 # assets + orchestration
 # --------------------------------------------------------------------------
 
-_ROOT_RE = re.compile(r":root\s*\{(.*?)\}", re.S)
+_VAR_RE = re.compile(r"--([a-z0-9-]+)\s*:\s*([^;]+);")
+_COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
+
+# The two critical first-paint faces (body + headline) preloaded in <head>; the
+# rest swap in. font-display:swap means the system stack is the visible
+# fallback, never a blank. CSP stays font-src 'self' — every byte is ours.
+_FONTS = [("Inter", 400, "inter-400"), ("Inter", 500, "inter-500"),
+          ("Inter", 700, "inter-700"),
+          ("JetBrains Mono", 400, "jetbrains-mono-400"),
+          ("JetBrains Mono", 700, "jetbrains-mono-700"),
+          ("JetBrains Mono", 800, "jetbrains-mono-800")]
+_PRELOAD_FONTS = ["inter-400", "jetbrains-mono-700"]
+_FONT_FACES = "".join(
+    f"@font-face{{font-family:'{fam}';font-style:normal;font-weight:{w};"
+    f"font-display:swap;src:url('/app/fonts/{file}.woff2') format('woff2');}}"
+    for fam, w, file in _FONTS)
 
 
-def _desk_tokens() -> str:
-    """Lift the :root token block from the desk's single-source stylesheet so
-    the edition carries the SAME values (specs/16 §9 — import, never fork)."""
-    css = (REPO / "suite" / "static" / "app.css").read_text(encoding="utf-8")
-    m = _ROOT_RE.search(css)
-    return f":root {{{m.group(1)}}}" if m else ":root{}"
+def _brand_vars(name) -> dict:
+    """Parse a brand token file into {var: value}, resolving one level of
+    var() references within the same file. brand/ is the single source for the
+    record's face (specs/20 §8) — values are read, never re-typed."""
+    text = _COMMENT_RE.sub("", (BRAND / "tokens" / name).read_text(encoding="utf-8"))
+    raw = {m.group(1): m.group(2).strip() for m in _VAR_RE.finditer(text)}
+    def deref(v):
+        m = re.fullmatch(r"var\(--([a-z0-9-]+)\)", v)
+        return raw.get(m.group(1), v) if m else v
+    return {k: deref(v) for k, v in raw.items()}
+
+
+def _brand_inner(name) -> str:
+    """The declarations inside a brand :root block, comments stripped — used
+    verbatim for the type and spacing scales (no colour lives there)."""
+    text = _COMMENT_RE.sub("", (BRAND / "tokens" / name).read_text(encoding="utf-8"))
+    return " ".join(f"--{m.group(1)}:{m.group(2).strip()};"
+                    for m in _VAR_RE.finditer(text))
+
+
+def _brand_tokens() -> str:
+    """The publicrecord :root — the quiet set, drawn byte-faithfully from
+    brand/. This supersedes the desk-token concatenation (specs/20 §8):
+    brand/ is the single source for the record's face, and the desk keeps its
+    own. Only the neutrals + deep green cross this line. The pop accents
+    (fuchsia, purple) and the whole warm desk palette never enter this file —
+    publicrecord is the quietest property, and its stylesheet has to prove it:
+    no forbidden hex ever appears, not even as an unused variable."""
+    c = _brand_vars("colors.css")
+    colours = (
+        f"--surface-page:{c['offwhite']};--surface-card:{c['white']};"
+        f"--surface-inverse:{c['ink']};"
+        f"--text-primary:{c['ink']};--text-secondary:{c['slate']};"
+        f"--text-muted:{c['slate-soft']};--text-inverse:{c['offwhite']};"
+        f"--border-hairline:{c['border-hairline']};--border-strong:{c['slate-soft']};"
+        # the accent, and the whole accent (deep green); emerald is state only
+        f"--accent:{c['green-deep']};--state:{c['green-emerald']};"
+        # measurement tints (green scale) — backgrounds in graphics only. The
+        # two lightest (green-50/100) are named in specs/20 §4; the two brighter
+        # come straight from brand (green-soft, green-bright).
+        f"--tint-1:#f0fdf4;--tint-2:#dcfce7;"
+        f"--tint-3:{c['green-soft']};--tint-4:{c['green-bright']};")
+    return (":root{" + colours + _brand_inner("typography.css") + " "
+            + _brand_inner("spacing.css") + "}")
 
 
 def emit_assets(out: Path, version, manifest):
     (out / "assets").mkdir(parents=True, exist_ok=True)
-    # app.css = the desk's tokens (single source) + the web-only rules
+    # app.css = publicrecord's own tokens (from brand/) + the self-hosted
+    # @font-face block + the web rules. No desk tokens, no third-party fonts.
     web_css = (Path(__file__).resolve().parent / "static" / "app.web.css").read_text(encoding="utf-8")
-    (out / "app.css").write_text(_desk_tokens() + "\n\n" + web_css, encoding="utf-8")
+    (out / "app.css").write_text(
+        _brand_tokens() + "\n" + _FONT_FACES + "\n\n" + web_css, encoding="utf-8")
     # app.js (the reader)
     shutil.copyfile(Path(__file__).resolve().parent / "static" / "app.js",
                     out / "app.js")
-    # favicon — the publicrecord keycap (the minutes, on the record)
-    (out / "favicon.svg").write_text(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">'
-        '<rect x="2" y="2" width="92" height="92" rx="20" fill="#ffffff" '
-        'stroke="#94a3b8" stroke-width="5"/>'
-        '<rect x="20" y="26" width="56" height="11" fill="#052e16"/>'
-        '<rect x="20" y="44" width="56" height="11" fill="#052e16"/>'
-        '<rect x="20" y="62" width="34" height="11" fill="#052e16"/></svg>',
-        encoding="utf-8")
-    # demo slides the doors reference
-    src = REPO / "site" / "content" / "assets"
-    for t in tools.TOOLS:
-        if t["slide"]:
-            f = src / f"slide-{t['slide']}.jpg"
-            if f.exists():
-                shutil.copyfile(f, out / "assets" / f"slide-{t['slide']}.jpg")
+    # the self-hosted faces (subset latin woff2, vendored with their OFL texts)
+    fonts_src = Path(__file__).resolve().parent / "static" / "fonts"
+    if fonts_src.is_dir():
+        shutil.copytree(fonts_src, out / "fonts", dirs_exist_ok=True)
+    # favicon — the publicrecord keycap, byte-equal from brand/logos (never
+    # redrawn); the mark must survive as a favicon and this is where it does.
+    (out / "favicon.svg").write_text(_brand_mark(), encoding="utf-8")
     # PWA: the web-app manifest (a DIFFERENT file from the edition manifest.json)
     # + a service worker. Both deterministic — the SW's cache name rides the
     # corpus fingerprint so a new pressing supersedes the old cache cleanly.
@@ -1108,7 +1178,7 @@ def _write_pwa(out: Path, manifest):
         "description": "A town's whole spoken life, cross-linked and searchable "
                        "— open in any browser.",
         "start_url": "/app/", "scope": "/app/", "display": "standalone",
-        "background_color": "#F3F0E7", "theme_color": "#F3F0E7",
+        "background_color": "#f8fafc", "theme_color": "#f8fafc",
         "icons": [{"src": "/app/favicon.svg", "sizes": "any",
                    "type": "image/svg+xml"}],
     }

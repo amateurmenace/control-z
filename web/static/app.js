@@ -889,7 +889,7 @@
   let toEl;
   function toast(msg) {
     if (!toEl) { toEl = document.createElement("div"); toEl.className = "citebar";
-      toEl.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:none;background:var(--cream);color:var(--ink);padding:8px 14px";
+      toEl.style.cssText = "position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:none;background:var(--surface-inverse);color:var(--text-inverse);padding:8px 14px";
       document.body.appendChild(toEl); }
     toEl.textContent = msg; toEl.style.display = "block";
     clearTimeout(toEl._t); toEl._t = setTimeout(() => toEl.style.display = "none", 2600);
