@@ -198,6 +198,10 @@ def press(corpus, out_dir: str, version: str = "",
     by_id = {m["id"]: m for m in meetings}
     issues = b.bake_issues(by_id)
     stats = b.bake_stats(meetings, issues)
+    # The hosted edition is the multi-town one — it is the only press that will
+    # ever have a second town to scope to, so the town plane matters more here
+    # than at the desk, not less.
+    towns = b.bake_towns(meetings)
     officials = b.bake_officials(meetings)
     analytics = b.bake_analytics(meetings)
     graph = b.bake_graph(issues)
@@ -208,11 +212,13 @@ def press(corpus, out_dir: str, version: str = "",
 
     emit.emit_assets(out, version, manifest)
     emit.emit_stubs(out, meetings, issues, stats, manifest, site_base,
-                    officials=officials, analytics=analytics, graph=graph)
+                    officials=officials, analytics=analytics, graph=graph,
+                    towns=towns)
 
     pressing = _write_pressing(out, manifest, fingerprint)
 
-    print(f"  {len(meetings)} meetings · {len(issues)} issues · "
+    print(f"  {len(towns['towns'])} town(s) · {len(meetings)} meetings · "
+          f"{len(issues)} issues · "
           f"{idx['segments']} segments indexed ({idx['terms']} terms) · "
           f"{stats['counts']['documents']} documents · "
           f"{stats['counts']['votes']} roll calls · "

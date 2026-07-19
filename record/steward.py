@@ -31,6 +31,7 @@ holding an HTTP connection open while a meeting transcribes.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Optional
 
@@ -38,6 +39,8 @@ from fastapi import Body, Header, Query
 from fastapi.responses import JSONResponse
 
 from memory import issues as issue_engine
+
+from . import sources
 
 from . import auth
 
@@ -280,6 +283,112 @@ def register_steward(app, store, steward_of) -> None:
             out = issue_engine.mint_from_query(corpus, q, town)
         _audit(corpus, who, "mint", (out or {}).get("id", ""), town, q=q)
         return {"issue": out}
+
+
+    # -- the intake: what the record is allowed to swallow -----------------
+    #
+    # This is the cost lever. Ingest spends money per meeting (embeddings
+    # always, ASR when captions are missing), and a municipal channel is
+    # mostly not meetings — so the steward's control here is not a
+    # convenience, it is the budget.
+
+    @app.get("/api/steward/towns")
+    def steward_towns(authorization: Optional[str] = Header(None)):
+        steward_of(authorization)
+        corpus = store()
+        with corpus._con() as con:
+            rows = con.execute(
+                "SELECT slug, name, state, status, sources FROM towns "
+                "ORDER BY name").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            srcs = d.get("sources") or []
+            if isinstance(srcs, str):
+                srcs = json.loads(srcs)
+            d["sources"] = srcs
+            d["bodies"] = sorted({b for src in srcs
+                                  for b in sources.bodies_of(src)})
+            d["problems"] = [p for src in srcs for p in sources.bad_patterns(src)]
+            out.append(d)
+        return {"towns": out}
+
+    @app.put("/api/steward/towns/{slug}/sources")
+    def set_sources(slug: str, body: dict = Body(...),
+                    authorization: Optional[str] = Header(None)):
+        """Replace a town's intake rules. Refuses a config whose patterns do
+        not compile — a bad regex must fail at the desk of the person who
+        typed it, never at 3am inside a nightly job."""
+        who = steward_of(authorization)
+        srcs = body.get("sources")
+        if not isinstance(srcs, list):
+            return JSONResponse({"error": "sources must be a list"},
+                                status_code=422)
+        problems = [p for src in srcs for p in sources.bad_patterns(src)]
+        if problems:
+            return JSONResponse(
+                {"error": "these patterns will not compile", "problems": problems},
+                status_code=422)
+        corpus = store()
+        with corpus._con() as con:
+            hit = con.execute("SELECT slug FROM towns WHERE slug=%s",
+                              (slug,)).fetchone()
+            if not hit:
+                return JSONResponse({"error": "no such town"}, status_code=404)
+            con.execute("UPDATE towns SET sources=%s, updated_at=%s WHERE slug=%s",
+                        (json.dumps(srcs), time.time(), slug))
+        _audit(corpus, who, "sources", slug, slug, sources=len(srcs))
+        return {"slug": slug, "sources": srcs}
+
+    @app.post("/api/steward/preview")
+    def preview(body: dict = Body(...),
+                authorization: Optional[str] = Header(None)):
+        """What would a poll file, if it ran right now — and nothing written.
+
+        The steward changes a rule and sees the three lists move before
+        committing to anything. `unmatched` comes back with suggested rules
+        attached, so the taxonomy is learned from what the town actually
+        posts rather than guessed at."""
+        steward_of(authorization)
+        src = body.get("source") or {}
+        if not src.get("url"):
+            return JSONResponse({"error": "a source needs a url"},
+                                status_code=422)
+        problems = sources.bad_patterns(src)
+        if problems:
+            return JSONResponse({"error": "bad patterns", "problems": problems},
+                                status_code=422)
+        try:
+            from .connectors import youtube
+            items = youtube.poll(src["url"], limit=int(body.get("limit") or 15))
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"could not reach the source ({exc})"},
+                status_code=502)
+        p = sources.plan(items, src)
+        p["suggestions"] = sources.suggest_rules(p["unmatched"])
+        p["polled"] = len(items)
+        # The single number a steward is deciding on.
+        p["would_cost"] = len(p["file"])
+        return p
+
+    @app.post("/api/steward/towns/{slug}/poll")
+    def poll_town(slug: str, body: dict = Body(default={}),
+                  authorization: Optional[str] = Header(None)):
+        """Run the intake for real. Still files to the queue, never to the
+        record — approval remains a separate, human act."""
+        who = steward_of(authorization)
+        corpus = store()
+        with corpus._con() as con:
+            row = con.execute("SELECT * FROM towns WHERE slug=%s",
+                              (slug,)).fetchone()
+        if not row:
+            return JSONResponse({"error": "no such town"}, status_code=404)
+        from .connectors import youtube
+        result = youtube.poll_town(corpus, dict(row),
+                                   limit=int(body.get("limit") or 15))
+        _audit(corpus, who, "poll", slug, slug, filed=result.get("filed"))
+        return result
 
     # -- the ledgers ------------------------------------------------------
 

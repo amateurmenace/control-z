@@ -35,10 +35,11 @@ not.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Optional
 
 from fastapi import Body, FastAPI, Header, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from memory import embed
 
@@ -234,7 +235,93 @@ def create_app(corpus=None) -> FastAPI:
                 "WHERE status='live' ORDER BY name").fetchall()
         return {"towns": [dict(r) for r in rows]}
 
-    # -- the steward console ----------------------------------------------
+    # -- the steward console, as a page -----------------------------------
+    #
+    # The console is served by this service rather than pressed into the
+    # edition, and that separation is deliberate. The edition must read with
+    # this service dead; a curation console cannot and should not. Keeping
+    # them on different origins-of-authorship means a steward's sign-in can
+    # never become something a reader's copy of the record carries around.
+    #
+    # **The CSP.** Every reader page ships `script-src 'self'` and
+    # `connect-src 'self'` in a <meta> tag (web/emit.py) and no third party
+    # rides in — that is the whole posture, and nothing here relaxes it. But
+    # Google Identity Services is a script from accounts.google.com, and the
+    # console cannot sign anybody in without it. So `/steward` carries its
+    # own header naming exactly what Google documents and nothing else: the
+    # GSI client script, its stylesheet, its iframe, and its token endpoint.
+    # The choice is a *second, narrower* policy on one path — four files
+    # nobody but a steward requests — rather than a hole in the reader's.
+    # Note what stays strict even here: `script-src` has no 'unsafe-inline'
+    # and no 'unsafe-eval', so console.js is the only code that can run, and
+    # `connect-src` still names only ourselves and Google. `style-src` does
+    # carry 'unsafe-inline' because Google's rendered button sets element
+    # styles; that costs a great deal less than letting injected markup
+    # execute, which is the thing script-src is holding.
+    CONSOLE_CSP = (
+        "default-src 'self'; base-uri 'self'; form-action 'self'; "
+        "script-src 'self' https://accounts.google.com/gsi/client; "
+        "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; "
+        "frame-src https://accounts.google.com/gsi/; "
+        "connect-src 'self' https://accounts.google.com/gsi/; "
+        "img-src 'self' data:; font-src 'self'; object-src 'none'; "
+        "frame-ancestors 'none'")
+
+    # An allowlist of four names, not a directory mount. A console is a fixed
+    # set of files; anything that resolves a path from the URL is a way to ask
+    # this service for a file it did not mean to publish, and there is no
+    # reason to own that risk for three assets.
+    STATIC = Path(__file__).resolve().parent / "static"
+    CONSOLE_FILES = {"console.html": "text/html; charset=utf-8",
+                     "console.css": "text/css; charset=utf-8",
+                     "console.js": "text/javascript; charset=utf-8"}
+
+    def _console_file(name: str) -> Response:
+        path = STATIC / name
+        if not path.is_file():                          # pragma: no cover
+            return JSONResponse(
+                {"error": f"the console is missing {name} — this build is "
+                          f"incomplete, and the API is unaffected"},
+                status_code=500)
+        return Response(path.read_bytes(), media_type=CONSOLE_FILES[name],
+                        headers={"Content-Security-Policy": CONSOLE_CSP})
+
+    @app.get("/steward", include_in_schema=False)
+    @app.get("/steward/", include_in_schema=False)
+    def console_page():
+        return _console_file("console.html")
+
+    @app.get("/steward/console.css", include_in_schema=False)
+    def console_css():
+        return _console_file("console.css")
+
+    @app.get("/steward/console.js", include_in_schema=False)
+    def console_js():
+        return _console_file("console.js")
+
+    @app.get("/steward/config.json", include_in_schema=False)
+    def console_config():
+        """Whether there is a console at all, and the client id to sign in
+        against — the two things the page must know *before* it can make an
+        authenticated call, so this one route cannot itself require auth.
+
+        The client id is not a secret: Google's whole design puts it in the
+        markup of every page that renders a sign-in button. The allowlist is
+        a secret and is never in this response — who the stewards are is not
+        the browser's business, and 403 already tells a signed-in stranger
+        the only thing they need to hear.
+
+        When nothing is configured this answers 200 with `configured: false`
+        rather than 503, because "there is no console here" is a true and
+        successful answer to the question the page asked. The steward API
+        underneath keeps returning 503 to everything, which is where failing
+        closed actually matters."""
+        ok = auth.configured()
+        return {"configured": ok,
+                "client_id": settings.google_client_id if ok else "",
+                "why": "" if ok else auth.why_unconfigured()}
+
+    # -- the steward API ---------------------------------------------------
     # Everything below this line requires a signed-in steward on the
     # allowlist. Nothing above it takes an identity at all.
 

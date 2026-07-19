@@ -1,0 +1,246 @@
+/* The steward console, in publicrecord's voice — which is the quiet one.
+ *
+ * civicmedia gets the console look because operators like it. This is not
+ * that surface. A steward is doing bookkeeping on a town's public record,
+ * and the page should read like a ledger someone would trust with it:
+ * neutrals, deep green, hairlines, monospace labels, no colour that means
+ * nothing. There is no fuchsia and no purple anywhere in this file, and
+ * there must never be — publicrecord takes zero pop colour, ever, and the
+ * console is publicrecord even though only a handful of people see it.
+ *
+ * Destructive verbs are therefore marked in INK rather than in red, because
+ * the palette has no red and inventing one here would be the first crack.
+ * Weight and wording carry the warning instead: "forget" says what it does.
+ *
+ * The token block below is copied verbatim from brand/tokens/*.css. It is
+ * duplicated rather than imported because the API serves this directory and
+ * nothing else, and a build step to concatenate two files would be a build
+ * step. If a token changes, it changes there first and is copied here.
+ */
+
+:root{
+  /* base palette */
+  --green-emerald:#059669; --green-deep:#052e16; --green-bright:#22c55e; --green-soft:#4ade80;
+  --ink:#0f172a; --slate:#475569; --slate-soft:#94a3b8; --offwhite:#f8fafc; --white:#ffffff;
+  /* semantic */
+  --surface-page:var(--offwhite); --surface-card:var(--white); --surface-inverse:var(--ink);
+  --text-primary:var(--ink); --text-secondary:var(--slate); --text-muted:var(--slate-soft);
+  --text-inverse:var(--offwhite);
+  --border-hairline:#e2e8f0; --border-strong:var(--slate-soft); --border-inverse:var(--slate);
+  --focus-ring:var(--green-emerald);
+  /* publicrecord is the quiet brand: this is its only accent */
+  --accent-publicrecord:var(--green-deep);
+  /* type */
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+  --font-sans:'Inter',system-ui,sans-serif;
+  --text-xs:11px; --text-sm:13px; --text-base:14px; --text-md:16px;
+  --text-lg:20px; --text-xl:24px; --text-display:32px;
+  --weight-regular:400; --weight-medium:500; --weight-bold:700; --weight-black:800;
+  --leading-tight:1.2; --leading-body:1.55; --tracking-label:0.06em;
+  /* spacing + shape */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:24px; --space-6:32px; --space-7:48px; --space-8:64px;
+  --radius-none:0; --radius-sm:4px;
+  --border-w:1px; --border-w-strong:2px;
+  --dot-grid:radial-gradient(#cbd5e1 1px,transparent 1px); --dot-gap:18px 18px;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--surface-page); color:var(--text-primary);
+  font-family:var(--font-sans); font-size:var(--text-base);
+  line-height:var(--leading-body);
+  -webkit-text-size-adjust:100%;
+}
+:focus-visible{outline:2px solid var(--focus-ring); outline-offset:2px}
+[hidden]{display:none !important}
+
+/* ---------------------------------------------------------------- chrome */
+
+.mark{
+  display:flex; align-items:center; gap:var(--space-3);
+  padding:var(--space-3) var(--space-5);
+  background:var(--surface-card);
+  border-bottom:var(--border-w) solid var(--border-hairline);
+  background-image:var(--dot-grid); background-size:var(--dot-gap);
+  flex-wrap:wrap;
+}
+.brand{display:flex; align-items:center; gap:var(--space-2); text-decoration:none; color:inherit}
+.wm{font-family:var(--font-mono); font-size:var(--text-md); font-weight:var(--weight-bold)}
+.wm .tld{color:var(--text-muted); font-weight:var(--weight-regular)}
+.chip{
+  font-family:var(--font-mono); font-size:var(--text-xs);
+  letter-spacing:var(--tracking-label); text-transform:uppercase;
+  padding:2px var(--space-2); border-radius:var(--radius-sm);
+  background:var(--accent-publicrecord); color:var(--text-inverse);
+}
+.mark .spacer{flex:1 1 auto}
+.who{font-family:var(--font-mono); font-size:var(--text-sm); color:var(--text-secondary)}
+
+main{max-width:1180px; margin:0 auto; padding:var(--space-5)}
+
+/* ------------------------------------------------------------------ tabs */
+
+.tabs{display:flex; gap:var(--space-1); flex-wrap:wrap; margin-bottom:var(--space-5);
+      border-bottom:var(--border-w) solid var(--border-hairline)}
+.tab{
+  font-family:var(--font-mono); font-size:var(--text-sm);
+  letter-spacing:var(--tracking-label); text-transform:uppercase;
+  background:none; border:0; border-bottom:var(--border-w-strong) solid transparent;
+  color:var(--text-secondary); padding:var(--space-3) var(--space-4);
+  cursor:pointer;
+}
+.tab:hover{color:var(--text-primary)}
+.tab[aria-selected="true"]{color:var(--accent-publicrecord); border-bottom-color:var(--accent-publicrecord);
+                           font-weight:var(--weight-bold)}
+
+/* ----------------------------------------------------------------- cards */
+
+.card{
+  background:var(--surface-card);
+  border:var(--border-w) solid var(--border-hairline);
+  padding:var(--space-4); margin-bottom:var(--space-4);
+}
+h1,h2,h3,h4{font-family:var(--font-mono); line-height:var(--leading-tight); margin:0}
+h1{font-size:var(--text-lg)}
+h2{font-size:var(--text-md); margin-bottom:var(--space-3)}
+h3{font-size:var(--text-base)}
+h4{font-size:var(--text-xs); letter-spacing:var(--tracking-label); text-transform:uppercase;
+   color:var(--text-secondary); margin:var(--space-4) 0 var(--space-2)}
+p{margin:0 0 var(--space-3)}
+p:last-child{margin-bottom:0}
+.muted{color:var(--text-secondary); font-size:var(--text-sm)}
+.mono{font-family:var(--font-mono); font-size:var(--text-sm)}
+.dim{color:var(--text-muted)}
+a{color:var(--accent-publicrecord)}
+
+/* --------------------------------------------------------------- buttons */
+
+button{font-family:var(--font-mono)}
+.btn{
+  font-size:var(--text-xs); letter-spacing:var(--tracking-label); text-transform:uppercase;
+  padding:var(--space-2) var(--space-3);
+  background:var(--surface-card); color:var(--text-primary);
+  border:var(--border-w) solid var(--border-strong); border-radius:var(--radius-sm);
+  cursor:pointer;
+}
+.btn:hover{border-color:var(--accent-publicrecord)}
+.btn[disabled]{opacity:.45; cursor:not-allowed}
+.btn.primary{background:var(--accent-publicrecord); color:var(--text-inverse);
+             border-color:var(--accent-publicrecord)}
+/* Destructive. Ink, not red — the palette has no red and this is not the
+ * place to invent one. The word does the warning. */
+.btn.grave{background:var(--surface-inverse); color:var(--text-inverse);
+           border-color:var(--surface-inverse)}
+.btn.tiny{padding:2px var(--space-2)}
+.row-actions{display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center}
+
+/* ---------------------------------------------------------------- inputs */
+
+input[type=text],input[type=number],input[type=search],select,textarea{
+  font-family:var(--font-mono); font-size:var(--text-sm);
+  padding:var(--space-2); background:var(--surface-card); color:var(--text-primary);
+  border:var(--border-w) solid var(--border-hairline); border-radius:var(--radius-sm);
+}
+input[type=text]:focus,select:focus{border-color:var(--accent-publicrecord)}
+label.inline{display:inline-flex; align-items:center; gap:var(--space-2);
+             font-family:var(--font-mono); font-size:var(--text-xs);
+             letter-spacing:var(--tracking-label); text-transform:uppercase;
+             color:var(--text-secondary)}
+.field{display:flex; gap:var(--space-2); align-items:center; flex-wrap:wrap;
+       margin-bottom:var(--space-2)}
+.grow{flex:1 1 220px}
+
+/* ------------------------------------------------------------------ rows */
+
+.rows{border-top:var(--border-w) solid var(--border-hairline)}
+.rows > li,.rows > div.r{
+  list-style:none; padding:var(--space-3) 0;
+  border-bottom:var(--border-w) solid var(--border-hairline);
+}
+ul.rows{margin:0; padding:0}
+.rule-row{display:flex; gap:var(--space-2); align-items:center; margin-bottom:var(--space-2);
+          flex-wrap:wrap}
+.rule-row .ord{font-family:var(--font-mono); font-size:var(--text-xs); color:var(--text-muted);
+               width:2.2em; text-align:right}
+
+/* ---------------------------------------------------------------- intake */
+
+.source{border-left:var(--border-w-strong) solid var(--border-hairline);
+        padding-left:var(--space-4); margin:var(--space-4) 0}
+.source.off{opacity:.6}
+.srchead{display:flex; gap:var(--space-3); align-items:baseline; flex-wrap:wrap}
+.cost{display:flex; align-items:baseline; gap:var(--space-3);
+      border:var(--border-w-strong) solid var(--accent-publicrecord);
+      padding:var(--space-3) var(--space-4); margin:var(--space-3) 0}
+.cost .n{font-family:var(--font-mono); font-size:var(--text-display);
+         font-weight:var(--weight-black); color:var(--accent-publicrecord);
+         line-height:1}
+.cost .what{font-size:var(--text-sm); color:var(--text-secondary)}
+.three{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+       gap:var(--space-4); margin-top:var(--space-3)}
+.pane{border:var(--border-w) solid var(--border-hairline); padding:var(--space-3);
+      max-height:420px; overflow:auto}
+.pane h4{margin-top:0}
+.title{font-size:var(--text-sm); word-break:break-word}
+.why{font-family:var(--font-mono); font-size:var(--text-xs); color:var(--text-secondary)}
+.suggest{margin-top:var(--space-1); display:flex; gap:var(--space-2); align-items:center;
+         flex-wrap:wrap}
+.suggest .pat{font-family:var(--font-mono); font-size:var(--text-xs);
+              background:var(--surface-page); padding:1px var(--space-1);
+              border:var(--border-w) solid var(--border-hairline)}
+
+/* ------------------------------------------------- problems + statements */
+
+/* Anything the record refuses to do, said as a sentence. Never a code. */
+.problems{border-left:var(--border-w-strong) solid var(--surface-inverse);
+          background:var(--surface-page); padding:var(--space-3);
+          margin:var(--space-3) 0}
+.problems h4{margin-top:0; color:var(--text-primary)}
+.problems ul{margin:0; padding-left:var(--space-4)}
+.problems li{font-family:var(--font-mono); font-size:var(--text-sm)}
+
+.say{border:var(--border-w) solid var(--border-strong); background:var(--surface-card);
+     padding:var(--space-3); margin-bottom:var(--space-4); font-size:var(--text-sm)}
+.say.bad{border-left:var(--border-w-strong) solid var(--surface-inverse)}
+.say.good{border-left:var(--border-w-strong) solid var(--accent-publicrecord)}
+
+.empty{color:var(--text-secondary); font-size:var(--text-sm); font-style:italic}
+.dirty{font-family:var(--font-mono); font-size:var(--text-xs);
+       letter-spacing:var(--tracking-label); text-transform:uppercase;
+       color:var(--accent-publicrecord)}
+
+/* ---------------------------------------------------------------- tables */
+
+table{border-collapse:collapse; width:100%; font-size:var(--text-sm)}
+th{font-family:var(--font-mono); font-size:var(--text-xs); text-align:left;
+   letter-spacing:var(--tracking-label); text-transform:uppercase;
+   color:var(--text-secondary); border-bottom:var(--border-w) solid var(--border-hairline);
+   padding:var(--space-2)}
+td{padding:var(--space-2); border-bottom:var(--border-w) solid var(--border-hairline);
+   vertical-align:top; word-break:break-word}
+td.num{font-family:var(--font-mono); text-align:right; white-space:nowrap}
+.scroller{overflow-x:auto}
+
+.totals{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+        gap:var(--space-3); margin-bottom:var(--space-4)}
+.total{border:var(--border-w-strong) solid var(--accent-publicrecord); padding:var(--space-3)}
+.total .n{font-family:var(--font-mono); font-size:var(--text-xl);
+          font-weight:var(--weight-black); color:var(--accent-publicrecord); display:block}
+.total .k{font-family:var(--font-mono); font-size:var(--text-xs);
+          letter-spacing:var(--tracking-label); text-transform:uppercase;
+          color:var(--text-secondary)}
+
+/* --------------------------------------------------------------- sign-in */
+
+.gate{max-width:640px; margin:var(--space-8) auto; padding:0 var(--space-5)}
+.gate .card{padding:var(--space-6)}
+.gate h1{margin-bottom:var(--space-3)}
+.gate dl{font-family:var(--font-mono); font-size:var(--text-sm); margin:var(--space-4) 0 0}
+.gate dt{font-weight:var(--weight-bold); margin-top:var(--space-3)}
+.gate dd{margin:0 0 0 0; color:var(--text-secondary)}
+#signin{margin-top:var(--space-4); min-height:44px}
+
+footer{max-width:1180px; margin:0 auto; padding:var(--space-5);
+       color:var(--text-muted); font-size:var(--text-xs); font-family:var(--font-mono)}

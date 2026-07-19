@@ -65,7 +65,52 @@ b { font-weight: 600; }
   font-family: var(--mono); font-size: 11.5px; color: var(--cream-faint); }
 .foot .cov { color: var(--cream-dim); }
 .foot .cov:hover { color: var(--memory); }
+.foot .scopelink { color: var(--cream-dim); }
+.foot .scopelink:hover { color: var(--memory); }
 .foot .ed { margin-left: auto; }
+
+/* ---------- the town picker + the body filter (specs/17 §8) ---------- */
+.scope { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 11px; }
+.scopelabel { letter-spacing: .12em; text-transform: uppercase;
+  color: var(--cream-faint); }
+.scopenow { color: var(--cream); font-weight: 600; }
+.scope.one .scopehint { color: var(--cream-faint); }
+.scopetowns { display: flex; gap: 5px; flex-wrap: wrap; }
+.scopetown { padding: 3px 8px; border-radius: 999px; color: var(--cream-dim);
+  border: 1px solid var(--line); }
+.scopetown:hover { border-color: var(--cream); color: var(--cream); }
+.scopetown.active { background: var(--memory); border-color: var(--memory);
+  color: #FAF8F1; }
+.scopetown .scopen { margin-left: 5px; color: inherit; opacity: .7; }
+
+/* the un-trapping banner — top of the main column, above what they came for */
+.scopebanner { background: var(--ink-2); border: 1.5px solid var(--amber);
+  border-radius: 10px; padding: 11px 14px; margin-bottom: 16px; }
+.scopebanner[hidden] { display: none; }
+.scopemsg { font-size: 13.5px; color: var(--cream); }
+.scopeacts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
+.scopeacts .btn { font-size: 12px; padding: 5px 11px; }
+
+.scopeline { font-family: var(--mono); font-size: 11.5px; color: var(--cream-dim);
+  margin-top: 10px; }
+.scopeline[hidden] { display: none; }
+.bodyfilter { display: flex; gap: 6px; flex-wrap: wrap; }
+.bodyfilter[hidden] { display: none; }
+.bodychip { font: 500 12px var(--ui); cursor: pointer; padding: 4px 10px;
+  border-radius: 999px; background: var(--ink-3); color: var(--cream-dim);
+  border: 1px solid var(--line); }
+.bodychip:hover { border-color: var(--cream); color: var(--cream); }
+.bodychip.active { background: var(--memory); border-color: var(--memory);
+  color: #FAF8F1; }
+.bodychip .bn { font-family: var(--mono); font-size: 10px; opacity: .75; }
+.bodylist { font-size: 13px; color: var(--cream-dim); }
+.bodylist[hidden] { display: none; }
+.searchfilters { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.filt { font-family: var(--mono); font-size: 11px; color: var(--cream-faint);
+  display: inline-flex; align-items: center; gap: 6px; }
+.filt select { font: 500 12px var(--ui); padding: 5px 8px; border-radius: 7px;
+  background: var(--ink-2); color: var(--cream); border: 1.5px solid var(--line); }
 
 /* ---------- shared cards ---------- */
 .card { background: var(--ink-2); border: 1.5px solid var(--line);
@@ -400,7 +445,8 @@ table.twin a { color: var(--memory); text-decoration: none; }
 /* ---------- reduced motion + print ---------- */
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 @media print {
-  .rail, .mark, .foot, .player, .tbar .dls, .chips, .disclose { display: none; }
+  .rail, .mark, .foot, .player, .tbar .dls, .chips, .disclose,
+  .scopebanner, .bodyfilter { display: none; }
   body { color: #000; background: #fff; }
   .transcript { border: 0; padding: 0; }
   .seg .ts { color: #000; }

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- A page with a sign-in on it has no business in a search index, and the
+     record's own crawlers should never follow anything from here. -->
+<meta name="robots" content="noindex, nofollow">
+<title>steward — publicrecord.studio</title>
+<link rel="stylesheet" href="/steward/console.css">
+<!-- Google Identity Services. This is the ONE third-party thing the whole
+     record loads, it loads on this page only, and /steward carries its own
+     Content-Security-Policy header naming it (see record/app.py). Every
+     reader page still ships script-src 'self' and connect-src 'self'. -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="/steward/console.js" defer></script>
+</head>
+<body>
+
+<header class="mark">
+  <a class="brand" href="/steward">
+    <svg class="brandmark" viewBox="0 0 96 96" width="22" height="22" aria-hidden="true"><rect x="2" y="2" width="92" height="92" rx="20" fill="#ffffff" stroke="#94a3b8" stroke-width="3"/><rect x="22" y="28" width="52" height="8" fill="#052e16"/><rect x="22" y="44" width="52" height="8" fill="#052e16"/><rect x="22" y="60" width="34" height="8" fill="#052e16"/></svg>
+    <span class="wm">publicrecord<span class="tld">.studio</span></span>
+  </a>
+  <span class="chip">Steward</span>
+  <span class="spacer"></span>
+  <span class="who" id="who"></span>
+  <button class="btn" id="signout" hidden>Sign out</button>
+</header>
+
+<!-- Everything below is filled by console.js. With JavaScript off this page
+     says so, rather than showing an empty frame that looks like a bug. The
+     reader's pages degrade to real HTML because a resident must be able to
+     read the record without scripts; a curation console genuinely cannot,
+     and saying so plainly is the honest version of that. -->
+
+<noscript>
+  <div class="gate"><div class="card">
+    <h1>The steward console needs JavaScript</h1>
+    <p>Signing in, previewing intake rules and running the curation verbs all
+    happen in the browser against the API. There is no server-rendered version
+    of this page.</p>
+    <p class="muted">The record itself does not need scripts. Every meeting,
+    issue and transcript in the pressed edition reads with JavaScript off —
+    that is a promise made to residents, and it is untouched by this.</p>
+  </div></div>
+</noscript>
+
+<!-- the gate: sign-in, or the plain statement of why there is no sign-in -->
+<div class="gate" id="gate">
+  <div class="card">
+    <h1 id="gate-title">Checking whether this console is configured…</h1>
+    <div id="gate-body"></div>
+    <div id="signin"></div>
+  </div>
+</div>
+
+<main id="console" hidden>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-intake"  data-pane="pane-intake"  aria-selected="true">Intake</button>
+    <button class="tab" role="tab" id="tab-queue"   data-pane="pane-queue"   aria-selected="false">Review queue</button>
+    <button class="tab" role="tab" id="tab-issues"  data-pane="pane-issues"  aria-selected="false">Issues</button>
+    <button class="tab" role="tab" id="tab-ledgers" data-pane="pane-ledgers" aria-selected="false">Ledgers</button>
+  </nav>
+
+  <div id="say"></div>
+
+  <!-- 1. INTAKE — the cost lever, and the reason this console exists -->
+  <section id="pane-intake" role="tabpanel" aria-labelledby="tab-intake">
+    <div class="card">
+      <h2>What the record is allowed to swallow</h2>
+      <p class="muted">Default-deny. A video enters the queue only if a rule
+      names the public body it belongs to. Nothing here spends anything until
+      you press <b>Poll now</b> — preview is a pure function over the feed and
+      writes nothing.</p>
+      <div class="row-actions">
+        <button class="btn" id="intake-reload">Reload from the record</button>
+      </div>
+    </div>
+    <div id="towns"></div>
+  </section>
+
+  <!-- 2. THE REVIEW QUEUE -->
+  <section id="pane-queue" role="tabpanel" aria-labelledby="tab-queue" hidden>
+    <div class="card">
+      <h2>Submissions</h2>
+      <p class="muted">Nothing ingests on the strength of a stranger's POST.
+      Approving marks the row for the pipeline job; it does not transcribe a
+      meeting while you wait.</p>
+      <div class="field">
+        <label class="inline">Status
+          <select id="queue-status">
+            <option value="submitted" selected>submitted</option>
+            <option value="approved">approved</option>
+            <option value="queued">queued</option>
+            <option value="live">live</option>
+            <option value="rejected">rejected</option>
+          </select>
+        </label>
+        <button class="btn" id="queue-reload">Reload</button>
+      </div>
+    </div>
+    <div id="queue"></div>
+  </section>
+
+  <!-- 3. THE EIGHT VERBS -->
+  <section id="pane-issues" role="tabpanel" aria-labelledby="tab-issues" hidden>
+    <div class="card">
+      <h2>Curation</h2>
+      <p class="muted">The desk's verbs, over HTTP, with a name against every
+      one. Each runs in a transaction and writes an audit row.</p>
+      <div class="field">
+        <label class="inline">Town
+          <select id="issues-town"><option value="">every town</option></select>
+        </label>
+        <label class="inline">Status
+          <select id="issues-status">
+            <option value="active" selected>active</option>
+            <option value="candidate">candidate</option>
+            <option value="merged">merged</option>
+          </select>
+        </label>
+        <button class="btn" id="issues-reload">Reload</button>
+      </div>
+      <h4>Verbs that do not belong to one issue</h4>
+      <div class="field">
+        <input type="text" id="mint-q" class="grow" placeholder="mint an issue from this query">
+        <button class="btn" id="mint-go">Mint</button>
+        <button class="btn grave" id="rebuild-go">Rebuild this town's issues</button>
+      </div>
+      <p class="muted" id="mint-note">Mint and rebuild both act on the town
+      selected above. Rebuild re-derives links from segments; it keeps minted,
+      steward-touched and followed issues.</p>
+    </div>
+    <div id="issues"></div>
+  </section>
+
+  <!-- 4. THE LEDGERS -->
+  <section id="pane-ledgers" role="tabpanel" aria-labelledby="tab-ledgers" hidden>
+    <div class="card">
+      <h2>Spend</h2>
+      <p class="muted">The AI-audit ledger, ported up from the desk: every
+      token attributed, visible here rather than in a bill nobody reads. The
+      server's spend is the project's — a reader's identity is never part of
+      the price.</p>
+      <div id="spend-totals" class="totals"></div>
+      <div id="spend-rows"></div>
+    </div>
+    <div class="card">
+      <h2>Audit</h2>
+      <p class="muted">The record remembers its own edits — now with a name and
+      a time against each one.</p>
+      <div id="audit-rows"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  publicrecord.studio · the steward console · readers are never logged in,
+  counted, or followed — nothing on this page applies to them
+</footer>
+
+</body>
+</html>

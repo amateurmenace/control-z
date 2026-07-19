@@ -33,13 +33,318 @@
   /* ---------------- router ---------------- */
   const path = location.pathname.replace(/\/index\.html$/, "").replace(/\/$/, "") || "/app";
   document.addEventListener("DOMContentLoaded", () => {
+    initScope();
     if (/\/app\/m\//.test(path)) meeting();
     else if (/\/app\/s$/.test(path)) search();
     else if (/\/app\/add$/.test(path)) addMeeting();
     else if (/\/app\/i\//.test(path)) issue();
     else if (/\/app\/watching$/.test(path)) stillWatching();
+    else if (/\/app\/officials$/.test(path)) officials();
+    else if (path === "/app") home();
     registerSW();
   });
+
+  /* ================= SCOPE: the town, and the body ==================
+     specs/17 §8. The reader picks a town once and every page obeys it; a
+     `?town=` link overrides for the visit without touching the choice.
+
+     Three rules hold this together, and all three are about not lying:
+
+     · The choice is localStorage and nothing else. No cookie (it would ride
+       every request and become a server-side fact about a reader), no
+       account, no sync. It is a preference this browser keeps, and the
+       covenant page already says so.
+
+     · A `?town=` override is NEVER written to storage. A link is somebody
+       else's opinion about where you should be looking; honouring it for one
+       visit is hospitality, remembering it is presumption.
+
+     · Untowned meetings are in every scope. A meeting whose town the record
+       never learned belongs to no town, so filtering it out would erase it
+       silently — the one outcome a record cannot have. It shows everywhere,
+       and the scope line says how many there are.
+
+     specs/17 §14 leaves one question open: the reader who arrives on a deep
+     link from another town, and must never be trapped in the wrong scope.
+     The answer here is a banner that names the town they landed in and the
+     town they came from, with both exits one click away — and, on a meeting
+     page, the same banner when the meeting itself sits outside their scope,
+     because that is the trap without a query string. */
+
+  const TOWN_KEY = "cz-town";           /* the reader's chosen town */
+  let EDP = null;
+  const edition = () => (EDP ||= getJSON(`${BASE}/towns.json`)
+    .then(d => d || { towns: [], bodies: [], untowned: 0 }));
+  const readTown = () => { try { return localStorage.getItem(TOWN_KEY) || ""; } catch { return ""; } };
+  const writeTown = t => { try { t ? localStorage.setItem(TOWN_KEY, t) : localStorage.removeItem(TOWN_KEY); } catch { /* private mode: the visit still scopes */ } };
+  const REDRAW = [];                    /* page hooks re-run on a scope change */
+  let SCOPE = { town: "", body: "", from: "none", stored: "", lost: "" };
+
+  /* Resolve the scope from the URL, storage, and what the edition holds.
+     Pure over (edition, location, storage) so the banner logic can reason
+     about *where* the scope came from, not merely what it is. */
+  function resolve(ed) {
+    const names = (ed.towns || []).map(t => t.town);
+    const match = n => names.find(x => x.toLowerCase() === String(n).toLowerCase()) || "";
+    const p = new URLSearchParams(location.search);
+    const stored = readTown();
+    const body = (p.get("body") || "").trim();
+    // a stored town this pressing no longer carries is a fact worth saying out
+    // loud rather than a scope worth silently ignoring
+    const lost = stored && !match(stored) ? stored : "";
+    if (p.has("town")) {
+      const asked = (p.get("town") || "").trim();
+      return { town: match(asked), body, from: asked ? "link" : "link-all",
+               stored: match(stored), lost, asked };
+    }
+    if (stored && match(stored)) return { town: match(stored), body, from: "stored", stored: match(stored), lost };
+    // a dropped choice must NOT fall through to the one-town auto-scope: on a
+    // pressing that now carries only Boston, a reader who chose Brookline
+    // would be silently moved into a different town while the banner told
+    // them they were reading everything. Widen instead, and say why.
+    if (lost) return { town: "", body, from: "lost", stored: "", lost };
+    if (names.length === 1) return { town: names[0], body, from: "only", stored: "", lost };
+    return { town: "", body, from: "none", stored: "", lost };
+  }
+
+  async function initScope() {
+    const ed = await edition();
+    SCOPE = resolve(ed);
+    paintScope(ed);
+    wireScope(ed);
+    banner(ed);
+  }
+
+  /* The header bar: name the scope, mark the active town. */
+  function paintScope(ed) {
+    const now = $("#scopenow");
+    if (now && (ed.towns || []).length > 1)
+      now.textContent = SCOPE.town || "the whole record";
+    $$(".scopetown").forEach(a => a.classList.toggle(
+      "active", (a.dataset.town || "") === (SCOPE.town || "")));
+  }
+
+  /* Choosing a town is a click on a real link; we take it over so the choice
+     persists and the page re-scopes without a round trip. The href stays live
+     for the reader who has JavaScript off — it goes somewhere true. */
+  function wireScope(ed) {
+    $$(".scopetown").forEach(a => a.addEventListener("click", ev => {
+      ev.preventDefault();
+      chooseTown(ed, a.dataset.town || "");
+    }));
+  }
+
+  function chooseTown(ed, town) {
+    writeTown(town);
+    // a stale ?town= would outrank the choice just made, so it goes
+    const u = new URL(location.href);
+    u.searchParams.delete("town");
+    history.replaceState(null, "", u.pathname + u.search + u.hash);
+    SCOPE = resolve(ed);
+    paintScope(ed);
+    banner(ed);
+    REDRAW.forEach(fn => { try { fn(); } catch { /* one page's redraw is not the app's */ } });
+    toast(town ? `scoped to ${town} — this browser remembers, nothing else does`
+               : "showing the whole record");
+  }
+
+  /* The un-trapping. */
+  function banner(ed) {
+    const el = $("#scopebanner"); if (!el) return;
+    const many = (ed.towns || []).length > 1;
+    const art = $(".meeting");
+    const here = art ? (art.dataset.town || "") : "";
+    let msg = "", acts = [];
+    if (SCOPE.lost) {
+      msg = `You chose <b>${esc(SCOPE.lost)}</b>, and this edition does not carry
+             it — you are reading the whole record.`;
+      acts = [{ label: "clear that choice", town: "", primary: true }];
+    } else if (SCOPE.from === "link" && SCOPE.stored && SCOPE.town !== SCOPE.stored) {
+      msg = `You followed a link into <b>${esc(SCOPE.town)}</b>. Your town is
+             <b>${esc(SCOPE.stored)}</b> — this visit only, unless you say otherwise.`;
+      acts = [{ label: `back to ${SCOPE.stored}`, town: SCOPE.stored, primary: true, go: true },
+              { label: `make ${SCOPE.town} my town`, town: SCOPE.town }];
+    } else if (SCOPE.from === "link" && !SCOPE.stored && SCOPE.town && many) {
+      msg = `A link scoped you to <b>${esc(SCOPE.town)}</b>. You have not chosen
+             a town yet.`;
+      acts = [{ label: `keep ${SCOPE.town}`, town: SCOPE.town, primary: true },
+              { label: "show the whole record", town: "" }];
+    } else if (here && SCOPE.town && here !== SCOPE.town) {
+      msg = `This meeting is <b>${esc(here)}</b>'s. You are reading in
+             <b>${esc(SCOPE.town)}</b>.`;
+      acts = [{ label: `switch to ${here}`, town: here, primary: true },
+              { label: `stay in ${SCOPE.town}`, dismiss: true }];
+    } else if (SCOPE.from === "none" && many && !SCOPE.body) {
+      // first visit, more than one town: an inline row, never a modal. The
+      // record stays readable behind it and "not yet" is a real answer.
+      msg = `This edition carries ${ed.towns.length} towns. Pick one and every
+             page will scope to it — or read all of them.`;
+      acts = ed.towns.map(t => ({ label: t.town, town: t.town }))
+        .concat([{ label: "the whole record", town: "", dismiss: true }]);
+    }
+    if (!msg) { el.hidden = true; el.textContent = ""; return; }
+    el.innerHTML = `<p class="scopemsg">${msg}</p><div class="scopeacts"></div>`;
+    const row = $(".scopeacts", el);
+    acts.forEach(a => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn" + (a.primary ? " primary" : "");
+      b.textContent = a.label;
+      b.onclick = () => {
+        if (a.dismiss) { el.hidden = true; return; }
+        // "back to my town" from a foreign meeting means leaving the meeting —
+        // scoping in place would leave the reader staring at the same page
+        if (a.go) { writeTown(a.town); location.href = `${BASE}/`; return; }
+        chooseTown(ed, a.town);
+      };
+      row.appendChild(b);
+    });
+    el.hidden = false;
+  }
+
+  /* Does a meeting belong in the current scope? Untowned always does. */
+  const inScope = (town, body) =>
+    (!SCOPE.town || !town || town === SCOPE.town) &&
+    (!SCOPE.body || (body || "") === SCOPE.body);
+
+  /* ================= HOME (scope + body filter) ================= */
+  async function home() {
+    const ed = await edition();
+    const strip = $("#bodyfilter"); if (!strip) return;
+    const draw = () => { paintBodies(ed, strip); filterHome(ed); };
+    REDRAW.push(draw);
+    draw();
+  }
+
+  /* The chips: every body the scoped town actually posted, each with the count
+     that makes the number checkable. Minted here rather than baked because
+     they are stateful — and the sentence they replace stays in the markup for
+     the reader who never runs this file. */
+  function paintBodies(ed, strip) {
+    const t = (ed.towns || []).find(x => x.town === SCOPE.town);
+    const list = t ? t.bodies : (ed.bodies || []);
+    if (!list.length) return;
+    strip.innerHTML = "";
+    const chip = (label, val, n) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "bodychip" + (SCOPE.body === val ? " active" : "");
+      b.textContent = label + (n == null ? "" : " ");
+      if (n != null) { const s = document.createElement("span");
+        s.className = "bn"; s.textContent = n; b.appendChild(s); }
+      b.onclick = () => setBody(ed, SCOPE.body === val ? "" : val);
+      strip.appendChild(b);
+    };
+    chip("every body", "", null);
+    list.forEach(b => chip(b.body || "no body recorded", b.body, b.meetings));
+    strip.hidden = false;
+    const plain = $("#bodylist"); if (plain) plain.hidden = true;
+  }
+
+  function setBody(ed, val) {
+    // the filter belongs in the URL so a filtered view is a shareable link,
+    // and NOT in storage — a body is a question you asked once, not a home
+    const u = new URL(location.href);
+    val ? u.searchParams.set("body", val) : u.searchParams.delete("body");
+    history.replaceState(null, "", u.pathname + u.search + u.hash);
+    SCOPE = { ...SCOPE, body: val };
+    paintBodies(ed, $("#bodyfilter"));
+    filterHome(ed);
+  }
+
+  async function filterHome(ed) {
+    let shown = 0, hidden = 0;
+    $$(".mcard").forEach(c => {
+      const ok = inScope(c.dataset.town || "", c.dataset.body || "");
+      c.hidden = !ok; ok ? shown++ : hidden++;
+    });
+    // the rail must say when a scope has emptied it, or an empty column reads
+    // as "the record has nothing" instead of "your filter has nothing"
+    let none = $("#mcards-none");
+    if (!shown && hidden) {
+      if (!none) {
+        none = document.createElement("p");
+        none.id = "mcards-none"; none.className = "hint";
+        const box = $(".mcards"); if (box) box.appendChild(none);
+      }
+      none.textContent = `Nothing on this rail in ${SCOPE.body || "this scope"}`
+        + (SCOPE.town ? ` for ${SCOPE.town}` : "") + ". The record itself is unchanged.";
+      none.hidden = false;
+    } else if (none) none.hidden = true;
+    line(ed);
+    await recoverage();
+  }
+
+  /* The honest sentence under the stat band: what is scoped, and what is not.
+     The band's own numbers are edition-wide (issues and threads are corpus
+     objects, not town objects), so rather than quietly re-scoping some cells
+     and not others, the page says which is which. */
+  function line(ed) {
+    const el = $("#scopeline"); if (!el) return;
+    if (!SCOPE.town && !SCOPE.body) { el.hidden = true; return; }
+    // on a one-town edition the town scope is not a choice the reader made and
+    // excludes nothing — announcing it is the nag specs/17 rules out. A body
+    // filter is still a real narrowing, so that one still speaks.
+    if (SCOPE.from === "only" && !SCOPE.body) { el.hidden = true; return; }
+    const bits = [];
+    if (SCOPE.town) bits.push(SCOPE.town);
+    if (SCOPE.body) bits.push(SCOPE.body);
+    const extra = ed.untowned
+      ? ` ${ed.untowned} meeting(s) carry no town and appear in every scope.` : "";
+    el.textContent = `Scoped to ${bits.join(" · ")} — the coverage strip and the `
+      + `rails below follow it. The counts above are the whole edition.${extra}`;
+    el.hidden = false;
+  }
+
+  /* Redraw the coverage strip under the scope. The bake ships a per-(town,
+     body) cell count per month for exactly this: a strip that kept its
+     whole-record heights beside scoped cards would be a chart contradicting
+     the list next to it. */
+  async function recoverage() {
+    const bars = $$(".covbar"); if (!bars.length) return;
+    const st = await getJSON(`${BASE}/stats.json`); if (!st) return;
+    const by = {}; (st.coverage || []).forEach(c => by[c.month] = c);
+    const totals = bars.map(b => {
+      const rec = by[b.dataset.month]; if (!rec) return 0;
+      if (!SCOPE.town && !SCOPE.body) return rec.total;
+      let n = 0;
+      for (const [key, v] of Object.entries(rec.cells || {})) {
+        const [tw, bd] = key.split("␟");
+        if (inScope(tw, bd)) n += v;
+      }
+      return n;
+    });
+    const mx = Math.max(1, ...totals);
+    bars.forEach((b, i) => {
+      const n = totals[i], sp = b.querySelector("span");
+      if (sp) sp.style.height = (n ? Math.max(6, Math.round(56 * n / mx)) : 2) + "px";
+      b.title = `${b.dataset.month}: ${n} meeting(s)`
+        + (SCOPE.town || SCOPE.body ? " in this scope" : "");
+    });
+  }
+
+  /* ================= OFFICIALS (scope) ================= */
+  async function officials() {
+    const ed = await edition();
+    const draw = () => {
+      let shown = 0;
+      $$(".offcard").forEach(c => {
+        // an official's town is where their roll calls mostly sit; one with
+        // no town at all is shown everywhere, same rule as an untowned meeting
+        const t = c.dataset.town || "";
+        const ok = !SCOPE.town || !t || t === SCOPE.town;
+        c.hidden = !ok; if (ok) shown++;
+      });
+      let none = $("#off-none");
+      if (!shown && SCOPE.town) {
+        if (!none) { none = document.createElement("p"); none.id = "off-none";
+          none.className = "hint"; ($(".offgrid") || document.body).appendChild(none); }
+        none.textContent = `No roll calls from ${SCOPE.town} on this edition yet.`;
+        none.hidden = false;
+      } else if (none) none.hidden = true;
+    };
+    REDRAW.push(draw);
+    draw();
+  }
 
   /* ================= MEETING ================= */
   let YT = { win: null, loaded: false, ready: false, time: 0, pending: null };
@@ -220,13 +525,40 @@
 
   /* ================= SEARCH ================= */
   async function search() {
+    // resolve the scope here rather than trusting initScope to have landed
+    // first — both await the same fetch, and a search that silently ignored
+    // the reader's town would be the worst of the two failures
+    const ed = await edition();
+    SCOPE = resolve(ed);
     const q = new URLSearchParams(location.search).get("q") || "";
     const inp = $("#q"); if (inp) inp.value = q;
+    const tsel = $("#townsel"), bsel = $("#bodysel");
+    if (tsel) tsel.value = SCOPE.town || "";
+    if (bsel) bsel.value = SCOPE.body || "";
+    // the filters rewrite the URL, so a scoped search is a link somebody can
+    // send — and widening back to every town is always one select away
+    const refilter = () => {
+      const u = new URL(location.href);
+      const t = tsel ? tsel.value : SCOPE.town, b = bsel ? bsel.value : SCOPE.body;
+      t ? u.searchParams.set("town", t) : u.searchParams.delete("town");
+      b ? u.searchParams.set("body", b) : u.searchParams.delete("body");
+      history.replaceState(null, "", u.pathname + u.search + u.hash);
+      SCOPE = resolve(ed);
+      const val = ($("#q") && $("#q").value.trim()) || "";
+      if (val) runSearch(val);
+    };
+    if (tsel) tsel.addEventListener("change", refilter);
+    if (bsel) bsel.addEventListener("change", refilter);
+    REDRAW.push(() => { if (tsel) tsel.value = SCOPE.town || ""; refilter(); });
     if (q) runSearch(q);
     const form = $("#searchform");
     if (form) form.addEventListener("submit", e => {
       e.preventDefault(); const val = $("#q").value.trim();
-      history.replaceState(null, "", `${BASE}/s?q=${encodeURIComponent(val)}`);
+      const u = new URL(`${location.origin}${BASE}/s`);
+      if (val) u.searchParams.set("q", val);
+      if (SCOPE.town) u.searchParams.set("town", SCOPE.town);
+      if (SCOPE.body) u.searchParams.set("body", SCOPE.body);
+      history.replaceState(null, "", u.pathname + u.search);
       runSearch(val);
     });
   }
@@ -253,14 +585,53 @@
       const exact = hits.filter(s => String(s[3]).toLowerCase().includes(phrase));
       if (exact.length) hits = exact;
     }
+    // scope BEFORE the cut, or the 80-hit ceiling would be spent on meetings
+    // the reader has said they are not looking at — and a scoped search would
+    // silently return fewer results than it found
+    const total = hits.length;
+    if (SCOPE.town || SCOPE.body)
+      hits = hits.filter(([mi]) => {
+        const m = meta[mi] || {};
+        return inScope(m.town || "", m.body || "");
+      });
+    const cut = hits.length;
     hits = hits.slice(0, 80);
-    if (!hits.length) { box.innerHTML = `<p class="hint">nothing in the record for “${esc(q)}”. It holds ${meta.length} meeting(s).</p>`; return; }
-    box.innerHTML = `<p class="hint">${hits.length} moment${hits.length>1?"s":""} across the record</p>` +
+    const where = [SCOPE.town, SCOPE.body].filter(Boolean).join(" · ");
+    if (!hits.length) {
+      // an empty scoped result is two different facts, and the reader is owed
+      // whichever one is true: nothing anywhere, or nothing *here*
+      box.innerHTML = where && total
+        ? `<p class="hint">Nothing for “${esc(q)}” in ${esc(where)} — but
+             ${total} moment(s) elsewhere on the record.
+             <button class="btn" type="button" id="widen">search every town</button></p>`
+        : `<p class="hint">nothing in the record for “${esc(q)}”. It holds ${meta.length} meeting(s).</p>`;
+      const w = $("#widen");
+      if (w) w.onclick = () => {
+        const u = new URL(location.href);
+        u.searchParams.delete("town"); u.searchParams.delete("body");
+        history.replaceState(null, "", u.pathname + u.search);
+        const ts = $("#townsel"), bs = $("#bodysel");
+        if (ts) ts.value = ""; if (bs) bs.value = "";
+        SCOPE = { ...SCOPE, town: "", body: "" };
+        runSearch(q);
+      };
+      return;
+    }
+    // untowned meetings ride along in every scope, so "18 in Brookline" would
+    // be claiming a town for moments the record never learned one for — count
+    // them out loud instead
+    const noTown = SCOPE.town
+      ? hits.filter(([mi]) => !((meta[mi] || {}).town)).length : 0;
+    box.innerHTML = `<p class="hint">${hits.length} moment${hits.length>1?"s":""} `
+      + (where ? `in ${esc(where)}` : "across the record")
+      + (noTown ? ` · ${noTown} from meeting(s) with no town recorded` : "")
+      + (where && cut < total ? ` · ${total - cut} more elsewhere on the record` : "")
+      + `</p>` +
       hits.map(([mi, t, spk, text]) => {
         const m = meta[mi] || {};
         return `<a class="sresult" href="${BASE}/m/${m.pid}#t${Math.floor(t)}">
           <span class="ts">${hms(t)}</span>${mark(text, terms)}
-          <span class="smeta">${esc([m.title, m.body, m.date].filter(Boolean).join(" · "))}${spk ? " · " + esc(spk) : ""}</span></a>`;
+          <span class="smeta">${esc([m.title, m.body, SCOPE.town ? "" : m.town, m.date].filter(Boolean).join(" · "))}${spk ? " · " + esc(spk) : ""}</span></a>`;
       }).join("");
   }
   function mark(text, terms) {

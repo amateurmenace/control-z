@@ -31,6 +31,22 @@ CSP = ("default-src 'self'; base-uri 'self'; form-action 'self'; "
        "connect-src 'self'; object-src 'none'")
 
 
+# What this pressing serves, set once per bake by emit_stubs().
+#
+# Module state rather than a parameter because the scope bar lives in the
+# shared chrome, and ten page functions call shell() — threading an eleventh
+# argument through page_door() so a keycap header can name a town would be
+# ceremony that buys nothing. A bake is one process pressing one edition; this
+# is written before the first stub renders and never again.
+_EDITION = {"towns": [], "bodies": [], "untowned": 0, "meetings": 0}
+
+
+def set_edition(towns_plane) -> None:
+    """Tell the chrome which towns and bodies this edition actually holds."""
+    _EDITION.update({"towns": [], "bodies": [], "untowned": 0, "meetings": 0})
+    _EDITION.update(towns_plane or {})
+
+
 def esc(s) -> str:
     return html.escape(str(s or ""), quote=True)
 
@@ -83,10 +99,53 @@ def head(title, desc, canonical, og_image="", version="0"):
 </head><body>"""
 
 
+def scope_bar():
+    """The town picker, baked into every page (specs/17 §8).
+
+    Three shapes, because the honest answer differs by how many towns the
+    pressing actually holds:
+
+      no town   — nothing to pick; the bar is not rendered at all
+      one town  — the town is *named*, not offered. A picker with one option
+                  is a question whose answer is already known, and asking it
+                  would be the nag specs/17 warns against.
+      many      — real anchors, one per town, plus the whole record.
+
+    The anchors are `<a href>` and not buttons on purpose. A static edition
+    cannot scope server-side, so with JavaScript off these still navigate
+    somewhere true (the record, whole), and the line under them says plainly
+    that the scoping itself is the browser's work. The alternative — controls
+    that look live and silently do nothing — is the dishonesty the covenant
+    is against."""
+    towns = _EDITION.get("towns") or []
+    if not towns:
+        return ""
+    if len(towns) == 1:
+        t = towns[0]
+        return (f'<div class="scope one" id="scope">'
+                f'<span class="scopelabel">town</span>'
+                f'<span class="scopenow" id="scopenow" data-town="{esc(t["town"])}">'
+                f'{esc(t["town"])}</span>'
+                f'<span class="scopehint">the only town on this edition</span>'
+                f'</div>')
+    links = "".join(
+        f'<a class="scopetown" href="/app/?town={esc(t["town"])}" '
+        f'data-town="{esc(t["town"])}">{esc(t["town"])}'
+        f'<span class="scopen">{t["meetings"]}</span></a>'
+        for t in towns)
+    return (f'<div class="scope" id="scope">'
+            f'<span class="scopelabel">town</span>'
+            f'<span class="scopenow" id="scopenow">the whole record</span>'
+            f'<div class="scopetowns">{links}'
+            f'<a class="scopetown" href="/app/" data-town="">the whole record</a>'
+            f'</div></div>')
+
+
 def mark():
     return f"""<header class="mark">
   <a class="brand" href="/app/"><svg class="brandmark" viewBox="0 0 96 96" width="22" height="22" aria-hidden="true"><rect x="2" y="2" width="92" height="92" rx="20" fill="#ffffff" stroke="#94a3b8" stroke-width="3"/><rect x="22" y="28" width="52" height="8" fill="#052e16"/><rect x="22" y="44" width="52" height="8" fill="#052e16"/><rect x="22" y="60" width="34" height="8" fill="#052e16"/></svg><span class="wm">publicrecord<span class="tld">.studio</span></span></a>
   <span class="webchip">WEB</span>
+  {scope_bar()}
   <details class="mark-panel"><summary class="btn">Get the desktop app</summary>
     <div class="mark-body">
       <p><b>Civic Media Studio</b> (the desktop app) adds what a browser can't:</p>
@@ -134,17 +193,29 @@ def rail(current=""):
 
 def footer(manifest):
     ed = manifest.get("edition_date") or ""
+    # The second way back to the picker. specs/17 §8 asks for re-choosable "at
+    # any time", and a reader who has scrolled to the bottom of a four-hour
+    # transcript should not have to scroll back up to leave a town. The anchor
+    # works with JavaScript off, because it is only an anchor.
+    again = ('<a class="scopelink" href="#scope">town — change</a>'
+             if len(_EDITION.get("towns") or []) > 1 else "")
     return f"""<footer class="foot">
   <a class="cov" href="/app/covenant">no accounts · no tracking · yours</a>
+  {again}
   <span class="ed">edition {esc(ed)} · v{esc(manifest.get('version',''))}</span>
 </footer>"""
 
 
 def shell(title, desc, canonical, body, current, manifest,
           og_image="", version="0"):
+    # The banner slot rides in the markup rather than being minted by script so
+    # it lands in one known place on every page — top of the main column, above
+    # whatever the reader came for, which is the only position that can honestly
+    # claim to have warned them before they read.
+    slot = '<div class="scopebanner" id="scopebanner" hidden></div>'
     return (head(title, desc, canonical, og_image, version)
             + mark() + '<div class="layout">' + rail(current)
-            + f'<main class="main" id="app">{body}</main></div>'
+            + f'<main class="main" id="app">{slot}{body}</main></div>'
             + footer(manifest)
             + f'<script src="/app/app.js?v={esc(version)}"></script></body></html>')
 
@@ -152,6 +223,34 @@ def shell(title, desc, canonical, body, current, manifest,
 # --------------------------------------------------------------------------
 # pages
 # --------------------------------------------------------------------------
+
+def body_strip():
+    """The public bodies this edition holds, as a filter — and, underneath it,
+    as a plain sentence.
+
+    Two renderings of one fact, and both ship. The chips are minted by app.js
+    into the empty rail (they are stateful, so markup cannot honestly bake
+    them); the sentence is real HTML and is what a reader with JavaScript off
+    gets — not a dead control, but the same information in the form that still
+    works. The counts come from the pressed meetings, so every body named here
+    has at least one meeting behind it."""
+    bodies = _EDITION.get("bodies") or []
+    if not bodies:
+        return ""
+    named = " · ".join(
+        f'{esc(b["body"] or "no body recorded")} <b>{b["meetings"]}</b>'
+        for b in bodies)
+    return f"""
+  <section class="card bodycard">
+    <span class="tag">the bodies on the record — filter what you see</span>
+    <div class="bodyfilter" id="bodyfilter" role="group"
+         aria-label="Filter by public body" hidden></div>
+    <p class="bodylist" id="bodylist">{named}</p>
+    <p class="hint">Filtering runs in your browser and touches nothing else.
+      With JavaScript off this page lists the whole record — every meeting
+      below stays readable either way.</p>
+  </section>"""
+
 
 def page_home(meetings, issues, stats, manifest, base):
     c = stats["counts"]
@@ -168,7 +267,8 @@ def page_home(meetings, issues, stats, manifest, base):
         stat(c["described"], "described", "/app/"),
     ])
     new = "".join(
-        f'<a class="mcard" href="/app/m/{m["pid"]}">'
+        f'<a class="mcard" href="/app/m/{m["pid"]}" '
+        f'data-town="{esc(m.get("town", ""))}" data-body="{esc(m["body"])}">'
         + (f'<img loading="lazy" src="{esc(m["thumb"])}" alt="">' if m["thumb"] else "")
         + f'<div class="mc-body"><span class="chip">{esc(m["body"] or "meeting")}</span>'
           f'<b>{esc(m["title"])}</b>'
@@ -184,7 +284,8 @@ def page_home(meetings, issues, stats, manifest, base):
     # coverage strip (hand-drawn bars) + access meters
     mx = max([m["total"] for m in stats["coverage"]] or [1])
     bars = "".join(
-        f'<div class="covbar" title="{esc(m["month"])}: {m["total"]} meeting(s)">'
+        f'<div class="covbar" data-month="{esc(m["month"])}" '
+        f'title="{esc(m["month"])}: {m["total"]} meeting(s)">'
         f'<span style="height:{max(6, round(56*m["total"]/mx))}px"></span>'
         f'<label>{esc((m["month"] or "?")[5:] or "?")}</label></div>'
         for m in stats["coverage"])
@@ -212,6 +313,8 @@ def page_home(meetings, issues, stats, manifest, base):
     <p class="addline"><a href="/app/add">＋ Add a meeting</a></p>
   </section>
   <section class="statband">{band}</section>
+  <p class="scopeline" id="scopeline" hidden></p>
+  {body_strip()}
   <section class="card"><span class="tag">coverage — meetings on the record, by month</span>
     <div class="covstrip">{bars}</div></section>
   <div class="grid2">
@@ -354,7 +457,7 @@ def page_meeting(m, manifest, base):
                   for t in m["tracks"])
     addl = (f'<a class="dl" href="/app/ad/{m["pid"]}.vtt" download>described .vtt</a>' if m["ad"] else "")
     body = f"""
-  <article class="meeting" data-pid="{esc(m["pid"])}">
+  <article class="meeting" data-pid="{esc(m["pid"])}" data-town="{esc(m["town"])}" data-body="{esc(m["body"])}">
     <div class="mhead">
       <a class="back" href="/app/">← the record</a>
       <h1>{esc(m["title"])}</h1>
@@ -498,13 +601,39 @@ def page_issue(i, manifest, base):
 
 
 def page_search(manifest, base):
-    body = """
+    # The two filters are baked as real <select name=…> inside the form, so a
+    # scoped search is a URL: /app/s?q=override&town=Brookline&body=Select+Board.
+    # That is what makes a filtered result shareable, and it is why they are
+    # form controls rather than script-minted chips — the search page is the
+    # one surface where JavaScript is already load-bearing (the index is read
+    # in the browser), so a control that submits a query string is honest here
+    # in a way it would not be on the home page.
+    towns = _EDITION.get("towns") or []
+    bodies = _EDITION.get("bodies") or []
+    tsel = ""
+    if len(towns) > 1:
+        opts = "".join(f'<option value="{esc(t["town"])}">{esc(t["town"])}</option>'
+                       for t in towns)
+        tsel = ('<label class="filt">town <select name="town" id="townsel">'
+                f'<option value="">every town</option>{opts}</select></label>')
+    bsel = ""
+    if len(bodies) > 1:
+        opts = "".join(
+            f'<option value="{esc(b["body"])}">'
+            f'{esc(b["body"] or "no body recorded")} ({b["meetings"]})</option>'
+            for b in bodies)
+        bsel = ('<label class="filt">body <select name="body" id="bodysel">'
+                f'<option value="">every body</option>{opts}</select></label>')
+    filters = (f'<div class="searchfilters">{tsel}{bsel}</div>'
+               if (tsel or bsel) else "")
+    body = f"""
   <section class="searchpage">
     <h1>Search the record</h1>
     <form class="askform" id="searchform" action="/app/s" method="get">
       <input name="q" id="q" placeholder="a phrase, a topic, a street name…" aria-label="Search">
       <button class="btn primary" type="submit">Search</button>
     </form>
+    {filters}
     <p class="hint" id="search-note">Search runs in your browser over a prebuilt
       lexical index — no query leaves this page. (Vector search stays at the desk.)</p>
     <div id="results"><noscript><p class="hint">Search needs JavaScript.
@@ -561,7 +690,9 @@ def page_covenant(manifest, base):
       <li><b>Static files only.</b> No backend, no compute, no accounts.</li>
       <li><b>No cookies, no analytics, no telemetry.</b> We will not know our
         reader count, and we ship anyway.</li>
-      <li><b>Follows live in your browser</b> (localStorage); notifications are RSS.</li>
+      <li><b>Follows and your chosen town live in your browser</b>
+        (localStorage, never a cookie — a cookie would ride every request and
+        become the server's business); notifications are RSS.</li>
       <li><b>Embeds are click-to-load</b> (youtube-nocookie) — nothing plays,
         and no third party sees you, until you tap.</li>
       <li><b>No video rehosting.</b> Tapes are embedded or transcript-first; a
@@ -598,7 +729,8 @@ def page_officials(officials, manifest, base):
             f'{_rollcell(v.get("vote",""))}<span class="vc-date">{esc((v.get("date") or "")[5:])}</span></a>'
             for v in reversed(o.get("votes", [])[-24:]))
         cards.append(
-            f'<div class="offcard"><div class="offhead"><b>{esc(o["name"])}</b>'
+            f'<div class="offcard" data-town="{esc(o.get("town", ""))}">'
+            f'<div class="offhead"><b>{esc(o["name"])}</b>'
             f'<span class="lmeta">{esc(o.get("town",""))}</span></div>'
             f'<div class="offtally"><span class="rc y">{o["yes"]} aye</span>'
             f'<span class="rc n">{o["no"]} no</span>'
@@ -935,8 +1067,10 @@ self.addEventListener('fetch', e => {{
 
 
 def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
-               analytics=None, graph=None):
+               analytics=None, graph=None, towns=None):
     v = manifest["version"]
+    # before a single stub renders: the chrome needs to know what it may offer
+    set_edition(towns)
     (out / "index.html").write_text(page_home(meetings, issues, stats, manifest, base), encoding="utf-8")
     (out / "s" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "s" / "index.html").write_text(page_search(manifest, base), encoding="utf-8")

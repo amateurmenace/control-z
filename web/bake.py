@@ -47,6 +47,14 @@ def islug(iid: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]", "_", iid)[:96]
 
 
+def nslug(name: str) -> str:
+    """A CSS/DOM-safe handle for a town or body name. It is NOT the scope key —
+    the reader scopes on the town string the corpus actually stores, because
+    two towns could slug alike and a filter that silently merged them would be
+    the worst possible failure for a record about *which* town said what."""
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") or "none"
+
+
 def _thumb(m: dict) -> str:
     v = m.get("video_id") or ""
     return f"https://i.ytimg.com/vi/{v}/hqdefault.jpg" if v else ""
@@ -371,17 +379,25 @@ class Bake:
                       "meetings": n, "pct": round(100 * n / max(1, n_live))}
                      for c, n in sorted(lang_meetings.items(),
                                         key=lambda kv: -kv[1])]
-        # coverage strip: meetings per month, stacked per body
+        # coverage strip: meetings per month, stacked per body — plus `cells`,
+        # the per-(town, body) breakdown the reader needs to redraw the strip
+        # under a scope. `bodies` alone cannot answer "Brookline's Select Board
+        # in March", and a strip that ignored the reader's scope while the
+        # cards beside it obeyed it would be a chart that quietly lies.
         cov = {}
         for m in meetings:
             mo = _month(m["date"]) or "undated"
             body = m["body"] or "—"
-            cov.setdefault(mo, {"month": mo, "total": 0, "bodies": {}})
+            cov.setdefault(mo, {"month": mo, "total": 0, "bodies": {},
+                                "cells": {}})
             cov[mo]["total"] += 1
             cov[mo]["bodies"][body] = cov[mo]["bodies"].get(body, 0) + 1
+            cell = f'{m["town"]}␟{m["body"]}'
+            cov[mo]["cells"][cell] = cov[mo]["cells"].get(cell, 0) + 1
         coverage = [cov[k] for k in sorted(cov)]
         # dashboard rails
         new = [{"pid": m["pid"], "title": m["title"], "body": m["body"],
+                "town": m["town"],
                 "date": m["date"], "minutes": _minutes(m["duration"]),
                 "video_id": m["video_id"], "thumb": m["thumb"]}
                for m in sorted(meetings, key=lambda x: (x["date"] or ""),
@@ -429,6 +445,64 @@ class Bake:
         _json(self.out / "stats.json", stats)
         self.note("stats.json", _gz_of(stats))
         return stats
+
+    # -- towns + bodies (what the reader is allowed to scope to) ----------
+    def bake_towns(self, meetings):
+        """The scope plane: which towns this edition serves, and which public
+        bodies each of them actually posted.
+
+        It is derived from the pressed meetings and from nothing else. The
+        steward console can name a body that has never met (`sources.bodies_of`
+        reads configuration on purpose, so a new committee reads as real before
+        its first meeting), but a reader's filter must not: an option that
+        always returns nothing is a promise the edition cannot keep, and the
+        reader has no server to ask why. So the console's list is aspirational
+        and this one is observed, and the difference is deliberate.
+
+        `untowned` is the honest remainder. A meeting whose town the record
+        never learned belongs to no scope, and dropping it out of every scope
+        would make it invisible without ever saying so — so it stays visible
+        everywhere and is *counted here*, which is what lets the reader's scope
+        line admit it out loud."""
+        towns, bodies = {}, {}
+        untowned = 0
+        for m in meetings:
+            town, body = m["town"] or "", m["body"] or ""
+            date = m["date"] or ""
+            if not town:
+                untowned += 1
+            else:
+                t = towns.setdefault(town, {
+                    "town": town, "slug": nslug(town), "meetings": 0,
+                    "hours": 0.0, "first": "", "last": "", "_bodies": {}})
+                t["meetings"] += 1
+                t["hours"] += (m["duration"] or 0) / 3600
+                if date:
+                    t["first"] = min(t["first"] or date, date)
+                    t["last"] = max(t["last"], date)
+                t["_bodies"][body] = t["_bodies"].get(body, 0) + 1
+            b = bodies.setdefault(body, {"body": body, "slug": nslug(body),
+                                         "meetings": 0, "_towns": set()})
+            b["meetings"] += 1
+            if town:
+                b["_towns"].add(town)
+        out_towns = []
+        for t in sorted(towns.values(), key=lambda r: r["town"]):
+            bl = [{"body": k, "slug": nslug(k), "meetings": v}
+                  for k, v in sorted(t.pop("_bodies").items(),
+                                     key=lambda kv: (-kv[1], kv[0]))]
+            out_towns.append({**t, "hours": round(t["hours"], 1), "bodies": bl})
+        out_bodies = []
+        for b in sorted(bodies.values(), key=lambda r: (-r["meetings"], r["body"])):
+            # pop BEFORE the spread: `{**b, ...}` copies every key first, so a
+            # set left in `b` would ride into the JSON and fail the press
+            in_towns = sorted(b.pop("_towns"))
+            out_bodies.append({**b, "towns": in_towns})
+        doc = {"towns": out_towns, "bodies": out_bodies, "untowned": untowned,
+               "meetings": len(meetings)}
+        _json(self.out / "towns.json", doc)
+        self.note("towns.json", _gz_of(doc))
+        return doc
 
     # -- officials (accountability, officials-only per specs/14 §8) --------
     def bake_officials(self, meetings):
@@ -573,8 +647,13 @@ class Bake:
 
     # -- search index (prefix-sharded inverted index) --------------------
     def bake_search(self, meetings):
+        # `town` rides in the search meta so a scoped search can filter its
+        # own hits: the index is one flat posting list over every town, and
+        # without the town on each meeting the reader would have to fetch a
+        # meeting document per hit to find out whether to show it.
         meta = [{"pid": m["pid"], "title": m["title"], "body": m["body"],
-                 "date": m["date"], "video_id": m["video_id"],
+                 "town": m["town"], "date": m["date"],
+                 "video_id": m["video_id"],
                  "source_kind": m["source_kind"]} for m in meetings]
         segs = []                       # [mi, t, speaker, text] — segId = index
         index = {}                      # term -> [segId,...]
@@ -710,6 +789,7 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str) -> dict:
     by_id = {m["id"]: m for m in meetings}
     issues = b.bake_issues(by_id)
     stats = b.bake_stats(meetings, issues)
+    towns = b.bake_towns(meetings)
     officials = b.bake_officials(meetings)
     analytics = b.bake_analytics(meetings)
     graph = b.bake_graph(issues)
@@ -721,9 +801,11 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str) -> dict:
     # the reader (static assets) + the HTML stubs
     emit.emit_assets(out, version, manifest)
     emit.emit_stubs(out, meetings, issues, stats, manifest, site_base,
-                    officials=officials, analytics=analytics, graph=graph)
+                    officials=officials, analytics=analytics, graph=graph,
+                    towns=towns)
 
-    print(f"  {len(meetings)} meetings · {len(issues)} issues · "
+    print(f"  {len(towns['towns'])} town(s) · {len(towns['bodies'])} bodies · "
+          f"{len(meetings)} meetings · {len(issues)} issues · "
           f"{idx['segments']} segments indexed ({idx['terms']} terms) · "
           f"{stats['counts']['documents']} documents · "
           f"{stats['counts']['votes']} roll calls · {len(officials)} officials · "

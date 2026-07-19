@@ -77,6 +77,100 @@ class TestCanonTwin(unittest.TestCase):
                          f"JS canon disagreed with the golden table:\n{r.stdout}{r.stderr}")
 
 
+class TestScopeResolution(unittest.TestCase):
+    """The reader's `resolve()` decides which town every page obeys, and it is
+    the one place specs/17 §14's trap is either sprung or defused. So it is
+    executed for real in node against a table, rather than trusted to reading
+    — the same treatment canon() gets, for the same reason."""
+
+    # (label, edition towns, stored choice, query string, expected fields)
+    TABLE = [
+        ("two towns, first visit: nothing is presumed",
+         ["Brookline", "Boston"], None, "", {"town": "", "from": "none"}),
+        ("the stored choice governs",
+         ["Brookline", "Boston"], "Brookline", "", {"town": "Brookline", "from": "stored"}),
+        ("a ?town= link overrides the choice WITHOUT replacing it",
+         ["Brookline", "Boston"], "Brookline", "?town=Boston",
+         {"town": "Boston", "from": "link", "stored": "Brookline"}),
+        ("the link's town is matched case-insensitively",
+         ["Brookline", "Boston"], None, "?town=bOsToN",
+         {"town": "Boston", "from": "link"}),
+        ("a ?town= naming a town this edition lacks scopes to nothing, "
+         "rather than to a town that looks close",
+         ["Brookline", "Boston"], "Brookline", "?town=Cambridge",
+         {"town": "", "from": "link", "stored": "Brookline"}),
+        ("one town: scoped without ever being asked",
+         ["Brookline"], None, "", {"town": "Brookline", "from": "only"}),
+        ("a stored town this pressing dropped is reported, not obeyed",
+         ["Boston"], "Brookline", "", {"town": "", "lost": "Brookline"}),
+        ("?town= empty means the whole record for this visit",
+         ["Brookline", "Boston"], "Brookline", "?town=",
+         {"town": "", "from": "link-all"}),
+        ("the body filter rides alongside the town",
+         ["Brookline"], None, "?body=Select+Board",
+         {"town": "Brookline", "body": "Select Board"}),
+    ]
+
+    def test_resolve_runs_in_node(self):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not available")
+        js = (REPO / "web" / "static" / "app.js").read_text()
+        fn = re.search(r"  function resolve\(ed\) \{.+?\n  \}", js, re.S)
+        self.assertTrue(fn, "resolve() not found in the reader — did it move?")
+        cases = [{"label": l, "towns": t, "stored": s, "qs": q, "want": w}
+                 for l, t, s, q, w in self.TABLE]
+        body = "\n".join([
+            "let STORED = null, QS = '';",
+            "const readTown = () => STORED || '';",
+            "const location = { get search() { return QS; } };",
+            fn.group(0),
+            "const CASES = " + json.dumps(cases) + ";",
+            "let bad = 0;",
+            "for (const c of CASES) {",
+            "  STORED = c.stored; QS = c.qs;",
+            "  const ed = { towns: c.towns.map(t => ({ town: t })) };",
+            "  const got = resolve(ed);",
+            "  for (const [k, v] of Object.entries(c.want)) {",
+            "    if ((got[k] || '') !== v) {",
+            "      console.log('FAIL [' + c.label + '] ' + k + ' = ' +",
+            "        JSON.stringify(got[k]) + ' want ' + JSON.stringify(v));",
+            "      bad++; } } }",
+            "process.exit(bad ? 1 : 0);",
+        ])
+        r = subprocess.run([node, "-e", body], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0,
+                         f"the reader's scope resolution is wrong:\n{r.stdout}{r.stderr}")
+
+    def test_an_override_never_writes_the_choice(self):
+        """The rule that keeps a shared link from silently re-homing a reader:
+        only chooseTown() may touch storage, and it is only ever called from a
+        click. resolve() and banner() must never write."""
+        js = (REPO / "web" / "static" / "app.js").read_text()
+        # Walk back from each call site to the thing that owns it. Only a
+        # deliberate act of choosing may reach storage.
+        ALLOWED = {"const writeTown", "function chooseTown", "b.onclick"}
+        sites = [m.start() for m in re.finditer(r"writeTown\(", js)]
+        self.assertTrue(sites, "writeTown disappeared")
+        for at in sites:
+            before = js[:at]
+            owner = max(
+                ((before.rfind(k), k) for k in
+                 ("const writeTown", "function chooseTown", "b.onclick",
+                  "function resolve", "function banner", "function paintScope",
+                  "function initScope", "function runSearch")),
+                key=lambda kv: kv[0])[1]
+            self.assertIn(owner, ALLOWED,
+                          f"writeTown reached from {owner} — the choice must "
+                          f"only be written when the reader makes one")
+        # and resolve() itself is pure over (edition, location, storage)
+        fn = re.search(r"  function resolve\(ed\) \{.+?\n  \}", js, re.S).group(0)
+        for forbidden in ("writeTown", "localStorage.setItem", "fetch("):
+            self.assertNotIn(forbidden, fn,
+                             f"resolve() must not {forbidden} — it is read-only")
+
+
 class TestBakeEdition(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -322,6 +416,216 @@ class TestBakeEdition(unittest.TestCase):
         # the SVG is inline (no external lib — CSP holds) and has a table twin
         self.assertIn("<svg", page)
         self.assertIn("the same, as a table", page)
+
+
+    # -- the scope plane: towns and bodies (specs/17 §8) -------------------
+
+    def test_towns_plane_is_observed_not_configured(self):
+        """towns.json is derived from the pressed meetings. The steward's
+        source rules can name a body that has never met; the reader's filter
+        must not, because an option that always returns nothing is a promise a
+        static edition has no way to explain."""
+        t = self._read("towns.json")
+        self.assertEqual([x["town"] for x in t["towns"]], ["Testville"])
+        town = t["towns"][0]
+        self.assertEqual(town["meetings"], 2)
+        self.assertEqual(town["first"], "2026-03-10")
+        self.assertEqual(town["last"], "2026-06-18")
+        self.assertEqual([b["body"] for b in town["bodies"]], ["Board"])
+        self.assertEqual(town["bodies"][0]["meetings"], 2)
+        self.assertEqual([b["body"] for b in t["bodies"]], ["Board"])
+        self.assertEqual(t["bodies"][0]["towns"], ["Testville"])
+        self.assertEqual(t["untowned"], 0)      # every seeded meeting has a town
+
+    def test_search_meta_carries_town_for_scoping(self):
+        """A scoped search filters its own hits from the meta plane; without
+        town on each meeting it would have to fetch a document per hit."""
+        meta = self._read("search/meta.json")
+        self.assertTrue(all(m["town"] == "Testville" for m in meta))
+        self.assertTrue(all(m["body"] == "Board" for m in meta))
+
+    def test_coverage_carries_town_body_cells(self):
+        """The strip has to be redrawable under a scope, or it contradicts the
+        scoped list beside it."""
+        s = self._read("stats.json")
+        cov = s["coverage"]
+        self.assertTrue(cov)
+        for month in cov:
+            self.assertIn("cells", month)
+            self.assertEqual(sum(month["cells"].values()), month["total"])
+        self.assertIn("Testville␟Board", cov[0]["cells"])
+        # the home rail's cards carry their town, so the filter needs no fetch
+        self.assertTrue(all("town" in m for m in s["new"]))
+
+    def test_single_town_edition_names_it_and_does_not_nag(self):
+        """One town is not a question. The bar states it; there is no picker,
+        no prompt, and nothing that blocks the page."""
+        home = (self.out / "index.html").read_text()
+        self.assertIn('class="scope one"', home)
+        self.assertIn("the only town on this edition", home)
+        self.assertNotIn('class="scopetown"', home)
+        self.assertNotIn("scopelink", home)      # no footer re-chooser either
+        # and the picker is on every page, not just home
+        for rel in ("s/index.html", "m/vid1/index.html", "officials/index.html"):
+            self.assertIn('id="scope"', (self.out / rel).read_text(), rel)
+
+    def test_scope_banner_slot_on_every_page(self):
+        """The un-trapping banner lands above what the reader came for, on
+        every page — so it is markup, not something script invents late."""
+        for stub in self.out.rglob("index.html"):
+            self.assertIn('id="scopebanner"', stub.read_text(), str(stub))
+
+    def test_body_filter_degrades_to_a_readable_sentence(self):
+        """JS-off there is no dead control: the filter rail is empty and
+        hidden, and the same fact ships as prose with checkable counts."""
+        home = (self.out / "index.html").read_text()
+        self.assertIn('id="bodyfilter"', home)
+        self.assertIn('hidden', home)
+        self.assertRegex(home, r'class="bodylist"[^>]*>Board <b>2</b>')
+        self.assertIn("With JavaScript off this page lists the whole record",
+                      home)
+        # every card carries what the filter needs
+        self.assertIn('data-body="Board"', home)
+        self.assertIn('data-town="Testville"', home)
+
+    def test_meeting_stub_declares_its_town(self):
+        """The deep-link trap without a query string: a meeting from another
+        town. The banner needs the meeting's own town in the markup."""
+        stub = (self.out / "m" / "vid1" / "index.html").read_text()
+        self.assertIn('data-town="Testville"', stub)
+        self.assertIn('data-body="Board"', stub)
+
+    def test_officials_cards_carry_town(self):
+        page = (self.out / "officials" / "index.html").read_text()
+        self.assertIn('class="offcard" data-town="Testville"', page)
+
+    def test_search_filters_appear_only_when_they_can_do_something(self):
+        """One town and one body: a select with a single option is a control
+        that cannot change anything, so it is not emitted."""
+        page = (self.out / "s" / "index.html").read_text()
+        self.assertNotIn('id="townsel"', page)
+        self.assertNotIn('id="bodysel"', page)
+
+    def test_reader_still_reads_with_the_backend_dark(self):
+        """The load-bearing property: nothing added here reaches for a server.
+        The scope planes are files in the edition, and the only fetches the
+        reader makes are same-origin paths under /app/."""
+        js = (REPO / "web" / "static" / "app.js").read_text()
+        self.assertIn("towns.json", js)
+        self.assertNotIn("http://", js.replace("http://www.w3.org", ""))
+        for host in ("/api/", "localhost"):
+            self.assertNotIn(host, js)
+        self.assertTrue((self.out / "towns.json").exists())
+
+
+class TestScopeOnTwoTowns(unittest.TestCase):
+    """A second town changes the shape of the chrome, and only a second town
+    can exercise the trap specs/17 §14 leaves open — so it gets its own
+    pressing rather than a bolt-on to the single-town corpus."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = Path(cls.tmp.name)
+        db = root / "two.db"
+        TestBakeEdition._seed(db)
+        from memory.store import Corpus
+        c = Corpus(str(db))
+        segs = [{"start": i * 10.0, "end": i * 10 + 9, "speaker": "Chair",
+                 "text": f"the zoning appeal item {i}"} for i in range(4)]
+        c.replace_segments("vid3", segs)
+        c.upsert_meeting({"id": "vid3", "title": "Zoning Board — July",
+                          "date": "2026-07-02", "town": "Otherville",
+                          "body": "Zoning Board of Appeals",
+                          "source_kind": "youtube", "video_id": "vid3",
+                          "url": "https://youtube.com/watch?v=vid3",
+                          "url_canon": "youtube:vid3", "duration": 60,
+                          "n_segments": len(segs), "status": "live"})
+        # a meeting the record never learned a town for — it must not vanish
+        c.replace_segments("vid4", segs)
+        c.upsert_meeting({"id": "vid4", "title": "Unknown provenance",
+                          "date": "2026-07-03", "town": "", "body": "",
+                          "source_kind": "youtube", "video_id": "vid4",
+                          "url": "https://youtube.com/watch?v=vid4",
+                          "url_canon": "youtube:vid4", "duration": 60,
+                          "n_segments": len(segs), "status": "live"})
+        cls.out = root / "app"
+        from web import bake
+        bake.bake(str(db), str(cls.out), "9.9.9", "https://example.org")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def _read(self, rel):
+        return json.loads((self.out / rel).read_text())
+
+    def test_untowned_meeting_is_counted_never_filed_under_a_town(self):
+        t = self._read("towns.json")
+        self.assertEqual([x["town"] for x in t["towns"]],
+                         ["Otherville", "Testville"])
+        self.assertEqual(t["untowned"], 1)
+        self.assertEqual(t["meetings"], 4)
+        # it belongs to no town, so it is in no town's bucket
+        self.assertEqual(sum(x["meetings"] for x in t["towns"]), 3)
+        # but its (empty) body is still a real filter option
+        self.assertIn("", [b["body"] for b in t["bodies"]])
+
+    def test_picker_offers_every_town_plus_the_whole_record(self):
+        home = (self.out / "index.html").read_text()
+        self.assertIn('data-town="Testville"', home)
+        self.assertIn('data-town="Otherville"', home)
+        self.assertIn("the whole record", home)
+        self.assertNotIn("the only town on this edition", home)
+        # re-choosable from the footer, and the anchor works JS-off
+        self.assertIn('class="scopelink" href="#scope"', home)
+
+    def test_search_gets_real_filters_when_there_is_a_choice(self):
+        page = (self.out / "s" / "index.html").read_text()
+        self.assertIn('<select name="town" id="townsel"', page)
+        self.assertIn('<select name="body" id="bodysel"', page)
+        self.assertIn("every town", page)
+        self.assertIn("no body recorded", page)   # the untowned meeting's body
+
+    def test_bodies_are_per_town_not_a_flat_list(self):
+        t = self._read("towns.json")
+        other = next(x for x in t["towns"] if x["town"] == "Otherville")
+        self.assertEqual([b["body"] for b in other["bodies"]],
+                         ["Zoning Board of Appeals"])
+        test = next(x for x in t["towns"] if x["town"] == "Testville")
+        self.assertEqual([b["body"] for b in test["bodies"]], ["Board"])
+
+    def test_coverage_cells_separate_the_towns(self):
+        cov = self._read("stats.json")["coverage"]
+        july = next(m for m in cov if m["month"] == "2026-07")
+        self.assertEqual(july["cells"]["Otherville␟Zoning Board of Appeals"], 1)
+        self.assertEqual(july["cells"]["␟"], 1)   # the untowned meeting
+        self.assertEqual(july["total"], 2)
+
+    def test_two_town_edition_presses_idempotently(self):
+        """The scope plane is derived from the corpus; nothing in it may vary
+        between two pressings of the same record."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db = root / "two.db"
+            TestBakeEdition._seed(db)
+            from memory.store import Corpus
+            c = Corpus(str(db))
+            c.replace_segments("vid3", [{"start": 0.0, "end": 9, "text": "zoning"}])
+            c.upsert_meeting({"id": "vid3", "title": "Zoning Board — July",
+                              "date": "2026-07-02", "town": "Otherville",
+                              "body": "Zoning Board of Appeals",
+                              "source_kind": "youtube", "video_id": "vid3",
+                              "url_canon": "youtube:vid3", "duration": 60,
+                              "n_segments": 1, "status": "live"})
+            from web import bake
+            bake.bake(str(db), str(root / "a"), "1.0.0", "https://x.org")
+            bake.bake(str(db), str(root / "b"), "1.0.0", "https://x.org")
+            for p in sorted((root / "a").rglob("*")):
+                if p.is_file():
+                    rel = p.relative_to(root / "a")
+                    self.assertEqual(p.read_bytes(), (root / "b" / rel).read_bytes(),
+                                     f"{rel} differs between two bakes")
 
 
 class TestIdempotence(unittest.TestCase):
