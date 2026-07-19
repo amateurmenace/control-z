@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from web import canon, tools
+from web import canon, emit, tools
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -309,6 +309,32 @@ class TestBakeEdition(unittest.TestCase):
         door = (self.out / "t" / "stencil" / "index.html").read_text()
         self.assertIn("desk", door)
         self.assertIn("Get the desktop app", door)
+
+    def test_covenant_explains_the_licence_and_links_the_source(self):
+        """The covenant page named AGPL-3.0 for a year while the repository was
+        MIT — a claim nobody could check because the page never said where to
+        look. Both licences are named, both are explained in words a resident
+        reads without a lawyer, and the source and LICENSING.md are one click
+        away. A regression back to the bare word fails here."""
+        cov = (self.out / "covenant" / "index.html").read_text()
+        self.assertIn("AGPL-3.0", cov)
+        self.assertIn("CC BY-SA 4.0", cov)
+        # the consequence, not the mechanism: what a resident actually gets
+        self.assertIn("run their own copy", cov)
+        self.assertIn("owes those people the changed program", cov)
+        # the record and the code are told apart, and the town's own record
+        # is not claimed by either
+        self.assertIn("The meetings belong to the town", cov)
+        # a claim with a dead link behind it is worse than no claim
+        self.assertIn(f'href="{emit.SOURCE_REPO}"', cov)
+        self.assertIn(f'href="{emit.LICENSING_DOC}"', cov)
+        self.assertIn("LICENSING.md", cov)
+        # it must read with JavaScript off, like the rest of the edition: the
+        # prose is baked into the document, not injected by app.js, and nothing
+        # holds it back with hidden
+        body = cov.split('<section class="covpage">')[1].split("</section>")[0]
+        self.assertIn("The software is AGPL-3.0", body)
+        self.assertNotIn("hidden", body)
 
     def test_feeds(self):
         self.assertTrue((self.out / "feeds" / "firehose.xml").exists())

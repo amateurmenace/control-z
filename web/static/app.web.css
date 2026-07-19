@@ -291,6 +291,9 @@ mark { background: rgba(169,122,22,.28); color: inherit; border-radius: 2px; }
 .covlist li { padding-left: 20px; position: relative; }
 .covlist li::before { content: "·"; position: absolute; left: 6px;
   color: var(--memory); font-weight: 700; }
+.covpage h2 { font-family: var(--head); font-size: 19px; margin: 26px 0 0;
+  padding-top: 18px; border-top: 1px solid var(--line); }
+.covpage .covwhy { max-width: 66ch; color: var(--cream-dim); margin: 8px 0 0; }
 
 /* ---------- doors ---------- */
 .door { max-width: 760px; }

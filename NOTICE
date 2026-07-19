@@ -1,7 +1,36 @@
-control-z — third-party notices
-===============================
+control-z — licences and third-party notices
+============================================
 
-The code in this repository is MIT (see LICENSE). The tools also download
+Two licences, drawn along one line
+-----------------------------------
+
+This repository is splitting in two, and the halves carry different terms.
+
+  control-z — czcore and the nine Resolve tools (pivot, stencil, scribe,
+  clear, rise, depth, grabber, slate, indexer)          MIT — see LICENSE
+
+  the civic stack — brand, memory, web, record, highlighter, publisher,
+  interpreter, narrator, suite       AGPL-3.0 — see LICENSE-AGPL-3.0.txt
+
+The reason is the network clause. AGPL-3.0 §13 obliges anyone who runs a
+*modified* version as a network service to offer their users its source.
+publicrecord.studio is such a service, so the clause does real work: a
+vendor cannot take publicly-funded civic code, host it as a black box, and
+sell a town its own record back. A desktop Resolve tool has no server, the
+clause never fires, and MIT maximises adoption instead. MIT flows into
+AGPL, so the civic stack depends on the Resolve tools freely; nothing flows
+the other way.
+
+Releases through v1.9.0 were published under MIT and remain MIT — a licence
+already granted cannot be withdrawn. The relicensing binds future releases
+of the civic stack only. LICENSING.md explains all of this at length,
+including the unresolved question of who holds copyright in contributed
+code.
+
+Third-party notices
+-------------------
+
+The tools also download
 machine-learning models on first use. Those models are NOT part of this
 repository and carry their own licenses — all permissive, never CC-BY-NC,
 never gated behind a login. Each shows its license card before downloading,
@@ -76,3 +105,8 @@ Data shipped in this repository:
                                            glossary seeds (do-not-translate
                                            names + vetted civic terms), marked
                                            "suggested" until a human reviews.
+
+Content is licensed separately from code. The glossaries above, and the
+material the record publishes — meetings, transcripts, issue pages — are
+CC BY-SA 4.0. Neither copyleft licence above reaches them, and CC BY-SA
+does not reach the code. Two bodies of material, two licences, no overlap.

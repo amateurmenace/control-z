@@ -24,6 +24,13 @@ from web import tools
 
 REPO = Path(__file__).resolve().parents[1]
 DMG_LATEST = "https://github.com/amateurmenace/control-z/releases/latest"
+
+# Where a reader goes to read the program that pressed what they are reading.
+# The covenant page promises the source is published; a promise with a dead
+# link behind it is worse than no promise, so these are constants and a test
+# asserts the covenant page carries them.
+SOURCE_REPO = "https://github.com/amateurmenace/control-z"
+LICENSING_DOC = SOURCE_REPO + "/blob/main/LICENSING.md"
 CSP = ("default-src 'self'; base-uri 'self'; form-action 'self'; "
        "frame-src https://www.youtube-nocookie.com; "
        "img-src 'self' https://i.ytimg.com data:; "
@@ -702,8 +709,33 @@ def page_covenant(manifest, base):
       <li><b>Corrections annotate, never rewrite.</b> A takedown path reaches the steward.</li>
       <li><b>Anti-lock-in.</b> Every meeting downloads as transcript and every
         timeline as data — the record is yours to keep.</li>
-      <li><b>Licensed to stay free.</b> AGPL-3.0 for the code, CC BY-SA 4.0 for the record.</li>
+      <li><b>Licensed to stay free.</b> AGPL-3.0 for the code, CC BY-SA 4.0 for
+        the record — and below, in plain words, what that buys you.</li>
     </ul>
+    <h2>What the licence means for you</h2>
+    <p class="covwhy">Three different things are licensed here, and the
+      difference matters more than the names do.</p>
+    <ul class="covlist">
+      <li><b>The meetings belong to the town.</b> They were public when they
+        happened and they are public now. This site supplements the official
+        record; it does not replace it, and it cannot become the only place the
+        town's business can be found.</li>
+      <li><b>The record on this site is CC BY-SA 4.0.</b> Anyone may copy it,
+        quote it, republish it, or build something else on top of it — so long
+        as they credit it and pass the same freedom on to whoever comes next.</li>
+      <li><b>The software is AGPL-3.0</b> — a licence whose whole purpose is
+        that a public thing stays public. The program that pressed this edition
+        is published in full. Anyone can run their own copy: the town, the
+        library, a neighbor with a laptop. And anyone who changes it and runs it
+        as a service for other people owes those people the changed program too.
+        So this record cannot be taken away, fenced off, or sold back to the
+        town, and there is no version of it that quietly becomes somebody's
+        product.</li>
+    </ul>
+    <p class="hint">The source is at
+      <a href="{SOURCE_REPO}">github.com/amateurmenace/control-z</a>; which
+      licence covers which part, in full, is in
+      <a href="{LICENSING_DOC}">LICENSING.md</a>.</p>
     <p class="hint">A strict Content-Security-Policy on every page enforces all
       of this in the browser: no third-party script, font, or beacon can load.</p>
     <p class="hint">This edition was pressed {esc(manifest.get('edition_date',''))}
