@@ -453,7 +453,7 @@ def _file_submission(corpus, sub: dict) -> bool:
 
 
 def discover(corpus, town: str, body: str, source: str, limit: int = 25,
-             check_captions: bool = True) -> dict:
+             check_captions: bool = True, rules: Optional[dict] = None) -> dict:
     """Poll one source and file what the record has never seen.
 
     Dedupe is tier one only — the canonical URL — and deliberately so: tiers
@@ -461,10 +461,24 @@ def discover(corpus, town: str, body: str, source: str, limit: int = 25,
     words are what approval unlocks. A duplicate that slips past the URL tier
     meets the other two inside ingest, where `memory.ingest` already runs them.
 
+    **`rules` is what makes intake default-deny, and it is not optional for a
+    nightly poll.** Given a source config it runs `sources.plan` — the same
+    function the console's preview runs — so what a poll files and what the
+    preview promised are the same list computed the same way. Without it this
+    function files every entry in the feed, which is right for the manual
+    `--source --body` path (a human named the body, and that naming *is* the
+    rule) and catastrophic for a scheduler: the first nightly run filed all
+    45 entries from three channels, PSAs and ribbon cuttings included, because
+    the rules existed in `record/sources.py` and nothing on this path called
+    them. The preview said "would file 4" and the poll filed 30; a preview that
+    does not predict the poll is worse than no preview.
+
     Returns `{"polled", "known", "filed", "errors"}` with the source's own
-    labels alongside. Every entry in `errors` is a dict with a `kind`, because
-    the nightly scheduler is an honorary user (specs/17 §4) and an honorary
-    user reads machine-readable failure."""
+    labels alongside — plus `excluded`, `unmatched` and `capped` when rules
+    ran, because what a poll declined to file is the steward's business.
+    Every entry in `errors` is a dict with a `kind`, because the nightly
+    scheduler is an honorary user (specs/17 §4) and an honorary user reads
+    machine-readable failure."""
     out: dict = {"source": source, "town": town, "body": body,
                  "polled": 0, "known": 0, "filed": 0, "errors": []}
     try:
@@ -480,6 +494,23 @@ def discover(corpus, town: str, body: str, source: str, limit: int = 25,
         return out
 
     out["polled"] = len(items)
+    if rules is not None:
+        from .. import sources as _rules
+        p = _rules.plan(items, rules)
+        # The body now comes from whichever rule matched, per item, rather than
+        # from one string stamped on everything the feed happened to carry.
+        items = p["file"]
+        out.update(excluded=len(p["excluded"]), unmatched=len(p["unmatched"]),
+                   too_old=len(p["too_old"]), capped=p["capped"],
+                   cap=p["cap"])
+        # `unmatched` is not a failure — it is a rule that does not exist yet,
+        # and `sources.suggest_rules` turns it into one the steward can accept
+        # with a click. It rides in `errors` so the nightly summary surfaces it
+        # rather than leaving a body quietly unpolled for a month.
+        for row in p["unmatched"]:
+            out["errors"].append({"kind": "unmatched", "url": row.get("url", ""),
+                                  "title": row.get("title", ""),
+                                  "detail": row.get("reason", "")})
     for it in items:
         key = canon(it["url"])
         if not key:
@@ -521,7 +552,9 @@ def discover(corpus, town: str, body: str, source: str, limit: int = 25,
                 # segment — the steward's approve route would 404 on exactly
                 # the submissions unusual enough to need a human.
                 "id": submission_id(key), "url": it["url"], "url_canon": key,
-                "town": town, "body": body, "date": "",
+                # The rule that matched names the body; the caller's `body` is
+                # the fallback for the manual path, where a human named it.
+                "town": town, "body": it.get("body") or body, "date": "",
                 "note": " · ".join(n for n in notes if n)})
         except Exception as e:
             out["errors"].append({"kind": "not_filed", "url": it["url"],
@@ -554,6 +587,7 @@ def poll_town(corpus, town_row: dict, limit: int = 25) -> dict:
 
     out: dict = {"town": town, "slug": str(town_row.get("slug") or ""),
                  "sources": 0, "polled": 0, "known": 0, "filed": 0,
+                 "excluded": 0, "unmatched": 0, "capped": 0,
                  "errors": [], "results": []}
     first = True
     for src in sources:
@@ -571,11 +605,15 @@ def poll_town(corpus, town_row: dict, limit: int = 25) -> dict:
         if not first:
             _pause(SOURCE_GAP)      # a beat between one town's own feeds
         first = False
+        # `rules=src` is the whole of default-deny on this path: the source
+        # config carries the body rules, the exclusions and `max_per_poll`,
+        # and passing it is what makes a nightly poll file the same list the
+        # console's preview promised.
         r = discover(corpus, town, str(src.get("body", "") or ""), url,
-                     limit=limit)
+                     limit=limit, rules=src)
         out["sources"] += 1
-        for k in ("polled", "known", "filed"):
-            out[k] += r[k]
+        for k in ("polled", "known", "filed", "excluded", "unmatched", "capped"):
+            out[k] += r.get(k, 0)
         out["errors"].extend(r["errors"])
         out["results"].append(r)
     return out
@@ -586,19 +624,79 @@ def poll_town(corpus, town_row: dict, limit: int = 25) -> dict:
 # --------------------------------------------------------------------------
 
 def _print_run(r: dict) -> None:
-    print(f"  polled {r['polled']} · known {r['known']} · filed {r['filed']}")
+    line = (f"  polled {r['polled']} · known {r['known']} · filed {r['filed']}")
+    # What default-deny turned away is the number that proves it ran. A poll
+    # that reports only what it filed cannot be told apart from one with no
+    # rules at all — which is exactly how the first nightly run looked right
+    # while filing every PSA on the channel.
+    if r.get("excluded") or r.get("unmatched") or r.get("capped"):
+        line += (f" · excluded {r.get('excluded', 0)}"
+                 f" · unmatched {r.get('unmatched', 0)}")
+        if r.get("capped"):
+            line += f" · {r['capped']} held back by the cap"
+    print(line)
     for e in r["errors"]:
         what = e.get("title") or e.get("url") or e.get("source", "")
         print(f"  [{e['kind']}] {what}")
         print(f"      {e['detail']}")
 
 
+def _poll_all_towns(args) -> int:
+    """Every live town's own sources — the shape the nightly scheduler runs.
+
+    This is deliberately a separate path from `--source` rather than a loop
+    bolted onto it: the per-town rules live in `towns.sources` where a steward
+    edits them, and a nightly poll that took its sources from a command line
+    would be polling whatever was true the day somebody wrote the scheduler.
+
+    It files submissions and ingests nothing. `record.pipeline` is the other
+    half, and it only ever reads rows a human approved — so the worst a runaway
+    nightly poll can do is give a steward a long queue."""
+    from record.store import PgCorpus
+
+    corpus = PgCorpus()
+    runs, failed = [], 0
+    try:
+        with corpus._con() as con:
+            towns = [dict(r) for r in con.execute(
+                "SELECT slug, name, sources FROM towns WHERE status='live' "
+                "ORDER BY slug").fetchall()]
+        if not towns and not args.json:
+            print("no live towns configured — run `python -m record.seed_towns`")
+        for t in towns:
+            r = poll_town(corpus, t, limit=args.limit)
+            runs.append(r)
+            if not args.json:
+                print(f"{r['town']}: {r['sources']} source(s)")
+                _print_run(r)
+            if any(e["kind"] in ("throttled", "unreachable", "not_filed")
+                   for e in r["errors"]):
+                failed += 1
+    finally:
+        corpus.close()
+
+    if args.json:
+        print(json.dumps({"towns": runs}, indent=2))
+    else:
+        filed = sum(r["filed"] for r in runs)
+        print(f"\n{len(runs)} town(s) polled · {filed} submission(s) filed "
+              f"· awaiting a steward")
+    # Non-zero when a feed was unreachable, so a scheduler notices. A nightly
+    # job that always exits 0 is a nightly job nobody ever reads.
+    return 1 if failed else 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog="record.connectors.youtube",
         description="Poll a town body's YouTube channel and file what is new.")
-    ap.add_argument("--source", required=True,
+    ap.add_argument("--source", default="",
                     help="channel id (UC…), playlist id (PL…), @handle, or URL")
+    ap.add_argument("--all-towns", action="store_true",
+                    help="poll every live town's configured sources — what the "
+                         "nightly scheduler runs. The intake caps "
+                         "(max_per_poll, the rules' default-deny) are what "
+                         "make this safe to leave alone.")
     ap.add_argument("--town", default="", help="town the meetings belong to")
     ap.add_argument("--body", default="",
                     help="the body that meets (e.g. 'Select Board')")
@@ -610,6 +708,15 @@ def main(argv=None) -> int:
                     help="poll and print; touch no database at all")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args(argv)
+
+    if not args.source and not args.all_towns:
+        ap.error("give me a --source, or --all-towns to poll every live town")
+    if args.source and args.all_towns:
+        ap.error("--source names one feed and --all-towns means all of them; "
+                 "pick one")
+
+    if args.all_towns:
+        return _poll_all_towns(args)
 
     if args.dry_run:
         # Nothing is imported that could write: no store, no DSN, no pool.

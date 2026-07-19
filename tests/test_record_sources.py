@@ -251,3 +251,173 @@ class SpendCapTest(unittest.TestCase):
             out = en.backfill(Ledger(), verbose=False, cap_usd=1.0)
         self.assertTrue(out["available"])
         self.assertEqual(out["embedded"], 0)
+
+
+class NightlyCliTest(unittest.TestCase):
+    """The command the scheduler runs, and the two ways to ask for nothing.
+
+    `--source` used to be `required=True`, which meant the nightly job the
+    runbook documented (`--all-towns`) would have exited on argparse before
+    touching the database — a scheduler firing at 03:00 into an error nobody
+    was awake to read. The flags are mutually exclusive rather than merely
+    both-accepted, because "poll this one feed, and also all of them" has no
+    sensible reading and guessing at one is how a poll files a town's meetings
+    under the wrong body.
+
+    No network and no database: argparse rejects both shapes before the
+    connector imports a store.
+    """
+
+    def parse(self, argv):
+        from record.connectors import youtube
+        return youtube.main(argv)
+
+    def test_asking_for_neither_is_refused(self):
+        with self.assertRaises(SystemExit) as e:
+            self.parse([])
+        self.assertEqual(e.exception.code, 2)
+
+    def test_asking_for_both_is_refused(self):
+        with self.assertRaises(SystemExit) as e:
+            self.parse(["--source", "UCabc", "--all-towns"])
+        self.assertEqual(e.exception.code, 2)
+
+    def test_all_towns_reaches_the_town_loop(self):
+        """It gets past argparse and asks the database for live towns — which
+        is the whole point, and the thing `required=True` prevented."""
+        from unittest import mock
+
+        from record.connectors import youtube
+        with mock.patch.object(youtube, "_poll_all_towns",
+                               lambda args: 0) as _:
+            self.assertEqual(self.parse(["--all-towns"]), 0)
+
+
+class PollObeysTheRulesTest(unittest.TestCase):
+    """The preview and the poll must be the same decision, computed once.
+
+    They were not. `sources.plan` — every rule in this file, every exclusion
+    tuned against a live channel — was reached by exactly one caller: the
+    console's preview. `connectors.youtube.discover` filed every entry the feed
+    returned. So the console promised "would file 4" and the first real nightly
+    run filed 30, PSAs and ribbon cuttings included, across three channels.
+
+    Nothing caught it because the rules were tested as pure functions and the
+    connector was tested for filing, and no test asked whether the connector
+    used the rules. That is what this class is: the seam, asserted.
+
+    `max_per_poll` is the same story. It is documented as the thing that makes
+    an unattended nightly poll safe, and it lived only in `plan`.
+    """
+
+    def feed(self, titles):
+        # Real-shaped ids (11 chars of YouTube's alphabet) — `canon` falls back
+        # to `url:<the whole thing>` for anything else, which would quietly test
+        # the wrong path.
+        return [{"title": t, "url": f"https://www.youtube.com/watch?v=vid{i:08d}",
+                 "video_id": f"vid{i:08d}", "published": "2026-07-16"}
+                for i, t in enumerate(titles)]
+
+    def discover(self, titles, rules, **kw):
+        """Run `discover` over a fixed feed with the database stubbed out."""
+        from unittest import mock
+
+        from record.connectors import youtube
+
+        class NothingKnown:
+            """A corpus that has never seen anything and records what is filed."""
+            def __init__(self):
+                self.filed = []
+
+            def find_by_url_canon(self, key):
+                return None
+
+        corpus = NothingKnown()
+        items = self.feed(titles)
+        with mock.patch.object(youtube, "poll", lambda *a, **k: items), \
+             mock.patch.object(youtube, "_submission_for", lambda c, k: None), \
+             mock.patch.object(youtube, "captions_probe",
+                               lambda v, **k: {"captions": True, "note": ""}), \
+             mock.patch.object(youtube, "_file_submission",
+                               lambda c, sub: corpus.filed.append(sub) or True):
+            out = youtube.discover(corpus, "Boston", "", "UCx", rules=rules, **kw)
+        return out, corpus.filed
+
+    # -- default-deny actually denies --------------------------------------
+
+    def test_a_poll_files_only_what_a_rule_names(self):
+        """The exact failure: PSAs and ceremonies entering the queue."""
+        s = src("Boston", 0)
+        out, filed = self.discover([
+            "Boston Licensing Board Voting Hearing 7/16/2026",   # a rule names it
+            "(Spanish) Recycling in the Club",                   # excluded
+            "Peace Park Ribbon Cutting Ceremony",                # excluded
+            "Some Entirely New Committee",                       # unmatched
+        ], s)
+        self.assertEqual(out["filed"], 1)
+        self.assertEqual(out["excluded"], 2)
+        self.assertEqual(out["unmatched"], 1)
+        self.assertEqual([f["url_canon"] for f in filed],
+                         ["youtube:vid00000000"])
+
+    def test_the_poll_files_exactly_what_the_preview_promised(self):
+        """One decision, computed once. If these ever diverge, the console is
+        lying about what a poll will cost."""
+        s = src("Boston", 0)
+        titles = ["Boston Licensing Board Voting Hearing 7/16/2026",
+                  "BPDA Board of Directors Meeting 7/16/26",
+                  "(Haitian Creole) Recycling in the Club",
+                  "Stay Cool Indoors",
+                  "Madison Park Roundtable"]
+        promised = sources.plan(self.feed(titles), s)["file"]
+        out, filed = self.discover(titles, s)
+        self.assertEqual(out["filed"], len(promised))
+        self.assertEqual([f["url_canon"] for f in filed],
+                         [f"youtube:{p['video_id']}" for p in promised])
+
+    def test_the_matched_rule_names_the_body_not_the_caller(self):
+        """One channel carries several bodies; stamping one string on all of
+        them files the School Committee's meetings under the BPDA."""
+        s = src("Boston", 0)
+        _, filed = self.discover([
+            "Boston School Committee Meeting 7/15/2026",
+            "BPDA Board of Directors Meeting 7/16/26"], s)
+        self.assertEqual([f["body"] for f in filed],
+                         ["School Committee", "BPDA"])
+
+    # -- the cap that makes a scheduler safe to leave alone -----------------
+
+    def test_max_per_poll_holds_a_backlog_back(self):
+        """Documented as the reason a nightly poll is safe unattended, and it
+        lived only in the preview."""
+        s = {**src("Boston", 0), "max_per_poll": 2}
+        out, filed = self.discover(
+            ["Boston Licensing Board Voting Hearing 7/1{}/2026".format(i)
+             for i in range(5)], s)
+        self.assertEqual(out["filed"], 2)
+        self.assertEqual(out["capped"], 3)
+        self.assertEqual(len(filed), 2)
+
+    # -- the manual path keeps its meaning ---------------------------------
+
+    def test_without_rules_the_human_who_named_the_body_is_the_rule(self):
+        """`--source --body` is a person pointing at one feed. That naming is
+        the rule, and the connector must not start second-guessing it."""
+        from unittest import mock
+
+        from record.connectors import youtube
+        filed = []
+        items = self.feed(["Anything At All", "Also This"])
+
+        class NothingKnown:
+            def find_by_url_canon(self, key):
+                return None
+
+        with mock.patch.object(youtube, "poll", lambda *a, **k: items), \
+             mock.patch.object(youtube, "_submission_for", lambda c, k: None), \
+             mock.patch.object(youtube, "_file_submission",
+                               lambda c, sub: filed.append(sub) or True):
+            out = youtube.discover(NothingKnown(), "Brookline", "Select Board",
+                                   "UCx", check_captions=False)
+        self.assertEqual(out["filed"], 2)
+        self.assertEqual({f["body"] for f in filed}, {"Select Board"})
