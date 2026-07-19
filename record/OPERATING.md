@@ -25,7 +25,7 @@ billed to *Firebase Payment*, budget **$100/mo** scoped to this project alone.
 **The API:** <https://record-api-907309358085.us-east1.run.app>
 **The steward console:** <https://record-api-907309358085.us-east1.run.app/steward>
 **The reader:** <https://publicrecord.studio> *(DNS points at GitHub Pages;
-the Pages custom domain is not switched over yet — see §8)*
+the Pages custom domain is not switched over yet — see §9)*
 
 ---
 
@@ -291,7 +291,109 @@ meaning-search and intake, not reading. To stop everything:
 there — it is in `corpus.db` on the desk and in every pressed edition anyone
 has downloaded, which is what the anti-lock-in promise was for.
 
-## 8. What is not done yet
+## 8. Testing a release on a machine that is not yours
+
+This section is about the **desktop app**, not the record, and it is here
+because it is the gate people skip and the one that decides whether a stranger
+can open what you built.
+
+### Why your own Mac cannot answer the question
+
+The machine that signs an app is the worst possible place to test it, and not
+by a little. Ask it and it will say `accepted`, `source=Notarized Developer ID`
+— and mean almost nothing by it, for three separate reasons:
+
+1. **Your keychain vouches for the certificate.** `spctl` can accept a
+   signature because this machine already trusts the signing identity, not
+   because Apple's notarization is carrying it. A stranger's Mac has no such
+   shortcut.
+2. **Homebrew exists here.** Anything in the bundle that reaches for
+   `/opt/homebrew/lib/…` resolves fine on a developer's machine and crashes on
+   launch for someone who has never installed it. `build_suite.sh` gates the
+   venv against this, but a runtime path can still slip past a build-time check.
+3. **Nothing is quarantined.** Gatekeeper only runs its strict path on files
+   carrying `com.apple.quarantine`, and a file that never arrived from anywhere
+   never got the flag. A pass on an unquarantined DMG is a pass on a check that
+   barely ran.
+
+specs/09 §7 has always required this gate. What is easy to forget is *why the
+verdict does not transfer between releases*: it is a judgement about a signing
+identity, and 2.0.0 changed the bundle identifier from `org.control-z.suite` to
+`org.civicmedia.studio`. Apple had never seen that identity. Every future
+identity change resets this the same way.
+
+### The machine
+
+Any Mac that has never had Xcode, Homebrew, or a developer certificate. A
+friend's laptop, a family machine, a library Mac, a clean VM. Apple silicon —
+the DMG is arm64-only.
+
+### Getting the file there
+
+**AirDrop it or download it. Do not use a USB drive.** AirDrop and browser
+downloads set the quarantine flag; a thumb drive does not, and the result is a
+test that passes because Gatekeeper was never asked.
+
+### On the loaner
+
+```bash
+cd ~/Downloads
+shasum -a 256 civicmedia-studio-*.dmg          # matches what was handed over?
+
+# THE CHECK THAT DECIDES WHETHER THE REST MEANS ANYTHING
+xattr -l civicmedia-studio-*.dmg | grep quarantine
+```
+
+If that prints nothing the test is void. Add the flag by hand rather than
+abandoning the run:
+
+```bash
+xattr -w com.apple.quarantine "0081;00000000;Safari;" civicmedia-studio-*.dmg
+```
+
+Then:
+
+```bash
+spctl -a -vvv -t open --context context:primary-signature civicmedia-studio-*.dmg
+hdiutil attach civicmedia-studio-*.dmg
+spctl -a -vvv "/Volumes/Civic Media Studio/Civic Media Studio.app"
+```
+
+**A pass is exactly three lines:**
+
+```
+…/Civic Media Studio.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: Stephen Walter (6M536MV7GT)
+```
+
+`rejected` or `source=Unnotarized` is a signing problem, not a user problem.
+Send the whole output and stop.
+
+### The part `spctl` cannot tell you
+
+Drag it to Applications and **double-click it like a person would.**
+
+- No dialog, or at most one *"downloaded from the Internet, are you sure?"* —
+  that one is normal.
+- It must **not** need right-click → Open.
+- It must **not** say *unidentified developer*, *cannot be opened*, or
+  *damaged and should be moved to the Trash*.
+
+Then open two tools that do real work — Scribe and Memory — and confirm neither
+crashes. `spctl` validates a signature; it does not notice a dylib that is not
+there. This step is where reason 2 above actually surfaces.
+
+### What to write down
+
+The three `spctl` lines verbatim; whether quarantine was already present or you
+added it; what happened on double-click; and which tools you opened. That is a
+release record, and it is worth keeping beside the release notes — the next
+identity change will want to compare against it.
+
+---
+
+## 9. What is not done yet
 
 Honest list. None of it is broken; all of it is unfinished.
 
@@ -318,7 +420,7 @@ Honest list. None of it is broken; all of it is unfinished.
 
 ---
 
-## 9. Importing the full corpus
+## 10. Importing the full corpus
 
 From the Mac that holds it — not this one, which has a thinner copy:
 
@@ -343,7 +445,7 @@ It opens the source corpus **read-only** and cannot write to it.
 
 ---
 
-## 10. The rules that are not negotiable
+## 11. The rules that are not negotiable
 
 These are covenant, not configuration. If a change would break one, the change
 is wrong.

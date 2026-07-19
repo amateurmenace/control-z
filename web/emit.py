@@ -31,11 +31,43 @@ DMG_LATEST = "https://github.com/amateurmenace/control-z/releases/latest"
 # asserts the covenant page carries them.
 SOURCE_REPO = "https://github.com/amateurmenace/control-z"
 LICENSING_DOC = SOURCE_REPO + "/blob/main/LICENSING.md"
-CSP = ("default-src 'self'; base-uri 'self'; form-action 'self'; "
-       "frame-src https://www.youtube-nocookie.com; "
-       "img-src 'self' https://i.ytimg.com data:; "
-       "style-src 'self' 'unsafe-inline'; script-src 'self'; "
-       "connect-src 'self'; object-src 'none'")
+_CSP_BASE = ("default-src 'self'; base-uri 'self'; form-action 'self'; "
+             "frame-src https://www.youtube-nocookie.com; "
+             "img-src 'self' https://i.ytimg.com data:; "
+             "style-src 'self' 'unsafe-inline'; script-src 'self'; "
+             "connect-src 'self'{extra}; object-src 'none'")
+CSP = _CSP_BASE.format(extra="")
+
+# The record's own API, when this pressing has one. Empty for a desk edition,
+# which is the case that must never change: press without --api and the bytes
+# are identical to yesterday's.
+#
+# This is the one place the reader is allowed to reach past its own origin, and
+# it is worth being exact about why that is not a hole in the covenant. The
+# promise on the covenant page is that no THIRD PARTY can load a script, a font
+# or a beacon — and that still holds, because default-src, script-src and
+# img-src are untouched. What widens is connect-src, by exactly one first-party
+# host: the record's own service, named in full, on the same project and the
+# same bill. A reader who blocks it loses meaning-search and keeps everything
+# else, which is the whole design.
+#
+# When the edition and the API eventually share an origin behind one load
+# balancer, this exception disappears on its own and nothing else changes.
+_API = {"base": ""}
+
+
+def set_api(base: str = "") -> None:
+    """Point this pressing at its Studio, or at nothing."""
+    _API["base"] = (base or "").rstrip("/")
+
+
+def csp() -> str:
+    """The policy for this pressing. Identical to CSP when there is no API."""
+    base = _API["base"]
+    if not base:
+        return CSP
+    origin = "/".join(base.split("/")[:3])       # scheme://host, never a path
+    return _CSP_BASE.format(extra=" " + origin)
 
 
 # What this pressing serves, set once per bake by emit_stubs().
@@ -90,7 +122,7 @@ def head(title, desc, canonical, og_image="", version="0"):
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="{CSP}">
+<meta http-equiv="Content-Security-Policy" content="{csp()}">
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(desc)}">
 <link rel="canonical" href="{esc(canonical)}">
@@ -607,6 +639,22 @@ def page_issue(i, manifest, base):
                  version=manifest["version"])
 
 
+def _search_note() -> str:
+    """What the search field promises, which differs by pressing.
+
+    A desk edition genuinely has no server, and saying "vector search stays at
+    the desk" is true there. On a Studio pressing it was a lie the page told
+    for a month, so the sentence is now derived from the same fact the CSP is:
+    whether this edition was pressed with an API behind it. app.js replaces it
+    again at runtime if the API turns out to be unreachable — a promise made at
+    press time cannot know that, and the reader deserves the live answer."""
+    if _API["base"]:
+        return ("Search reads the record two ways at once — the words you typed, "
+                "and what they mean. Nothing about you is sent with the query.")
+    return ("Search runs in your browser over a prebuilt lexical index — no "
+            "query leaves this page. (Meaning-search needs the Studio.)")
+
+
 def page_search(manifest, base):
     # The two filters are baked as real <select name=…> inside the form, so a
     # scoped search is a URL: /app/s?q=override&town=Brookline&body=Select+Board.
@@ -641,8 +689,7 @@ def page_search(manifest, base):
       <button class="btn primary" type="submit">Search</button>
     </form>
     {filters}
-    <p class="hint" id="search-note">Search runs in your browser over a prebuilt
-      lexical index — no query leaves this page. (Vector search stays at the desk.)</p>
+    <p class="hint" id="search-note">{_search_note()}</p>
     <div id="results"><noscript><p class="hint">Search needs JavaScript.
       <a href="/app/">Browse the record</a> instead — every meeting is a readable
       document with JavaScript off.</p></noscript></div>
