@@ -83,7 +83,21 @@
     else if (/\/app\/officials$/.test(path)) officials();
     else if (path === "/app") home();
     registerSW();
+    wireSlashFocus();
   });
+
+  /* `/` focuses the search field from any page — the field on this page if
+     there is one (front page, search page), otherwise a jump to search. */
+  function wireSlashFocus() {
+    document.addEventListener("keydown", e => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      e.preventDefault();
+      const q = $('input[name="q"]');
+      if (q) { q.focus(); q.select(); } else location.href = `${BASE}/s`;
+    });
+  }
 
   /* ================= SCOPE: the town, and the body ==================
      specs/17 §8. The reader picks a town once and every page obeys it; a
@@ -675,6 +689,37 @@
       history.replaceState(null, "", u.pathname + u.search);
       runSearch(val);
     });
+    // instant search: debounced, and never under three characters — a two-letter
+    // query is mostly noise over a lot of postings. Enter (the submit above)
+    // still works for a reader who prefers it.
+    let deb;
+    if (inp) inp.addEventListener("input", () => {
+      clearTimeout(deb);
+      const val = inp.value.trim();
+      if (val.length < 3) { if (!val) { $("#results").innerHTML = ""; selReset(); } return; }
+      deb = setTimeout(() => {
+        const u = new URL(location.href);
+        u.searchParams.set("q", val);
+        history.replaceState(null, "", u.pathname + u.search);
+        runSearch(val);
+      }, 320);
+    });
+    // j / k (or the arrows) walk the hits; Enter opens the selected one
+    document.addEventListener("keydown", e => {
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      const res = $$(".sresult"); if (!res.length) return;
+      if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); selMove(res, 1); }
+      else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); selMove(res, -1); }
+      else if (e.key === "Enter" && res[SEL]) location.href = res[SEL].href;
+    });
+  }
+  let SEL = -1;
+  function selReset() { SEL = -1; }
+  function selMove(res, d) {
+    res.forEach(r => r.classList.remove("sel"));
+    SEL = Math.max(0, Math.min(res.length - 1, (SEL < 0 ? (d > 0 ? -1 : 0) : SEL) + d));
+    const el = res[SEL]; if (el) { el.classList.add("sel"); el.scrollIntoView({ block: "nearest" }); }
   }
   /* Live-first, static-always. The Studio is asked once; whatever it cannot
      do, the prebuilt index does. Note the order: the API call is awaited
@@ -763,10 +808,11 @@
     let ids = [...(sets[0] || [])];
     for (let i = 1; i < sets.length; i++) ids = ids.filter(x => sets[i].has(x));
     // prefer exact-phrase segments on a multi-word query; else keep the AND hits
+    // (hits stays a list of segIds so a peek can reach the ±1 neighbours)
     const phrase = q.trim().toLowerCase();
-    let hits = ids.map(id => segs[id]).filter(Boolean);
+    let hits = ids.filter(id => segs[id]);
     if (terms.length > 1) {
-      const exact = hits.filter(s => String(s[3]).toLowerCase().includes(phrase));
+      const exact = hits.filter(id => String(segs[id][3]).toLowerCase().includes(phrase));
       if (exact.length) hits = exact;
     }
     // scope BEFORE the cut, or the 80-hit ceiling would be spent on meetings
@@ -774,8 +820,8 @@
     // silently return fewer results than it found
     const total = hits.length;
     if (SCOPE.town || SCOPE.body)
-      hits = hits.filter(([mi]) => {
-        const m = meta[mi] || {};
+      hits = hits.filter(id => {
+        const m = meta[segs[id][0]] || {};
         return inScope(m.town || "", m.body || "");
       });
     const cut = hits.length;
@@ -805,18 +851,32 @@
     // be claiming a town for moments the record never learned one for — count
     // them out loud instead
     const noTown = SCOPE.town
-      ? hits.filter(([mi]) => !((meta[mi] || {}).town)).length : 0;
+      ? hits.filter(id => !((meta[segs[id][0]] || {}).town)).length : 0;
     box.innerHTML = `<p class="hint">${hits.length} moment${hits.length>1?"s":""} `
       + (where ? `in ${esc(where)}` : "across the record")
       + (noTown ? ` · ${noTown} from meeting(s) with no town recorded` : "")
       + (where && cut < total ? ` · ${total - cut} more elsewhere on the record` : "")
       + `</p>` +
-      hits.map(([mi, t, spk, text]) => {
+      hits.map(id => {
+        const [mi, t, spk, text] = segs[id];
         const m = meta[mi] || {};
-        return `<a class="sresult" href="${BASE}/m/${m.pid}#t${Math.floor(t)}">
+        return `<a class="sresult" data-sid="${id}" href="${BASE}/m/${m.pid}#t${Math.floor(t)}">
           <span class="ts">${hms(t)}</span>${mark(text, terms)}
-          <span class="smeta">${esc([m.title, m.body, SCOPE.town ? "" : m.town, m.date].filter(Boolean).join(" · "))}${spk ? " · " + esc(spk) : ""}</span></a>`;
+          <span class="smeta">${esc([m.title, m.body, SCOPE.town ? "" : m.town, m.date].filter(Boolean).join(" · "))}${spk ? " · " + esc(spk) : ""}</span>${peek(segs, id, mi)}</a>`;
       }).join("");
+    selReset();
+  }
+  /* The peek: ±1 segment of context from the segs plane, already in hand
+     because the static path loaded it. Shown on hover (CSS); it costs no
+     request, so it never burdens the live path, which does not load segs. */
+  function peek(segs, id, mi) {
+    const ctx = [id - 1, id, id + 1].map(i => segs[i]).filter(s => s && s[0] === mi);
+    if (ctx.length < 2) return "";
+    return `<span class="peek">` + ctx.map(s => {
+      const now = s === segs[id] ? " pk-now" : "";
+      const who = s[2] ? `<b>${esc(s[2])}</b> ` : "";
+      return `<span class="${now.trim()}">${who}${esc(String(s[3]).slice(0, 150))}</span>`;
+    }).join("<br>") + `</span>`;
   }
   function mark(text, terms) {
     let t = esc(text);

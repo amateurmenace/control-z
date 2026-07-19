@@ -469,6 +469,24 @@ class TestBakeEdition(unittest.TestCase):
         # chronological
         self.assertEqual([mo["t"] for mo in ms], sorted(mo["t"] for mo in ms))
 
+    def test_search_is_instant_and_peeks_over_the_static_floor(self):
+        """Instant search (debounced, never under three characters), hover peeks
+        from the segs plane, and a `/` focus — all pure enhancement over the
+        R1.6 static index, which stays untouched (specs/20 §4). The peek reads
+        the plane the static path already loaded, so it never fetches and never
+        burdens the live path."""
+        js = (REPO / "web" / "static" / "app.js").read_text()
+        self.assertIn("val.length < 3", js)             # no query under 3 chars
+        self.assertIn('addEventListener("input"', js)   # instant
+        self.assertIn("function wireSlashFocus", js)    # `/` focuses search
+        self.assertIn("function selMove", js)           # j/k walk hits
+        peek = re.search(r"function peek\(segs, id, mi\) \{.+?\n  \}",
+                         js, re.S).group(0)
+        for forbidden in ("fetch", "getJSON", "/api/", "askStudio"):
+            self.assertNotIn(forbidden, peek,
+                             f"the peek reached for {forbidden!r} — it must read "
+                             "only the plane already in hand")
+
     def test_meeting_page_renders_moments_js_off(self):
         """The Moments panel is baked into the meeting stub, so it reads with
         JavaScript off (specs/20 §6 acceptance): scored cards, each a deep link
