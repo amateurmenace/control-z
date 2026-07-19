@@ -897,6 +897,60 @@ class TestIdempotence(unittest.TestCase):
                                      f"{rel} differs between two bakes")
 
 
+class TestTombstones(unittest.TestCase):
+    """A steward's forget leaves an explanation, not a bare 404 (specs/20 §6).
+    The date comes from the audit ledger — stored state, never a wall clock —
+    so the tombstone presses idempotently."""
+
+    def test_press_writes_a_tombstone_with_the_audit_date(self):
+        from memory.store import Corpus
+        from web import bake
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db = root / "c.db"
+            TestBakeEdition._seed(db)
+            forget = [{"id": "issue:testville:gone-issue", "name": "a gone issue",
+                       "town": "Testville", "date": "2026-05-01"}]
+            # the desk store has no audit ledger; stand one in for this press so
+            # the emission path is exercised end to end
+            orig = Corpus.list_forgotten
+            Corpus.list_forgotten = lambda self, limit=1000: list(forget)
+            try:
+                bake.bake(str(db), str(root / "app"), "1.0.0", "https://x")
+            finally:
+                Corpus.list_forgotten = orig
+            p = root / "app" / "i" / "issue_testville_gone-issue" / "index.html"
+            self.assertTrue(p.is_file(), "no tombstone was written")
+            html = p.read_text()
+            self.assertIn("removed from the record by a steward on 2026-05-01", html)
+            self.assertIn("a gone issue", html)
+            self.assertIn("Content-Security-Policy", html)   # a real page
+            # the live issue's own page still stands, untouched
+            self.assertTrue((root / "app" / "i" /
+                             "issue_testville_budget-override" / "index.html").is_file())
+
+    def test_a_live_issue_wins_its_old_grave(self):
+        """A re-created issue must not be buried by its own tombstone: a slug a
+        live issue occupies is never tombstoned."""
+        from web import bake
+
+        class Forgetful:
+            def list_forgotten(self, limit=1000):
+                return [{"id": "issue:x:thing", "name": "thing", "date": "2026-07-01"}]
+        b = bake.Bake(Forgetful(), Path("/tmp/none"), "1.0.0", None)
+        self.assertEqual(b.bake_tombstones({bake.islug("issue:x:thing")}), [])
+        # but with no live claimant, the grave stands
+        got = b.bake_tombstones(set())
+        self.assertEqual(got[0]["slug"], bake.islug("issue:x:thing"))
+        self.assertEqual(got[0]["date"], "2026-07-01")
+
+    def test_the_desk_store_keeps_no_audit_ledger(self):
+        from memory.store import Corpus
+        with tempfile.TemporaryDirectory() as td:
+            c = Corpus(str(Path(td) / "c.db"))
+            self.assertEqual(c.list_forgotten(), [])
+
+
 class TestRegistryMatchesDesk(unittest.TestCase):
     def test_web_accents_match_core_js(self):
         """The web registry re-declares the desk's accents; if core.js's

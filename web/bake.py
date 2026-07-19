@@ -440,6 +440,26 @@ class Bake:
         full.sort(key=lambda d: (-d["n_meetings"], -d["n_segments"], d["name"]))
         return full
 
+    # -- tombstones (a forgotten issue's grave) --------------------------
+    def bake_tombstones(self, active_slugs) -> list:
+        """Issues a steward forgot, as tombstone pages (specs/20 §6) — but never
+        one whose slug a live issue now occupies (a re-created issue wins over
+        its old grave). The store answers with the latest forget per id and a
+        date read from the audit ledger, so the pages are byte-idempotent. A
+        desk store keeps no such ledger and returns nothing."""
+        try:
+            rows = self.c.list_forgotten()
+        except Exception:
+            rows = []
+        out = {}
+        for r in rows:
+            slug = islug(r.get("id") or "")
+            if not slug or slug in active_slugs or slug in out:
+                continue
+            out[slug] = {"slug": slug, "name": r.get("name") or "",
+                         "date": r.get("date") or "", "town": r.get("town") or ""}
+        return [out[k] for k in sorted(out)]
+
     # -- stats / dashboard (Home reads this) ------------------------------
     def bake_stats(self, meetings, issues):
         s = self.c.stats()
@@ -879,6 +899,7 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str,
     meetings = b.bake_meetings()
     by_id = {m["id"]: m for m in meetings}
     issues = b.bake_issues(by_id)
+    tombstones = b.bake_tombstones({i["slug"] for i in issues})
     stats = b.bake_stats(meetings, issues)
     towns = b.bake_towns(meetings)
     officials = b.bake_officials(meetings)
@@ -893,7 +914,7 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str,
     emit.emit_assets(out, version, manifest)
     emit.emit_stubs(out, meetings, issues, stats, manifest, site_base,
                     officials=officials, analytics=analytics, graph=graph,
-                    towns=towns)
+                    towns=towns, tombstones=tombstones)
 
     print(f"  {len(towns['towns'])} town(s) · {len(towns['bodies'])} bodies · "
           f"{len(meetings)} meetings · {len(issues)} issues · "

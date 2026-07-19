@@ -767,6 +767,13 @@ class Corpus:
             con.commit()
         return True
 
+    def list_forgotten(self, limit: int = 1000) -> List[dict]:
+        """The desk keeps no audit ledger — stewarding lives on the hosted
+        record (record/store.py). So a desk edition has no tombstones, and says
+        so with an empty list rather than a missing method: the bake calls this
+        on both stores, and both must answer (specs/20 §6)."""
+        return []
+
     def clear_auto_issues(self, town: str = "") -> int:
         """Before a rebuild, drop the machine-made issues nobody follows — but
         keep minted, steward-touched, and followed issues (a rebuild refreshes

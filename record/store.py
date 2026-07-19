@@ -748,6 +748,32 @@ class PgCorpus:
             con.execute("DELETE FROM issues WHERE id=%s", (issue_id,))
         return True
 
+    def list_forgotten(self, limit: int = 1000) -> List[dict]:
+        """Every issue a steward has forgotten — the latest forget per id, read
+        from the audit ledger, which is the only durable trace a hard delete
+        leaves (specs/20 §6, tombstones). The date is the STORED `added_at`,
+        never a wall clock, so a tombstone pressed from it stays idempotent."""
+        with self._con() as con:
+            rows = con.execute(
+                "SELECT target, town, payload, added_at FROM audit "
+                "WHERE verb='forget' ORDER BY added_at").fetchall()
+        latest = {}
+        for r in rows:
+            target = r["target"] or ""
+            if not target:
+                continue
+            payload = r["payload"] or {}
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except ValueError:
+                    payload = {}
+            ts = float(r["added_at"] or 0)
+            date = time.strftime("%Y-%m-%d", time.gmtime(ts)) if ts else ""
+            latest[target] = {"id": target, "name": (payload or {}).get("name", ""),
+                              "town": r["town"] or "", "date": date}
+        return list(latest.values())[:limit]
+
     def clear_auto_issues(self, town: str = "") -> int:
         sql = ("SELECT id FROM issues WHERE origin='auto' AND status<>'merged' "
                + ("AND town=%s " if town else "") +

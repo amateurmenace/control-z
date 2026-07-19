@@ -791,6 +791,31 @@ def page_issue(i, manifest, base):
                  version=manifest["version"])
 
 
+def page_tombstone(slug, name, date, manifest, base):
+    """A citation to an issue a steward curated away resolves to an explanation,
+    never a bare 404 (specs/20 §6). The date is stored audit state, pressed
+    idempotently — never a wall clock. This pays the debt specs/19 R1.7 named:
+    control-z.org/app still carries a page publicrecord correctly dropped."""
+    when = f" on {esc(date)}" if date else ""
+    body = f"""
+  <section class="tombstone">
+    <a class="back" href="/app/">← the record</a>
+    <h1>{esc(name) or "This issue"}</h1>
+    <p class="presslede">This issue was <b>removed from the record by a
+      steward{when}</b>. The record is curated in public: a steward may fold one
+      issue into another or, rarely, forget one entirely. The meetings it
+      gathered are all still on the record — only this grouping of them was
+      withdrawn.</p>
+    <p class="hint"><a href="/app/">Browse the record</a> ·
+      <a href="/app/s">search it</a> · <a href="/app/covenant">the covenant</a>.</p>
+  </section>
+"""
+    return shell(f"{name or 'Removed'} — removed from the record",
+                 f"This issue was removed from the record by a steward{when}.",
+                 f"{base}/app/i/{slug}", body, "", manifest,
+                 version=manifest["version"])
+
+
 def _search_note() -> str:
     """What the search field promises, which differs by pressing.
 
@@ -1389,7 +1414,7 @@ self.addEventListener('fetch', e => {{
 
 
 def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
-               analytics=None, graph=None, towns=None):
+               analytics=None, graph=None, towns=None, tombstones=None):
     v = manifest["version"]
     # before a single stub renders: the chrome needs to know what it may offer
     set_edition(towns)
@@ -1424,6 +1449,16 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
         d = out / "i" / i["slug"]
         d.mkdir(parents=True, exist_ok=True)
         (d / "index.html").write_text(page_issue(i, manifest, base), encoding="utf-8")
+    # tombstones — a forgotten issue's URL explains itself, never 404s. Written
+    # after the live issues so a live issue always wins a shared slug.
+    for t in (tombstones or []):
+        d = out / "i" / t["slug"]
+        if (d / "index.html").exists():
+            continue
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "index.html").write_text(
+            page_tombstone(t["slug"], t["name"], t["date"], manifest, base),
+            encoding="utf-8")
     # the thirteen door URLs survive as slim redirect stubs into /app/press
     for t in tools.TOOLS:
         if t["surface"] != "web":

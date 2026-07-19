@@ -204,6 +204,9 @@ def press(corpus, out_dir: str, version: str = "",
     meetings = b.bake_meetings()
     by_id = {m["id"]: m for m in meetings}
     issues = b.bake_issues(by_id)
+    # tombstones for issues a steward forgot — read from the audit ledger, which
+    # the hosted store keeps and the desk does not (specs/20 §6)
+    tombstones = b.bake_tombstones({i["slug"] for i in issues})
     stats = b.bake_stats(meetings, issues)
     # The hosted edition is the multi-town one — it is the only press that will
     # ever have a second town to scope to, so the town plane matters more here
@@ -220,7 +223,7 @@ def press(corpus, out_dir: str, version: str = "",
     emit.emit_assets(out, version, manifest)
     emit.emit_stubs(out, meetings, issues, stats, manifest, site_base,
                     officials=officials, analytics=analytics, graph=graph,
-                    towns=towns)
+                    towns=towns, tombstones=tombstones)
 
     pressing = _write_pressing(out, manifest, fingerprint)
 
