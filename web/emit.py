@@ -61,6 +61,11 @@ def set_api(base: str = "") -> None:
     _API["base"] = (base or "").rstrip("/")
 
 
+def api() -> str:
+    """This pressing's Studio, or "" for a desk edition."""
+    return _API["base"]
+
+
 def csp() -> str:
     """The policy for this pressing. Identical to CSP when there is no API."""
     base = _API["base"]
@@ -68,6 +73,19 @@ def csp() -> str:
         return CSP
     origin = "/".join(base.split("/")[:3])       # scheme://host, never a path
     return _CSP_BASE.format(extra=" " + origin)
+
+
+def _api_meta() -> str:
+    """The address the reader may call, next to the policy that permits it.
+
+    A meta tag rather than a fetch of `manifest.json`, for two reasons. It is
+    available when the parser reaches it, so the first keystroke in the search
+    box does not race a round trip; and it sits in the same `<head>` as the
+    `connect-src` that authorises it, so the permission and the address are one
+    thing to read and one thing to change. The reader treats its absence as
+    "this is a desk edition" — which is exactly what it means."""
+    base = _API["base"]
+    return f'\n<meta name="record-api" content="{esc(base)}">' if base else ""
 
 
 # What this pressing serves, set once per bake by emit_stubs().
@@ -122,7 +140,7 @@ def head(title, desc, canonical, og_image="", version="0"):
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="{csp()}">
+<meta http-equiv="Content-Security-Policy" content="{csp()}">{_api_meta()}
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(desc)}">
 <link rel="canonical" href="{esc(canonical)}">

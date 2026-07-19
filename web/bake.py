@@ -748,6 +748,12 @@ class Bake:
             "corpus_hash": h.hexdigest()[:16], "edition_date": edition_date,
             "counts": stats["counts"],
         }
+        # Only when there is one, so a desk pressing's manifest is byte-for-byte
+        # what it was before this key existed. The reader does not read it here
+        # (the meta tag in `<head>` is what it uses); this is for the operator
+        # holding an edition and asking which Studio pressed it.
+        if emit.api():
+            manifest["api"] = emit.api()
         _json(self.out / "manifest.json", manifest)
         return manifest
 
@@ -771,9 +777,17 @@ class Bake:
         return {"total_gz": total, "busts": len(busts) + (total > 3_000_000)}
 
 
-def bake(corpus_db: str, out_dir: str, version: str, site_base: str) -> dict:
+def bake(corpus_db: str, out_dir: str, version: str, site_base: str,
+         api: str = "") -> dict:
     from czcore.paths import media_dir
     from memory.store import Corpus
+
+    # Set unconditionally, including to "". `emit` holds this as module state
+    # (the same shape `set_edition` uses), so a bake that only set it when an
+    # API was given would leak the previous pressing's Studio into the next
+    # one — which in a test run means a desk edition quietly acquiring a
+    # `connect-src` it must never have.
+    emit.set_api(api)
 
     out = Path(out_dir).resolve()
     if out.exists():
@@ -825,12 +839,18 @@ def main(argv=None):
                     help="output dir (default: site/docs/app)")
     ap.add_argument("--base", default="https://control-z.org",
                     help="site base URL for feed links + OG tags")
+    ap.add_argument("--api", default="",
+                    help="the Studio behind this pressing (e.g. "
+                         "https://record-api-….run.app). Omit for a desk "
+                         "edition: search then runs entirely in the browser "
+                         "and the bytes are identical to a pressing from "
+                         "before this flag existed.")
     args = ap.parse_args(argv)
     try:
         from suite import __version__ as version
     except Exception:
         version = "0"
-    r = bake(args.corpus, args.out, version, args.base)
+    r = bake(args.corpus, args.out, version, args.base, api=args.api)
     return 1 if r.get("busts") else 0
 
 

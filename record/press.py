@@ -155,7 +155,7 @@ def _no_sidecars(tool: str) -> Path:
 
 
 def press(corpus, out_dir: str, version: str = "",
-          site_base: str = "") -> dict:
+          site_base: str = "", api: str = "") -> dict:
     """Press the specs/16 edition out of a store — here, a `PgCorpus`.
 
     This is `web.bake.bake()` with its two desk-shaped assumptions replaced:
@@ -176,6 +176,13 @@ def press(corpus, out_dir: str, version: str = "",
         version = _suite_version()
     if not site_base:
         site_base = _site_base()
+    if not api:
+        api = _api_base()
+    # This is the pressing that actually has a Studio behind it — the desk's
+    # bake is the one that usually does not. Set unconditionally so a press
+    # into a bucket cannot inherit module state from a press that ran before
+    # it in the same process.
+    emit.set_api(api)
 
     out = Path(out_dir).resolve()
     if out.exists():
@@ -277,6 +284,21 @@ def _site_base() -> str:
         return settings.site_base
     except Exception:
         return "https://communityai.studio"
+
+
+def _api_base() -> str:
+    """Which Studio this pressing should point its reader at.
+
+    Empty by default, and that default is load-bearing: an edition pressed
+    without it is the static record, complete, and a press that guessed its own
+    public URL would bake an address into thousands of pages on the strength of
+    a guess. `RECORD_API_BASE` is set on the job that presses for the live
+    site, and nowhere else."""
+    try:
+        from .settings import settings
+        return settings.api_base
+    except Exception:
+        return ""
 
 
 # --------------------------------------------------------------------------
@@ -568,6 +590,10 @@ def main(argv=None):
     ap.add_argument("--base", default="",
                     help="site base URL for feeds + OG tags (default: "
                          "RECORD_SITE_BASE)")
+    ap.add_argument("--api", default="",
+                    help="the Studio this edition's reader should call for "
+                         "meaning-search and freshness (default: "
+                         "RECORD_API_BASE; omit for a purely static edition)")
     ap.add_argument("--force", action="store_true",
                     help="press even when the record has not moved")
     args = ap.parse_args(argv)
@@ -585,7 +611,7 @@ def main(argv=None):
             print(f"the record has not moved since the last pressing "
                   f"({corpus_fingerprint(corpus)}) — nothing to press")
             return 0
-        report = press(corpus, out_dir, args.version, args.base)
+        report = press(corpus, out_dir, args.version, args.base, api=args.api)
     finally:
         corpus.close()
 

@@ -73,6 +73,32 @@ def create_app(corpus=None) -> FastAPI:
             _store["corpus"] = get_corpus()
         return _store["corpus"]
 
+    # -- the reader is somewhere else, and browsers need telling ----------
+    #
+    # The edition is a pile of static files on another host, so its one call
+    # here is cross-origin and dies in the browser unless this service
+    # consents. `web/emit.py` writes the reader's half of that handshake (a
+    # `connect-src` naming this service); this is the other half, and until
+    # both exist live search cannot work no matter how correct the JavaScript
+    # is. Configured-off by default: a service with no reader origins set
+    # serves the API exactly as it did before, which is what every test and
+    # every curl already assumes.
+    #
+    # `allow_credentials` stays False on purpose rather than by omission. It
+    # is the covenant restated at the transport layer: there is no reader
+    # identity to send, so the service will not accept one even if a future
+    # caller invents it. The steward console is same-origin and unaffected —
+    # which is also why `Authorization` is not an allowed header here.
+    if settings.reader_origins:
+        from fastapi.middleware.cors import CORSMiddleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.reader_origins),
+            allow_credentials=False,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+            max_age=3600)
+
     # -- the covenant, in a header ---------------------------------------
     @app.middleware("http")
     async def no_tracking(request: Request, call_next):
@@ -116,13 +142,20 @@ def create_app(corpus=None) -> FastAPI:
     @app.get("/api/search")
     def search(q: str = Query("", description="what to ask the record"),
                town: str = Query("", description="scope to one town"),
+               body: str = Query("", description="scope to one public body"),
                space: str = Query("lexical", pattern="^(lexical|neural)$"),
                limit: int = Query(40, ge=1, le=200)):
         """Blended search, with the provenance the reader shows as chips.
 
         `town` is passed through explicitly and never defaulted at this layer —
         aggregating across towns is a covenant question, and the caller has to
-        have meant it."""
+        have meant it.
+
+        `body` exists so the reader's two filters both survive the trip. The
+        static index scopes before it applies its own ceiling, and says in a
+        comment why; a live search that made the reader filter the JSON
+        afterwards would have spent its limit on rows the reader had already
+        excluded, and reported fewer hits than the record holds."""
         from . import embed_neural
         q = (q or "").strip()
         if not q:
@@ -138,7 +171,8 @@ def create_app(corpus=None) -> FastAPI:
             note = ("meaning-search needs publicrecord; words still work — "
                     + embed_neural.status()["reason"])
         try:
-            hits = store().search(q, limit=limit, town=town, space=used)
+            hits = store().search(q, limit=limit, town=town, space=used,
+                                  body=body)
             if used == "neural" and not any(h["why"] in ("meaning", "both")
                                             for h in hits):
                 # The key is set and the SDK imports, which is all available()
@@ -155,8 +189,8 @@ def create_app(corpus=None) -> FastAPI:
                 {"q": q, "hits": [], "space": "none",
                  "note": f"the record is unreachable; the edition still reads ({exc})"},
                 status_code=503)
-        return {"q": q, "town": town, "space": used, "note": note,
-                "count": len(hits), "hits": hits}
+        return {"q": q, "town": town, "body": body, "space": used,
+                "note": note, "count": len(hits), "hits": hits}
 
     # -- public: is what I am reading current -----------------------------
 

@@ -533,15 +533,46 @@ class TestBakeEdition(unittest.TestCase):
         self.assertNotIn('id="bodysel"', page)
 
     def test_reader_still_reads_with_the_backend_dark(self):
-        """The load-bearing property: nothing added here reaches for a server.
-        The scope planes are files in the edition, and the only fetches the
-        reader makes are same-origin paths under /app/."""
+        """The load-bearing property, stated more precisely than it used to be.
+
+        This asserted that `/api/` appeared nowhere in the reader — a blanket
+        rule that was exactly right while the reader had no server to call.
+        specs/19 R1.6 gives it one, so the blanket rule would now have to be
+        deleted or the feature abandoned, and neither is the point. The
+        property worth keeping was never "no API string in the file"; it was
+        **nothing on the path to reading the record depends on a server**.
+
+        So: the edition's own planes are same-origin paths under /app/, the
+        API's address is never hardcoded here (it arrives per-pressing from a
+        meta tag, so a desk edition has no address to call), and the sole
+        outbound call is funnelled through one guarded helper. That the search
+        box actually falls back when that helper fails is proven by executing
+        the code, in TestReaderDegradesToStatic.
+        """
         js = (REPO / "web" / "static" / "app.js").read_text()
         self.assertIn("towns.json", js)
         self.assertNotIn("http://", js.replace("http://www.w3.org", ""))
-        for host in ("/api/", "localhost"):
-            self.assertNotIn(host, js)
+        self.assertNotIn("localhost", js)
         self.assertTrue((self.out / "towns.json").exists())
+
+        # No API host is baked into the reader. The address comes from the
+        # pressing, which is what makes a desk edition serverless by default
+        # rather than by everyone remembering.
+        self.assertNotIn("run.app", js)
+        self.assertNotIn("https://record-api", js)
+
+        # Exactly one outbound path, and it is guarded. Any other `/api/`
+        # would be a second door nobody wrote a fallback for.
+        self.assertEqual(js.count("API + path"), 1)
+        self.assertEqual(js.count("/api/"), 1, "a second API call appeared")
+        ask = re.search(r"  async function askStudio\(path\) \{.+?\n  \}",
+                        js, re.S).group(0)
+        self.assertIn("if (!API || API_DOWN) return null;", ask)
+
+        # Every edition plane the reader reads is a path under /app/.
+        for plane in re.findall(r"getJSON\(`([^`]+)`", js):
+            self.assertTrue(plane.startswith("${BASE}/"),
+                            f"{plane} is not an edition path")
 
 
 class TestScopeOnTwoTowns(unittest.TestCase):
@@ -689,3 +720,261 @@ class TestRegistryMatchesDesk(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLiveFirstEdition(unittest.TestCase):
+    """`--api`: the one pressing that has a Studio behind it.
+
+    Two promises are under test, and the second is the load-bearing one.
+
+    **A desk edition does not change.** Press without `--api` and the bytes are
+    what they were before the flag existed — no meta tag, no widened policy, no
+    extra manifest key. The desk is the common case and it must not pay for a
+    feature it does not have.
+
+    **A Studio edition is still complete without its Studio.** The API is an
+    upgrade on a static floor: every meeting, issue, timeline and the whole
+    prebuilt lexical index are in the edition either way. This was proven once
+    by stopping Postgres and walking the site, and it is asserted here so it
+    stays true.
+    """
+
+    API = "https://record-api-907309358085.us-east1.run.app"
+
+    def press(self, out, api=""):
+        from web import bake
+        return bake.bake(str(self.db), str(out), "1.0.0", "https://x.org",
+                         api=api)
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.root = Path(self.td.name)
+        self.db = self.root / "c.db"
+        TestBakeEdition._seed(self.db)
+        # `emit` holds the API as module state; leaving it set would leak into
+        # every later test in the process.
+        from web import emit
+        self.addCleanup(emit.set_api, "")
+
+    # -- the desk pays nothing ---------------------------------------------
+
+    def test_without_api_no_trace_of_one(self):
+        out = self.root / "desk"
+        self.press(out)
+        html = (out / "s" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("record-api", html)
+        self.assertIn("connect-src 'self';", html)
+        self.assertNotIn("api", json.loads(
+            (out / "manifest.json").read_text(encoding="utf-8")))
+
+    def test_a_desk_press_is_byte_identical_either_side_of_a_studio_press(self):
+        """The module-state trap: press with an API, then without, and the
+        second must not inherit the first's."""
+        a, b, c = self.root / "a", self.root / "b", self.root / "c"
+        self.press(a)
+        self.press(b, api=self.API)
+        self.press(c)
+        for p in sorted(a.rglob("*")):
+            if p.is_file():
+                rel = p.relative_to(a)
+                self.assertEqual(p.read_bytes(), (c / rel).read_bytes(),
+                                 f"{rel} changed after a Studio press")
+
+    # -- the Studio edition -------------------------------------------------
+
+    def test_with_api_the_address_and_the_permission_arrive_together(self):
+        out = self.root / "studio"
+        self.press(out, api=self.API)
+        html = (out / "s" / "index.html").read_text(encoding="utf-8")
+        self.assertIn(f'<meta name="record-api" content="{self.API}">', html)
+        # the policy names exactly that origin, and nothing else moved
+        self.assertIn(f"connect-src 'self' {self.API};", html)
+        self.assertIn("script-src 'self';", html)
+        self.assertIn("img-src 'self' https://i.ytimg.com data:;", html)
+
+    def test_the_policy_names_an_origin_never_a_path(self):
+        out = self.root / "path"
+        self.press(out, api=self.API + "/some/path")
+        html = (out / "s" / "index.html").read_text(encoding="utf-8")
+        self.assertIn(f"connect-src 'self' {self.API};", html)
+
+    def test_the_manifest_records_which_studio_pressed_it(self):
+        out = self.root / "m"
+        self.press(out, api=self.API)
+        man = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(man["api"], self.API)
+
+    def test_the_search_note_stops_promising_what_it_cannot_do(self):
+        """The sentence that was wrong for a month, both ways round."""
+        desk, studio = self.root / "d2", self.root / "s2"
+        self.press(desk)
+        self.press(studio, api=self.API)
+        self.assertIn("Meaning-search needs the Studio",
+                      (desk / "s" / "index.html").read_text(encoding="utf-8"))
+        self.assertIn("two ways at once",
+                      (studio / "s" / "index.html").read_text(encoding="utf-8"))
+
+    # -- the covenant: complete without the Studio --------------------------
+
+    def test_a_studio_edition_carries_the_whole_static_record_anyway(self):
+        """If the API vanished, this edition still reads. Same files, same
+        index, same meetings as a desk pressing — the API adds a way to ask,
+        never a thing to hold."""
+        desk, studio = self.root / "d3", self.root / "s3"
+        self.press(desk)
+        self.press(studio, api=self.API)
+        names = lambda r: {str(p.relative_to(r)) for p in r.rglob("*")
+                           if p.is_file()}
+        self.assertEqual(names(desk), names(studio))
+        for rel in ("search/segs.json", "search/meta.json", "stats.json",
+                    "urls.json", "towns.json"):
+            self.assertEqual((desk / rel).read_bytes(),
+                             (studio / rel).read_bytes(), rel)
+
+    def test_a_studio_press_is_idempotent_too(self):
+        a, b = self.root / "i1", self.root / "i2"
+        self.press(a, api=self.API)
+        self.press(b, api=self.API)
+        for p in sorted(a.rglob("*")):
+            if p.is_file():
+                rel = p.relative_to(a)
+                self.assertEqual(p.read_bytes(), (b / rel).read_bytes(),
+                                 f"{rel} differs between two Studio bakes")
+
+
+class TestReaderDegradesToStatic(unittest.TestCase):
+    """The reader's half of live-first, and the promise underneath it.
+
+    specs/17 §6.2 is a covenant, not a preference: if Cloud Run and Postgres
+    both vanish, the record still reads. So the interesting cases are not the
+    ones where the Studio answers — they are the ones where it does not.
+    """
+
+    JS = (REPO / "web" / "static" / "app.js").read_text()
+
+    def node(self, body):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not available")
+        return subprocess.run([node, "-e", body], capture_output=True, text=True)
+
+    def lift(self, pattern):
+        m = re.search(pattern, self.JS, re.S)
+        self.assertTrue(m, f"{pattern!r} not found in the reader — did it move?")
+        return m.group(0)
+
+    # -- structure: the fallback cannot be removed by accident -------------
+
+    def test_search_falls_through_to_the_static_index(self):
+        """`runSearch` may prefer the Studio; it must always be able to answer
+        without one. If someone deletes the fallback, this fails rather than
+        the record quietly needing a backend."""
+        run = self.lift(r"  async function runSearch\(q\) \{.+?\n  \}")
+        self.assertIn("staticSearch", run,
+                      "runSearch no longer reaches the static index")
+        self.assertIn("async function staticSearch", self.JS)
+
+    def test_the_static_path_touches_no_api(self):
+        """The prebuilt index answers from this origin and nowhere else."""
+        static = self.lift(r"  async function staticSearch\(q, terms, box\) \{.+?\n  \}")
+        for forbidden in ("askStudio", "API +", "/api/search"):
+            self.assertNotIn(forbidden, static,
+                             f"the static path reached for {forbidden!r}")
+
+    def test_a_missing_meta_tag_means_a_desk_edition(self):
+        """No tag, no API, no attempt — every desk edition's condition."""
+        self.assertIn('$(\'meta[name="record-api"]\') || {}', self.JS)
+
+    # -- behaviour: a dead Studio is one timed attempt, then silence -------
+
+    def test_a_dead_studio_returns_null_and_is_not_asked_twice(self):
+        body = "\n".join([
+            "let calls = 0;",
+            "const AbortController = globalThis.AbortController;",
+            "const fetch = () => { calls++; return Promise.reject(new Error('down')); };",
+            'const API = "https://api.example";',
+            "const API_TIMEOUT_MS = 50;",
+            "let API_DOWN = false;",
+            self.lift(r"  async function askStudio\(path\) \{.+?\n  \}"),
+            "(async () => {",
+            "  const a = await askStudio('/api/search?q=x');",
+            "  const b = await askStudio('/api/search?q=y');",
+            "  if (a !== null || b !== null) { console.log('FAIL: returned a value'); process.exit(1); }",
+            "  if (calls !== 1) { console.log('FAIL: asked ' + calls + ' times, want 1'); process.exit(1); }",
+            "  if (!API_DOWN) { console.log('FAIL: API_DOWN not set'); process.exit(1); }",
+            "  console.log('ok');",
+            "})();",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"askStudio mishandled a dead Studio:\n{r.stdout}{r.stderr}")
+
+    def test_a_slow_studio_is_abandoned_rather_than_waited_on(self):
+        """A cold Cloud Run instance must not hold the reader hostage."""
+        body = "\n".join([
+            "const AbortController = globalThis.AbortController;",
+            "const fetch = (u, o) => new Promise((res, rej) => {",
+            "  o.signal.addEventListener('abort', () => rej(new Error('aborted')));",
+            "});",
+            'const API = "https://api.example";',
+            "const API_TIMEOUT_MS = 60;",
+            "let API_DOWN = false;",
+            self.lift(r"  async function askStudio\(path\) \{.+?\n  \}"),
+            "(async () => {",
+            "  const t0 = Date.now();",
+            "  const a = await askStudio('/api/search?q=x');",
+            "  const dt = Date.now() - t0;",
+            "  if (a !== null) { console.log('FAIL: returned a value'); process.exit(1); }",
+            "  if (dt > 2000) { console.log('FAIL: waited ' + dt + 'ms'); process.exit(1); }",
+            "  console.log('ok');",
+            "})();",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"askStudio did not give up:\n{r.stdout}{r.stderr}")
+
+    def test_no_reader_request_ever_carries_credentials(self):
+        """Readers are never identified. The fetch says so explicitly rather
+        than relying on the default, because the default is a thing that can
+        change under you."""
+        ask = self.lift(r"  async function askStudio\(path\) \{.+?\n  \}")
+        self.assertIn('credentials: "omit"', ask)
+
+    # -- the four chips -----------------------------------------------------
+
+    def test_every_provenance_the_server_can_send_has_a_chip(self):
+        """The vocabulary is set in two places and read in a third.
+
+        `memory.policy.blend` emits `word` / `related` / `both`; the hosted
+        store renames `related` to `meaning` when the neural half answered, so
+        the reader can tell "a related word" from "what you meant". A value
+        the reader has no chip for would render a blank badge, so the two ends
+        are compared rather than trusted."""
+        from memory import policy
+        kw = [{"seg_id": 1, "score": 1.0}, {"seg_id": 2, "score": 0.9}]
+        vec = [({"seg_id": 2, "score": 0.9}, 0.8), ({"seg_id": 3}, 0.7)]
+        produced = {h["why"] for h in policy.blend(kw, vec, 10)}
+        self.assertEqual(produced, {"word", "both", "related"})
+
+        says = self.lift(r"  const WHY_SAYS = \{.+?\};")
+        # `meaning` is the fourth, added by record/store.py in the neural space
+        for w in produced | {"meaning"}:
+            self.assertIn(f"{w}:", says, f"no chip for provenance {w!r}")
+        self.assertIn('h["why"] = "meaning"',
+                      (REPO / "record" / "store.py").read_text(),
+                      "the hosted store no longer produces `meaning`")
+
+    def test_an_unknown_provenance_renders_nothing_rather_than_an_empty_badge(self):
+        body = "\n".join([
+            "const esc = s => String(s == null ? '' : s);",
+            self.lift(r"  const WHY_SAYS = \{.+?\};"),
+            self.lift(r"  function why\(w\) \{.+?\n  \}"),
+            "if (why('nonsense') !== '') { console.log('FAIL:', why('nonsense')); process.exit(1); }",
+            "if (!why('meaning').includes('prov-meaning')) { console.log('FAIL: no class'); process.exit(1); }",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"why() mishandled an unknown value:\n{r.stdout}{r.stderr}")

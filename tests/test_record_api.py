@@ -433,5 +433,96 @@ class StewardTest(unittest.TestCase):
         self.assertEqual(j["totals"][0]["model"], "gemini-embedding-001")
 
 
+class CorsTest(unittest.TestCase):
+    """The other half of the handshake that makes live search possible.
+
+    `web/emit.py` writes a `connect-src` into the edition naming this service.
+    That is the reader saying which host it is willing to call. It buys
+    nothing on its own: the browser also requires the *service* to say which
+    readers may call it, and until 2026-07-19 nothing here said anything, so
+    a correct `fetch()` from a correct edition would have failed in the
+    browser with the network tab as its only explanation.
+
+    Needs no database — CORS is decided before a route is reached, which is
+    also why `create_app(corpus=object())` is safe here.
+    """
+
+    def client(self, origins):
+        from fastapi.testclient import TestClient
+
+        from record import app as app_mod
+        from record.settings import Settings
+        cfg = Settings()
+        cfg.reader_origins = origins
+        with mock.patch.object(app_mod, "settings", cfg):
+            return TestClient(app_mod.create_app(corpus=object()))
+
+    # -- configured off, which is how every desk and every test runs -------
+
+    def test_with_no_reader_origins_nothing_changes(self):
+        """The default is the service exactly as it was. A feature that turns
+        itself on because someone deployed is a feature nobody chose."""
+        r = self.client([]).get("/steward/config.json",
+                                headers={"Origin": "https://publicrecord.studio"})
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("access-control-allow-origin",
+                         {k.lower() for k in r.headers})
+
+    # -- configured on ------------------------------------------------------
+
+    def test_a_named_reader_is_allowed(self):
+        c = self.client(["https://publicrecord.studio"])
+        r = c.get("/steward/config.json",
+                  headers={"Origin": "https://publicrecord.studio"})
+        self.assertEqual(r.headers.get("access-control-allow-origin"),
+                         "https://publicrecord.studio")
+
+    def test_an_unnamed_reader_is_not(self):
+        """An allowlist that lets anyone in is a wildcard with extra steps."""
+        c = self.client(["https://publicrecord.studio"])
+        r = c.get("/steward/config.json",
+                  headers={"Origin": "https://not-the-record.example"})
+        self.assertNotIn("access-control-allow-origin",
+                         {k.lower() for k in r.headers})
+
+    def test_the_preflight_a_browser_actually_sends_is_answered(self):
+        """The search call carries no custom header and would ride the simple
+        path, but `Add a meeting` POSTs JSON and therefore preflights. A 405
+        here is the bug this test exists to keep fixed."""
+        c = self.client(["https://publicrecord.studio"])
+        r = c.options("/api/submissions",
+                      headers={"Origin": "https://publicrecord.studio",
+                               "Access-Control-Request-Method": "POST",
+                               "Access-Control-Request-Headers": "content-type"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers.get("access-control-allow-origin"),
+                         "https://publicrecord.studio")
+        self.assertIn("POST", r.headers.get("access-control-allow-methods", ""))
+
+    # -- the covenant, at the transport layer -------------------------------
+
+    def test_credentials_are_never_allowed(self):
+        """There is no reader identity to send, so the service will not accept
+        one even if some future caller invents it. Asserted rather than
+        assumed, because `allow_credentials=True` is one keyword away and
+        reads like a convenience."""
+        c = self.client(["https://publicrecord.studio"])
+        r = c.get("/steward/config.json",
+                  headers={"Origin": "https://publicrecord.studio"})
+        self.assertNotIn("access-control-allow-credentials",
+                         {k.lower() for k in r.headers})
+
+    def test_a_steward_token_cannot_ride_in_from_a_reader_origin(self):
+        """The console is served from this same origin and needs no CORS at
+        all. Allowing `Authorization` cross-origin would widen the console's
+        attack surface to buy the reader nothing."""
+        c = self.client(["https://publicrecord.studio"])
+        r = c.options("/api/steward/submissions",
+                      headers={"Origin": "https://publicrecord.studio",
+                               "Access-Control-Request-Method": "GET",
+                               "Access-Control-Request-Headers": "authorization"})
+        self.assertNotEqual(r.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main()

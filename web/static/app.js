@@ -15,6 +15,47 @@
   const _cache = {};
   const getJSON = async u => (_cache[u] ||= fetch(u).then(r => r.ok ? r.json() : null).catch(() => null));
 
+  /* ---- the Studio, if this pressing has one (specs/19 R1.6) ----------------
+     Live-first, static-always. The API adds meaning-search to a record that
+     already searches without it; it is never what makes the record readable.
+     So everything below treats the API as an upgrade that may not arrive:
+     one timed attempt, and the prebuilt index answers if it does not.
+
+     The address rides a <meta> baked by web/emit.py, beside the connect-src
+     that permits it. No tag means a desk edition, and every line here is
+     dead code — which is the state this file shipped in for a month. */
+  const API = ($('meta[name="record-api"]') || {}).content || "";
+  /* Cloud Run scales to zero, so the first query of a quiet day pays for the
+     cold start. Long enough to let that land, short enough that a reader with
+     a dead API is reading static results before they wonder. There is no
+     retry: a second attempt would double the wait to tell them the same
+     thing, and the static index is right there. */
+  const API_TIMEOUT_MS = 6000;
+  let API_DOWN = false;      // one failure is enough; stop asking this page
+
+  async function askStudio(path) {
+    if (!API || API_DOWN) return null;
+    const ctl = new AbortController();
+    const bell = setTimeout(() => ctl.abort(), API_TIMEOUT_MS);
+    try {
+      const r = await fetch(API + path, { signal: ctl.signal,
+                                          credentials: "omit" });
+      if (!r.ok) throw new Error(String(r.status));
+      return await r.json();
+    } catch (e) {
+      API_DOWN = true;
+      return null;
+    } finally { clearTimeout(bell); }
+  }
+
+  /* The promise emit.py makes at press time — "search reads the record two
+     ways at once" — cannot know whether the Studio will answer. When it does
+     not, the page has to stop saying it. */
+  function saySearchIsStatic(why) {
+    const el = $("#search-note");
+    if (el) el.textContent = why;
+  }
+
   /* ---- canon(): the exact twin of web/canon.py (pinned by a golden table) ---- */
   const VIDEO_ID = /(?:v=|youtu\.be\/|\/shorts\/|\/live\/|\/embed\/)([\w-]{11})/;
   const BARE_ID = /^[\w-]{11}$/;
@@ -562,10 +603,80 @@
       runSearch(val);
     });
   }
+  /* Live-first, static-always. The Studio is asked once; whatever it cannot
+     do, the prebuilt index does. Note the order: the API call is awaited
+     BEFORE the static planes are fetched, so a working Studio costs one
+     request rather than one request plus a megabyte of index nobody reads. */
   async function runSearch(q) {
     const box = $("#results"); box.innerHTML = '<p class="hint">searching…</p>';
     const terms = (q.toLowerCase().match(/[a-z0-9]+/g) || []);
     if (!terms.length) { box.innerHTML = '<p class="hint">type a word or phrase</p>'; return; }
+    if (API && !API_DOWN) {
+      const live = await liveSearch(q, terms, box);
+      if (live) return;
+      // It did not answer. Say so where the page promised otherwise, then do
+      // exactly what a desk edition does.
+      saySearchIsStatic(
+        "Meaning-search needs the Studio and it is not answering right now — "
+        + "searching the words in your browser instead. Nothing else on this "
+        + "page depends on it.");
+    }
+    return staticSearch(q, terms, box);
+  }
+
+  /* The Studio's answer, rendered with the provenance it reports per hit:
+     `word` (the words you typed), `meaning` (what they mean), `both`, and
+     `related` when only the lexical vector reached it. Returns false if the
+     API did not answer, and the caller falls back — this function never
+     renders an error, because an error is not what the reader gets. */
+  async function liveSearch(q, terms, box) {
+    const p = new URLSearchParams({ q, space: "neural", limit: "80" });
+    if (SCOPE.town) p.set("town", SCOPE.town);
+    if (SCOPE.body) p.set("body", SCOPE.body);
+    const r = await askStudio(`/api/search?${p}`);
+    if (!r || !Array.isArray(r.hits)) return false;
+
+    // The server says which half actually answered, and it derives that from
+    // the results rather than from its own configuration. If it dropped to
+    // lexical, the note says why and the page prints it verbatim rather than
+    // inventing a cheerier one.
+    saySearchIsStatic(r.note || (r.space === "neural"
+      ? "Search read the record two ways at once — the words you typed, and "
+        + "what they mean. Nothing about you was sent with the query."
+      : "Search read the words you typed. Nothing about you was sent with "
+        + "the query."));
+
+    const where = [SCOPE.town, SCOPE.body].filter(Boolean).join(" · ");
+    if (!r.hits.length) {
+      box.innerHTML = `<p class="hint">nothing in the record for “${esc(q)}”`
+        + (where ? ` in ${esc(where)}` : "") + `.</p>`;
+      return true;
+    }
+    box.innerHTML = `<p class="hint">${r.hits.length} moment${r.hits.length > 1 ? "s" : ""} `
+      + (where ? `in ${esc(where)}` : "across the record")
+      + ` · <span class="live">live</span></p>`
+      + r.hits.map(h => {
+        const bits = [h.title, h.body, SCOPE.town ? "" : h.town, h.date];
+        return `<a class="sresult" href="${BASE}/m/${encodeURIComponent(h.meeting_id)}#t${Math.floor(h.t || 0)}">
+          <span class="ts">${hms(h.t)}</span>${why(h.why)}${mark(h.text || "", terms)}
+          <span class="smeta">${esc(bits.filter(Boolean).join(" · "))}${h.speaker ? " · " + esc(h.speaker) : ""}</span></a>`;
+      }).join("");
+    return true;
+  }
+
+  /* Why this hit is here. Four words, and the reader is owed the difference:
+     a moment found by meaning alone is a different claim from one that
+     literally says what was typed. */
+  const WHY_SAYS = { word: "the words you typed", meaning: "what you meant",
+                     both: "the words, and the meaning",
+                     related: "a related word" };
+  function why(w) {
+    w = String(w || "");
+    if (!WHY_SAYS[w]) return "";
+    return `<span class="prov prov-${esc(w)}" title="${esc(WHY_SAYS[w])}">${esc(w)}</span>`;
+  }
+
+  async function staticSearch(q, terms, box) {
     const [meta, segs, shards] = await Promise.all([
       getJSON(`${BASE}/search/meta.json`), getJSON(`${BASE}/search/segs.json`),
       getJSON(`${BASE}/search/shards.json`)]);

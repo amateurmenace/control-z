@@ -68,9 +68,35 @@ class Settings:
     # steward's identity — those are people, this is a robot.
     service_token: str = field(default_factory=lambda: _env("RECORD_SERVICE_TOKEN"))
 
+    # -- who may ask from a browser ----------------------------------------
+    # The edition is static and lives somewhere else — GitHub Pages today, a
+    # bucket behind a CDN tomorrow — so the one call the reader makes to this
+    # service is cross-origin, and a browser will not make it unless the
+    # service says out loud that it consents. This is that consent.
+    #
+    # It is an allowlist rather than `*` for the reason every other list in
+    # this file is one: naming who may ask costs a line, and a wildcard is a
+    # decision nobody ever revisits. It is also the exact mirror of the CSP
+    # exception `web/emit.py` writes into the edition — the reader names the
+    # service it may call, the service names the readers that may call it, and
+    # neither half works alone. When the two eventually share an origin behind
+    # one load balancer, both halves go quiet together.
+    #
+    # Note what is deliberately absent: credentials. No reader is identified,
+    # so no reader's request carries one, so this never allows them — and the
+    # steward console is served from this same origin and needs none of it.
+    reader_origins: List[str] = field(default_factory=lambda: _env_list(
+        "RECORD_READER_ORIGINS"))
+
     # -- the edition -------------------------------------------------------
     site_base: str = field(default_factory=lambda: _env(
         "RECORD_SITE_BASE", "https://communityai.studio"))
+    # The address a pressed edition tells its reader to call for meaning-search
+    # and freshness. Empty means "press a purely static edition", which is the
+    # right default everywhere except the job that presses the live site: an
+    # edition is complete without it, and baking a guessed URL into thousands
+    # of pages is worse than baking none.
+    api_base: str = field(default_factory=lambda: _env("RECORD_API_BASE"))
     edition_bucket: str = field(default_factory=lambda: _env("RECORD_EDITION_BUCKET"))
     edition_dir: str = field(default_factory=lambda: _env(
         "RECORD_EDITION_DIR", "/tmp/record-edition"))

@@ -272,6 +272,26 @@ b { font-weight: 600; }
 .sresult .smeta { display: block; font-family: var(--mono); font-size: 11px;
   color: var(--cream-faint); margin-top: 2px; }
 mark { background: rgba(169,122,22,.28); color: inherit; border-radius: 2px; }
+/* provenance: why this moment is in the list. Only the Studio can say — the
+   static index knows one way of finding things and so says nothing, which is
+   why these appear and disappear with the API rather than always sitting there
+   reading "word". Named `prov`, not `why`, because `.addpage .why` is already
+   a paragraph of prose and two meanings for one class is a thing somebody
+   debugs later.
+   Amber is spoken for: it is the <mark> colour, so a "word" chip in amber
+   would restate what the highlight already says. The lexical side stays
+   neutral and the semantic side takes the library violet. */
+.prov { font: 600 9.5px var(--mono); text-transform: uppercase;
+  letter-spacing: .03em; padding: 1px 5px; border-radius: 4px;
+  border: 1px solid var(--line); color: var(--cream-dim);
+  margin-right: 6px; vertical-align: 1px; }
+.prov-meaning { color: var(--kb); border-color: var(--kb); }
+.prov-both { color: var(--memory); border-color: var(--memory); }
+.prov-related { color: var(--cream-faint); border-style: dashed; }
+/* the live badge on the results count — the record is answering from the
+   Studio rather than from the envelope on disk */
+.live { font: 600 9.5px var(--mono); text-transform: uppercase;
+  letter-spacing: .03em; color: var(--kb); }
 
 /* ---------- add-a-meeting ---------- */
 .addpage .why { max-width: 66ch; color: var(--cream-dim); margin: 8px 0 14px; }

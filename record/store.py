@@ -314,23 +314,31 @@ class PgCorpus:
     # -- search ------------------------------------------------------------
 
     def search(self, q: str, limit: int = 60, town: str = "",
-               space: str = "lexical") -> List[dict]:
+               space: str = "lexical", body: str = "") -> List[dict]:
         """Words and meaning, blended, with the provenance the reader is shown.
 
         `town` is not optional in practice: the API layer always passes it, and
         a hosted record that forgets to is a cross-tenant leak. It defaults to
-        empty only so the signature matches the desk's."""
+        empty only so the signature matches the desk's.
+
+        `body` scopes to one public body, and it belongs down here rather than
+        in the reader for the same reason the static index scopes before its
+        own cut: filtering a finished result set means the limit was spent on
+        rows the reader had already said they did not want, so a scoped search
+        silently returns fewer hits than it found. The reader's two filters and
+        this signature now agree."""
         q = (q or "").strip()
         if not q:
             return []
         keyword_hits = [{**dict(r), "score": score}
                         for r, score in policy.rank_scores(
-                            self._keyword_rows(q, limit, town))]
+                            self._keyword_rows(q, limit, town, body))]
         by_kw = {h["seg_id"] for h in keyword_hits}
         vector_hits = []
         qvec = self._query_vec(q, space)
         if qvec is not None:
-            for row, sim in self._vector_rows(qvec, limit, town, space):
+            for row, sim in self._vector_rows(qvec, limit, town, space,
+                                              body):
                 if sim <= policy.VECTOR_FLOOR:
                     continue
                 hit = dict(row)
@@ -363,7 +371,8 @@ class PgCorpus:
             return embed_neural.embed_query(q)
         return self._vec(q)
 
-    def _keyword_rows(self, q: str, limit: int, town: str = "") -> List[dict]:
+    def _keyword_rows(self, q: str, limit: int, town: str = "",
+                      body: str = "") -> List[dict]:
         """One query, hit envelope and all. `to_tsquery` with `:*` prefixes is
         the same shape as FTS5's `"tok"*`, built from the same tokenizer; the
         ORDER BY is DESC because ts_rank_cd is positive where bm25 is negative,
@@ -380,6 +389,9 @@ class PgCorpus:
         if town:
             sql += " AND m.town=%s"
             args.append(town)
+        if body:
+            sql += " AND m.body=%s"
+            args.append(body)
         sql += (" ORDER BY ts_rank_cd(s.fts, to_tsquery('english', %s)) DESC, "
                 "s.id LIMIT %s")
         args += [tsq, limit]
@@ -392,9 +404,10 @@ class PgCorpus:
                 # case-insensitive and Postgres's is not, and a silently
                 # case-sensitive fallback is a search that quietly finds less.
                 con.rollback()
-                return self._like_rows(q, limit, town)
+                return self._like_rows(q, limit, town, body)
 
-    def _like_rows(self, q: str, limit: int, town: str = "") -> List[dict]:
+    def _like_rows(self, q: str, limit: int, town: str = "",
+                   body: str = "") -> List[dict]:
         sql = (f"SELECT {_HIT_COLS} FROM segments s "
                "JOIN meetings m ON m.id=s.meeting_id "
                "WHERE s.text ILIKE %s AND m.status='live'")
@@ -402,13 +415,16 @@ class PgCorpus:
         if town:
             sql += " AND m.town=%s"
             args.append(town)
+        if body:
+            sql += " AND m.body=%s"
+            args.append(body)
         sql += " ORDER BY s.meeting_id, s.id LIMIT %s"
         args.append(limit)
         with self._con() as con:
             return [dict(r) for r in con.execute(sql, args).fetchall()]
 
     def _vector_rows(self, qvec, limit: int, town: str = "",
-                     space: str = "lexical"):
+                     space: str = "lexical", body: str = ""):
         """Nearest neighbours by cosine, through the HNSW index. No matrix, no
         cache, no write counter — the index is the thing the desk's in-process
         numpy matrix was standing in for."""
@@ -420,6 +436,9 @@ class PgCorpus:
         if town:
             sql += " AND m.town=%s"
             args.append(town)
+        if body:
+            sql += " AND m.body=%s"
+            args.append(body)
         sql += f" ORDER BY s.{col} <=> %s LIMIT %s"
         args += [qvec, limit]
         with self._con() as con:
