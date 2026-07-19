@@ -70,6 +70,7 @@ Cloud SQL instance in another pays for the crossing and gets slower for it.
 ```bash
 gcloud sql instances create record-pg \
     --database-version=POSTGRES_16 \
+    --edition=ENTERPRISE \
     --tier=db-f1-micro \
     --region=us-east1 \
     --storage-size=10GB \
@@ -88,6 +89,12 @@ Console: <https://console.cloud.google.com/sql/instances?project=publicrecord-st
 **Adds: $10–30/mo.** Automated backups are on by default with the flag above;
 that is the line item that makes this a record rather than a cache.
 
+> **`--edition=ENTERPRISE` is not optional.** Cloud SQL now defaults
+> PostgreSQL 16 to ENTERPRISE_PLUS, which rejects every shared-core tier
+> with *"Invalid Tier (db-f1-micro) for (ENTERPRISE_PLUS) Edition"*. Without
+> the flag the cheapest instance you can create is roughly ten times this
+> line. Found by running this runbook, 2026-07-19.
+>
 > `db-f1-micro` is a shared-core tier. It is right for two meetings and will
 > not be right for three hundred — the upgrade is `gcloud sql instances patch
 > record-pg --tier=db-g1-small`, a restart, and roughly double the line. Do it
