@@ -51,6 +51,14 @@ to end before turning a nightly poll loose.
   poll files submissions; the pipeline ingests what a human approved. Safe to
   leave alone because the pipeline reads `approved` and nothing else.
 
+- **publicrecord.studio is live** (specs/19 R1.7, by a shortcut). Not the
+  specs/18 site-move — that needs `control-z-tools` made public — but a second,
+  independent GitHub Pages site (`amateurmenace/publicrecord`) with its own CNAME
+  serving the cloud-pressed live-first edition. `control-z.org` never moved and
+  never went dark; both domains were verified serving, in a browser, before and
+  after. The reader at its own address answers a semantic query with meaning
+  chips and keeps reading when the API is stopped.
+
 ### 2.0.0: Civic Media Studio — the suite takes its own name — 2026-07-18
 
 A major number because macOS agrees it is one: the bundle identifier moved from

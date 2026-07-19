@@ -24,12 +24,15 @@ billed to *Firebase Payment*, budget **$100/mo** scoped to this project alone.
 
 **The API:** <https://record-api-907309358085.us-east1.run.app>
 **The steward console:** <https://record-api-907309358085.us-east1.run.app/steward>
-**The reader (static, live today):** <https://control-z.org/app> — the desk's
-edition, 10 meetings, static search.
-**The reader (live-first, pressed and waiting):** `gs://publicrecord-edition/app`,
-served at <https://publicrecord.studio> once §9 item 2's domain swap lands. It
-carries 11 meetings and calls the API for meaning-search, degrading to its own
-index when the API is dark.
+**The reader:** <https://publicrecord.studio> — **live** (2026-07-19). The
+live-first edition: 12 meetings, meaning-search from the API, degrading to its
+own prebuilt index when the API is dark. Served from GitHub Pages on its own
+repo, `amateurmenace/publicrecord` (see §11 for how it is deployed and
+refreshed).
+**The reader (the older edition):** <https://control-z.org/app> — the desk's
+static 1.9.0 pressing, 10 meetings, no meaning-search. Left in place so every
+citation minted against it survives; the eventual tools-site move (specs/18,
+R1.8) is what retires `/app` from this domain.
 
 ---
 
@@ -162,6 +165,33 @@ Migrations are applied once, recorded in `schema_migrations`, and each runs
 inside a transaction. Running it twice is a no-op — that is asserted by a test,
 because a command nobody dares re-run after a partial failure is a command
 nobody runs at all.
+
+### Refreshing what publicrecord.studio serves
+
+The reader at publicrecord.studio is a **static edition on GitHub Pages** (repo
+`amateurmenace/publicrecord`), separate from the live API. New meetings reach
+the API and the console immediately; the reader shows them only after the
+edition is re-pressed and re-deployed. Two steps, both safe to re-run:
+
+```bash
+# 1. press from the cloud (never from a Mac — a thin corpus would shrink it)
+gcloud run jobs execute record-press --region=us-east1 --wait
+#    → writes gs://publicrecord-edition/app, with RECORD_API_BASE baked in
+
+# 2. sync that edition into the Pages repo and push
+git clone https://github.com/amateurmenace/publicrecord /tmp/pr && cd /tmp/pr
+gcloud storage rsync -r -d gs://publicrecord-edition/app app
+git add -A && git commit -m "Deploy: <what changed>" && git push
+```
+
+The `-d` on the rsync deletes what the press dropped, so a steward's `forget`
+propagates. The repo keeps `CNAME`, `.nojekyll` and the root `index.html`
+redirect at its top level — the rsync only touches `app/`, so those survive.
+**Before pushing, if the edition dropped a page that is cited on
+`control-z.org/app`** (a steward deleted an issue — see §9 item 1), decide
+whether that page needs a tombstone rather than a 404; the two editions are
+allowed to differ, but a dead citation is the one thing the covenant does not
+allow quietly.
 
 ---
 
@@ -421,15 +451,17 @@ named plainly, and one line is a finding, not a task.
      issue, not a bare 404** — a page that says *this issue was removed by a
      steward on <date>*, so a citation resolves to an explanation rather than a
      dead end. Until then the cloud edition is not deployed over control-z.org.
-2. **`publicrecord.studio` has no site behind it yet** (specs/19 R1.7). DNS
-   points at GitHub Pages, the monorepo's Pages custom domain is still
-   `control-z.org`, and the swap is blocked on a step only Stephen can take:
-   `amateurmenace/control-z-tools` exists but is **private**, and it must serve
-   `control-z.org` from its own Pages before the monorepo's domain can move —
-   otherwise control-z.org goes dark during the cutover, which the rail forbids.
-   The live-first edition is pressed and waiting in `gs://publicrecord-edition/app`;
-   the moment the domain lands, it serves. Until then it is testable locally
-   (see the test script handed over with this session).
+2. ~~`publicrecord.studio` has no site behind it yet~~ — **live** (2026-07-19).
+   Not by the specs/18 site-move (which needs `control-z-tools` made public —
+   still Stephen's call), but by a second, independent GitHub Pages site: the
+   public repo `amateurmenace/publicrecord` carries the cloud-pressed live-first
+   edition with its own CNAME, so `control-z.org` never had to move and never
+   went dark. Both domains were verified serving before and after, in a browser.
+   The root redirects to `/app/`; the reader calls the API and degrades to its
+   own index when the API is down. **The full specs/18 reorganisation
+   (control-z.org → the tools repo, `/app` retired from it) is still R1.8 and
+   still Stephen's** — this was the fast, reversible path to a working address,
+   not that reorganisation. How to refresh it is in §5.
 3. ~~No Gemini key~~ — **done, and used.** `neural.available: true`, the whole
    record embedded under the cap; `/api/steward/spend` shows the cost.
 4. ~~The steward console is configured-off~~ — **done.** Google sign-in against

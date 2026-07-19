@@ -13,19 +13,22 @@ specs/18 (the split), `record/OPERATING.md` (the live system), PARALLEL.md
 > by three commits. The roadmap's first job is not features. It is to make
 > both sentences false.
 
-> **R1 status, 2026-07-19.** The first sentence is now mostly false. The record
-> holds 11 meetings and 80,856 segments; the neural half is embedded and answers
-> meaning-search; the console signs a steward in; hosted ingest carried a meeting
-> end to end; the reader is live-first, static-always; and the nightly poll and
-> ingest run per town. **R1.1–R1.6 done. R1.7 (the domain) is blocked on making
-> `control-z-tools` public — Stephen's call — and R1.8 (the split) is deferred
-> behind it and needs the signing machine for its proof.** Two facts to carry
-> forward: the record now shows 215 active issues not because the import dropped
-> one but because a steward deleted one through the console mid-session (audited)
-> — the console works end to end, and hosted ingest carried two meetings, one
-> approved by the steward himself. The live-first edition is pressed into
-> `gs://publicrecord-edition/app`, waiting only on the domain; R1.7 owes a
-> tombstone for a deleted issue so a citation to it resolves to an explanation,
+> **R1 status, 2026-07-19.** The first sentence is now false: **publicrecord.studio
+> is live and serving the record.** It holds 12 meetings and ~85k segments; the
+> neural half is embedded and answers meaning-search; the console signs a steward
+> in (Stephen approved a meeting and curated an issue through it); hosted ingest
+> carried two meetings end to end; the reader is live-first, static-always; the
+> nightly poll and ingest run per town. **R1.1–R1.7 done.** R1.7 landed by a
+> shortcut rather than the specs/18 site-move: a second public repo
+> (`amateurmenace/publicrecord`) with its own Pages+CNAME serves publicrecord.studio,
+> so control-z.org never moved and never went dark — both verified in a browser.
+> **R1.8 (the split, and the full control-z.org → tools-repo reorganisation) is
+> still deferred** — it needs `control-z-tools` made public and the signing
+> machine for its DMG proof. Two carry-forward facts: the record shows 215 active
+> issues because a steward deleted one through the console (audited), not because
+> the import was short (it arrived whole at 216); and the shortcut leaves the
+> tombstone question open — `control-z.org/app` still carries that deleted issue's
+> page while publicrecord.studio does not, so a citation to it wants a tombstone,
 > not a 404. Details in `record/OPERATING.md` §9.
 
 ---

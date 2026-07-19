@@ -179,16 +179,21 @@ section below, updated on main.
   - **Cloud Run jobs**: `record-pipeline`, `record-poll`, `record-embed`,
     `record-press` created; `record-nightly-poll`/`-ingest` schedulers.
 
-  **Two facts to carry forward.** The record shows 215 active issues, not because
-  the import was short (it arrived whole at 216) but because Stephen deleted one
-  through the console during the session (audited `forget`) — the console works
-  end to end, and hosted ingest carried two meetings, one Stephen approved
-  himself. And R1.7 (domain) is blocked on making `control-z-tools` public — so
-  the live-first edition is pressed into `gs://publicrecord-edition/app` and
-  served nowhere public yet; `control-z.org/app` still serves the frozen 1.9.0
-  edition, deliberately un-overwritten because it predates that deletion and a
-  cloud press would 404 the deleted issue's still-cited page. R1.7 owes a
-  tombstone for a steward-deleted issue.
+  **R1.7 landed — publicrecord.studio is live.** Not by the specs/18 site-move
+  (which needs `control-z-tools` public) but by a second public repo,
+  `amateurmenace/publicrecord`, with its own Pages+CNAME serving the cloud-pressed
+  live-first edition. control-z.org never moved and never went dark; both verified
+  in a browser. Refresh flow in `record/OPERATING.md` §5. **R1.8 (the split + the
+  full control-z.org→tools reorganisation) is still deferred** — repo surgery plus
+  the signing machine for the DMG proof.
+
+  **Two facts to carry forward.** The record shows 215 active issues because
+  Stephen deleted one through the console (audited `forget`), not because the
+  import was short (it arrived whole at 216); the console works end to end, and
+  hosted ingest carried two meetings, one Stephen approved himself. And the R1.7
+  shortcut leaves the tombstone question open — `control-z.org/app` still carries
+  the deleted issue's page while publicrecord.studio does not, so a citation to it
+  wants a tombstone, not a 404.
 
 - 2026-07-18 — **publicrecord, wave 1: the record moves in.
   `record/` joins the tree; `memory/` grows a store seam. 648 tests green
