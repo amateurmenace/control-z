@@ -390,16 +390,88 @@
 
   /* ================= MEETING ================= */
   let YT = { win: null, loaded: false, ready: false, time: 0, pending: null };
+  let MINIMAP = null, STICKY_NOW = null;
   function meeting() {
     const art = $(".meeting"); if (!art) return;
     const pid = art.dataset.pid;
     getJSON(`${BASE}/meetings/${pid}.json`).then(m => m && hydrateMeeting(m));
     wirePlayer();
     wireTranscriptSeek();
+    wireMoments();
     wireCite(pid);
+    stickyHeader();
     window.addEventListener("message", onYT, false);
     focusHash();
     window.addEventListener("hashchange", focusHash);
+  }
+  /* A moment card seeks the tape, like a transcript line — the href stays a
+     real #t anchor for the reader with JavaScript off. */
+  function wireMoments() {
+    $$(".moment[data-t]").forEach(a => a.addEventListener("click", ev => {
+      ev.preventDefault();
+      const t = +a.dataset.t;
+      const f = $(".player.facade");
+      if (f) loadTape(f.dataset.video, t); else ytSeek(t);
+      history.replaceState(null, "", "#t" + Math.floor(t));
+    }));
+  }
+  /* The sticky mini-header: once the masthead has scrolled away, a slim bar
+     keeps the title, the playing time, and Cite in reach. Built here, not
+     baked, because it is pure enhancement — hidden with JavaScript off. */
+  function stickyHeader() {
+    const h1 = $(".meeting h1"); if (!h1) return;
+    const mh = document.createElement("div");
+    mh.className = "mini-header";
+    mh.innerHTML = `<span class="mh-title">${esc(h1.textContent.trim())}</span>`
+      + `<span class="mh-now" hidden></span>`
+      + `<button class="btn" type="button">⧉ Cite</button>`;
+    mh.querySelector("button").onclick = () => { const c = $(".cite-all"); if (c) c.click(); };
+    document.body.appendChild(mh);
+    STICKY_NOW = mh.querySelector(".mh-now");
+    const mast = $(".masthead");
+    const onScroll = () => mh.classList.toggle("on",
+      mast ? mast.getBoundingClientRect().bottom < 4 : scrollY > 220);
+    addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
+  /* The minimap: the meeting at a glance — a vertical timeline with a mark at
+     every scored moment and a line at the playhead. Click to jump. Drawn only
+     when there is room and enough to show; decorative, so it is JS-only. */
+  function buildMinimap(m) {
+    const dur = +m.duration || 0;
+    const moments = m.moments || [];
+    if (!dur || moments.length < 3) return;
+    const mm = document.createElement("div");
+    mm.className = "minimap on";
+    mm.title = "the meeting at a glance — click to jump";
+    mm.setAttribute("aria-hidden", "true");
+    const fill = document.createElement("div");
+    fill.className = "mm-fill"; fill.style.top = "0"; fill.style.bottom = "0";
+    mm.appendChild(fill);
+    moments.forEach(mo => {
+      const d = document.createElement("div");
+      d.className = "mm-mark" + (mo.kind === "question" ? " q" : "");
+      d.style.top = Math.max(0, Math.min(99, mo.t / dur * 100)) + "%";
+      mm.appendChild(d);
+    });
+    const now = document.createElement("div");
+    now.className = "mm-now"; now.hidden = true; mm.appendChild(now);
+    mm.addEventListener("click", e => {
+      const r = mm.getBoundingClientRect();
+      const t = Math.max(0, Math.min(dur, (e.clientY - r.top) / r.height * dur));
+      const f = $(".player.facade");
+      if (f) loadTape(f.dataset.video, t); else ytSeek(t);
+    });
+    document.body.appendChild(mm);
+    MINIMAP = { now, dur };
+  }
+  /* the playhead, reflected in the minimap and the sticky header */
+  function tick(t) {
+    if (MINIMAP && MINIMAP.dur) {
+      MINIMAP.now.hidden = false;
+      MINIMAP.now.style.top = Math.max(0, Math.min(100, t / MINIMAP.dur * 100)) + "%";
+    }
+    if (STICKY_NOW) { STICKY_NOW.hidden = false; STICKY_NOW.textContent = hms(t); }
   }
   function focusHash() {
     const m = location.hash.match(/^#t(\d+)$/); if (!m) return;
@@ -449,7 +521,8 @@
       if (YT.pending != null) { const p = YT.pending; YT.pending = null; ytSeek(p); }
     }
     if (d.info && typeof d.info.currentTime === "number") {
-      YT.time = d.info.currentTime; followAlong(YT.time); strip(YT.time);
+      YT.time = d.info.currentTime;
+      followAlong(YT.time); strip(YT.time); tick(YT.time);
     }
   }
   function wireTranscriptSeek() {
@@ -474,12 +547,11 @@
     if (hit >= 0) rows[hit].classList.add("now");
   }
   function hydrateMeeting(m) {
-    // reading panel (summary already in stub; add decisions/topics/entities)
+    buildMinimap(m);
+    // reading panel (the moments panel already carries decisions/votes/tension/
+    // questions; add the recurring topics and the named entities)
     const an = m.analysis || {};
     const bits = [];
-    if ((an.decisions || []).length)
-      bits.push(panel("motions & decisions", an.decisions.slice(0, 8).map(d =>
-        row(d.t, `${esc(d.text)}${d.outcome ? ` — <b>${esc(d.outcome)}</b>` : ""}`)).join("")));
     if ((an.topics || []).length)
       bits.push(panel("recurring topics", an.topics.slice(0, 12).map(tp =>
         `<a class="bead" href="#t${Math.floor(tp.t||0)}" data-seek="${tp.t||0}">${esc(tp.topic)}</a>`).join(" ")));

@@ -617,6 +617,34 @@ def page_meeting(m, manifest, base):
         docs_html = ('<section class="card"><span class="tag">the town’s paper — '
                      'agendas, minutes, and packets for this meeting</span>'
                      f'<div class="docrows">{drows}</div></section>')
+    # the Moments panel (specs/20 §6) — the analyzer's scored moments as cards,
+    # each a deep link into the tape. Baked into the stub so it reads with
+    # JavaScript off; app.js turns a click into a seek. The kinds differ by
+    # their mono kicker, never by colour (the record takes deep green only).
+    moments_html = ""
+    if m.get("moments"):
+        cards = ""
+        for mo in m["moments"]:
+            score = max(0.0, min(1.0, float(mo.get("score") or 0)))
+            reason = mo.get("reason") or ""
+            cards += (
+                f'<a class="moment" href="#t{int(mo["t"])}" data-t="{mo["t"]}">'
+                f'<div class="mo-head"><span class="ts">{hms(mo["t"])}</span>'
+                f'<span class="mo-kind">{esc(mo["kind"])}</span></div>'
+                f'<p class="mo-quote">{esc(mo["quote"])}</p>'
+                + (f'<div class="mo-foot"><span class="mo-reason">{esc(reason)}</span>'
+                   f'<span class="mo-score" title="salience {round(score*100)}%">'
+                   f'<i style="width:{round(score*100)}%"></i></span></div>'
+                   if reason or score else "")
+                + '</a>')
+        moments_html = (
+            '<section class="card moments"><span class="tag">the moments — the '
+            'analyzer’s scored read of this meeting; click one to jump the '
+            'tape</span>'
+            f'<div class="mo-grid">{cards}</div>'
+            '<p class="hint">Scored, not chosen for you — the salience bar is a '
+            'measurement, and every moment is a receipt into the transcript '
+            'below.</p></section>')
     meta = " · ".join([x for x in (m["body"], m["town"], m["date"] or "undated",
                                    f'{m["n_speakers"]} speakers' if m["n_speakers"] else "")
                        if x])
@@ -638,6 +666,7 @@ def page_meeting(m, manifest, base):
     </div>
     {player}
     {summ}
+    {moments_html}
     {votes_html}
     {docs_html}
     {framing_html}

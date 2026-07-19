@@ -469,6 +469,17 @@ class TestBakeEdition(unittest.TestCase):
         # chronological
         self.assertEqual([mo["t"] for mo in ms], sorted(mo["t"] for mo in ms))
 
+    def test_meeting_page_renders_moments_js_off(self):
+        """The Moments panel is baked into the meeting stub, so it reads with
+        JavaScript off (specs/20 §6 acceptance): scored cards, each a deep link
+        into the transcript below, differing by a mono kicker not by colour."""
+        stub = (self.out / "m" / "vid1" / "index.html").read_text()
+        self.assertIn("the moments", stub)
+        self.assertIn('class="moment"', stub)
+        self.assertIn('class="mo-kind"', stub)
+        self.assertRegex(stub, r'class="moment" href="#t\d+"')
+        self.assertIn("salience", stub)   # the score bar is a measurement
+
     def test_the_thirteen_tool_doors_left_the_masthead(self):
         """The desk tools no longer share the record's masthead: the rail is
         gone and the section line is the paper's own (specs/20 §5). The tools
