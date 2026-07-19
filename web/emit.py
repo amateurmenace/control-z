@@ -329,36 +329,130 @@ def body_strip():
   </section>"""
 
 
+def _brief_card(m):
+    """A brief — a recent meeting as a small still + a one-line deck, in the
+    briefs column. Same .mcard the scope filter already knows how to hide."""
+    thumb = m.get("thumb") or ""
+    return (f'<a class="mcard" href="/app/m/{m["pid"]}" '
+            f'data-town="{esc(m.get("town", ""))}" data-body="{esc(m["body"])}">'
+            + (f'<img loading="lazy" src="{esc(thumb)}" alt="" width="96" height="54">'
+               if thumb else "")
+            + f'<div class="mc-body"><span class="chip">{esc(m["body"] or "meeting")}</span>'
+              f'<b>{esc(m["title"])}</b>'
+              f'<span class="mc-meta">{esc(m["date"] or "undated")} · '
+              f'{int(round((m.get("duration") or 0)/60))} min</span></div></a>')
+
+
 def page_home(meetings, issues, stats, manifest, base):
     c = stats["counts"]
+    ms = sorted(meetings, key=lambda m: (m.get("date") or ""), reverse=True)
+    lead = ms[0] if ms else None
+
+    # -- the lead story: the latest meeting, given the front page --
+    if lead:
+        # the two strongest moments, but never two from the same second — a vote
+        # and the question beside it share a timestamp, and the paper wants two
+        # different beats
+        top, secs = [], set()
+        for mo in sorted(lead.get("moments") or [], key=lambda mo: -mo["score"]):
+            if int(mo["t"]) in secs:
+                continue
+            secs.add(int(mo["t"]))
+            top.append(mo)
+            if len(top) == 2:
+                break
+        pulls = "".join(
+            f'<a class="pull" href="/app/m/{lead["pid"]}#t{int(mo["t"])}">'
+            f'<span class="ts">{hms(mo["t"])}</span>'
+            f'<span class="mk">{esc(mo["kind"])}</span> '
+            f'{esc(mo["quote"][:130])}</a>' for mo in top)
+        lthumb = lead.get("thumb") or ""
+        deck = (f'<p class="deck">{esc(lead["summary"][:260])}</p>'
+                if lead.get("summary") else "")
+        lead_html = (
+            f'<article class="lead" data-town="{esc(lead["town"])}" '
+            f'data-body="{esc(lead["body"])}">'
+            f'<span class="kicker">the latest meeting on the record</span>'
+            + (f'<a class="lead-media" href="/app/m/{lead["pid"]}">'
+               f'<img src="{esc(lthumb)}" alt="" width="960" height="540"></a>'
+               if lthumb else "")
+            + f'<a class="lead-hl" href="/app/m/{lead["pid"]}"><h2>{esc(lead["title"])}</h2></a>'
+              f'<p class="lead-meta"><span class="chip">{esc(lead["body"] or "meeting")}</span> '
+              f'{esc(lead["town"] or "")} · {esc(lead["date"] or "undated")} · '
+              f'{int(round((lead["duration"] or 0)/60))} min</p>'
+            + deck
+            + (f'<div class="pulls"><span class="kicker">from the tape</span>{pulls}</div>'
+               if pulls else "")
+            + '</article>')
+    else:
+        lead_html = '<p class="hint">The record is empty — no meetings pressed yet.</p>'
+
+    # -- briefs: the next few meetings --
+    briefs = "".join(_brief_card(m) for m in ms[1:6]) or \
+        '<p class="hint">just the one meeting, so far</p>'
+
+    # -- by the numbers: every figure a link --
     def stat(n, label, href):
         return (f'<a class="statcell" href="{href}"><b>{n}</b>'
                 f'<span>{esc(label)}</span></a>')
     band = "".join([
         stat(c["meetings"], "meetings", "/app/s"),
-        stat(c["hours"], "hours", "/app/s"),
-        stat(c["bodies"], "bodies", "/app/s"),
-        stat(c["issues"], "issues", "/app/i/"),
+        stat(c["hours"], "hours", "/app/analytics"),
+        stat(c["bodies"], "bodies", "/app/analytics"),
+        stat(c["issues"], "issues", "/app/graph"),
+        stat(c["votes"], "roll calls", "/app/officials"),
         stat(f'{c["segments"]:,}', "segments", "/app/s"),
-        stat(c["languages"], "languages", "/app/"),
-        stat(c["described"], "described", "/app/"),
+        stat(c["languages"], "languages", "/app/press#interpreter"),
+        stat(c["described"], "described", "/app/press#narrator"),
     ])
-    new = "".join(
-        f'<a class="mcard" href="/app/m/{m["pid"]}" '
-        f'data-town="{esc(m.get("town", ""))}" data-body="{esc(m["body"])}">'
-        + (f'<img loading="lazy" src="{esc(m["thumb"])}" alt="">' if m["thumb"] else "")
-        + f'<div class="mc-body"><span class="chip">{esc(m["body"] or "meeting")}</span>'
-          f'<b>{esc(m["title"])}</b>'
-          f'<span class="mc-meta">{esc(m["date"] or "undated")} · {m["minutes"]} min</span>'
-          f'</div></a>'
-        for m in stats["new"])
+
+    # -- standing stories: the long view --
     loud = "".join(
         f'<a class="lrow" href="/app/i/{i["slug"]}">'
         f'<b>{esc(i["name"])}</b>'
         f'<span class="lmeta">{i["n_meetings"]} meetings · {i["n_segments"]} moments · '
         f'{esc((i["first_seen"] or "")[:4])}–{esc((i["last_seen"] or "")[:4])}</span></a>'
         for i in stats["loud"])
-    # coverage strip (hand-drawn bars) + access meters
+
+    # -- updates: what resurfaced, quoting its bead --
+    resurf = "".join(
+        f'<a class="rsrow" href="/app/i/{r["slug"]}"><b>{esc(r["name"])}</b>'
+        f'<span class="rsdelta">{esc(r["delta"][:220])}</span></a>'
+        for r in stats["resurfacings"]) \
+        or ('<p class="hint">No threads have resurfaced yet — follow an issue '
+            'and the record will keep watch.</p>')
+
+    # -- the access ledger: captioned / translated / described, honest zeros --
+    langs = stats["languages"]
+    translated = (", ".join(f'{esc(l["name"])} {l["pct"]}%' for l in langs)
+                  if langs else
+                  "0 — no meeting is translated yet; the drain fills this in")
+    access = (
+        f'<div class="acc"><span class="acc-l">captioned</span>'
+        f'<b class="acc-n">{stats["access"]["captioned_pct"]}%</b>'
+        f'<span class="acc-w">every live meeting ships its words</span></div>'
+        f'<div class="acc"><span class="acc-l">translated</span>'
+        f'<span class="acc-w">{translated}</span></div>'
+        f'<div class="acc"><span class="acc-l">described</span>'
+        f'<b class="acc-n">{stats["access"]["described_pct"]}%</b>'
+        f'<span class="acc-w">audio description arrives with the drain</span></div>')
+
+    # -- the votes teaser: latest roll calls --
+    allvotes = []
+    for m in meetings:
+        for v in (m.get("votes") or []):
+            allvotes.append({"pid": m["pid"], "date": m.get("date", ""),
+                             "title": m.get("title", ""), **v})
+    allvotes.sort(key=lambda v: (v.get("date", ""), v.get("t", 0)), reverse=True)
+    votes_teaser = "".join(
+        f'<a class="vteaser" href="/app/m/{v["pid"]}#t{int(v.get("t") or 0)}">'
+        f'<span class="vt-motion">{esc((v.get("motion") or "")[:90])}</span>'
+        f'<span class="vt-meta"><span class="outcome">{esc(v.get("outcome",""))}</span> '
+        f'<span class="tally">{esc(v.get("tally",""))}</span> · {esc(v.get("date",""))}</span></a>'
+        for v in allvotes[:4]) \
+        or '<p class="hint">no roll calls read yet</p>'
+
+    # -- coverage strip --
     mx = max([m["total"] for m in stats["coverage"]] or [1])
     bars = "".join(
         f'<div class="covbar" data-month="{esc(m["month"])}" '
@@ -366,44 +460,41 @@ def page_home(meetings, issues, stats, manifest, base):
         f'<span style="height:{max(6, round(56*m["total"]/mx))}px"></span>'
         f'<label>{esc((m["month"] or "?")[5:] or "?")}</label></div>'
         for m in stats["coverage"])
-    meters = "".join(
-        f'<div class="meter"><span>{esc(name)}</span>'
-        f'<div class="mtrack"><i style="width:{pct}%"></i></div>'
-        f'<b>{pct}%</b></div>'
-        for name, pct in [("captioned", stats["access"]["captioned_pct"]),
-                          ("described", stats["access"]["described_pct"])]
-        + [(l["name"], l["pct"]) for l in stats["languages"]])
-    resurf = "".join(
-        f'<a class="rsrow" href="/app/i/{r["slug"]}"><b>{esc(r["name"])}</b> — '
-        f'{esc(r["delta"][:200])}</a>' for r in stats["resurfacings"]) \
-        or '<p class="hint">No threads have resurfaced yet — follow an issue and the record will keep watch.</p>'
+
     body = f"""
-  <section class="hero">
-    <h1>The record, open.</h1>
-    <p class="why">Search everything the town has said across every read meeting,
-      and land in the tape at the second it was said. Local, labeled, and
-      supplementing the official record — never replacing it.</p>
-    <form class="askform" action="/app/s" method="get">
-      <input name="q" placeholder="ask the record — a phrase, a topic, a street name…" aria-label="Search the record">
-      <button class="btn primary" type="submit">Search</button>
-    </form>
-    <p class="addline"><a href="/app/add">＋ Add a meeting</a></p>
-  </section>
-  <section class="statband">{band}</section>
+  <form class="askform frontsearch" action="/app/s" method="get">
+    <input name="q" placeholder="ask the record — a phrase, a topic, a street name…" aria-label="Search the record">
+    <button class="btn primary" type="submit">Search</button>
+    <a class="addline" href="/app/add">＋ Add a meeting</a>
+  </form>
   <p class="scopeline" id="scopeline" hidden></p>
   {body_strip()}
-  <section class="card"><span class="tag">coverage — meetings on the record, by month</span>
-    <div class="covstrip">{bars}</div></section>
-  <div class="grid2">
-    <section class="card"><span class="tag">new on the record</span>
-      <div class="mcards">{new or '<p class="hint">nothing yet</p>'}</div></section>
-    <section class="card"><span class="tag">the long view — issues by reach</span>
-      <div class="lrows">{loud or '<p class="hint">the long view needs two read meetings</p>'}</div></section>
+  <div class="leadrow">
+    <div class="leadcol">{lead_html}</div>
+    <div class="briefscol">
+      <div class="sectionhead"><span class="kicker">also on the record</span></div>
+      <div class="mcards briefs">{briefs}</div>
+    </div>
   </div>
-  <section class="card"><span class="tag">what changed, last time</span>
-    <div class="rsrows">{resurf}</div></section>
-  <section class="card"><span class="tag">the mission, measured</span>
-    <div class="meters">{meters}</div></section>
+  <section class="numbers">
+    <div class="sectionhead"><span class="kicker">by the numbers</span></div>
+    <div class="statband">{band}</div>
+    <div class="covwrap"><span class="kicker">meetings by month</span>
+      <div class="covstrip">{bars}</div></div>
+  </section>
+  <div class="storyrow">
+    <section class="story"><div class="sectionhead"><span class="kicker">the long view — issues by reach</span></div>
+      <div class="lrows">{loud or '<p class="hint">the long view needs two read meetings</p>'}</div></section>
+    <section class="story"><div class="sectionhead"><span class="kicker">what changed, last time</span></div>
+      <div class="rsrows">{resurf}</div></section>
+  </div>
+  <div class="storyrow">
+    <section class="story"><div class="sectionhead"><span class="kicker">the access ledger</span></div>
+      <div class="accled">{access}</div></section>
+    <section class="story"><div class="sectionhead"><span class="kicker">the latest roll calls</span>
+      <a class="seeall" href="/app/officials">the votes →</a></div>
+      <div class="vteasers">{votes_teaser}</div></section>
+  </div>
 """
     return shell("The record — publicrecord.studio",
                  f"{c['meetings']} meetings, {c['hours']} hours, {c['issues']} issues "

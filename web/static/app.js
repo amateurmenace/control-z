@@ -294,7 +294,8 @@
 
   async function filterHome(ed) {
     let shown = 0, hidden = 0;
-    $$(".mcard").forEach(c => {
+    // the lead story re-scopes with the briefs — it carries the same data-town
+    $$(".mcard, .lead").forEach(c => {
       const ok = inScope(c.dataset.town || "", c.dataset.body || "");
       c.hidden = !ok; ok ? shown++ : hidden++;
     });

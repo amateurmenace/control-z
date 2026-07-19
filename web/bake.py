@@ -154,6 +154,80 @@ def _decisions(m: dict) -> list:
     return out
 
 
+def _build_moments(segs, votes, decisions, questions, tension) -> list:
+    """The moments plane (specs/20 §6) — the analyzer's scored moments, pressed
+    once so the meeting page never re-analyzes at read time. Four kinds, in one
+    ranked, chronological list: a roll-call VOTE, a heuristic DECISION, a moment
+    of TENSION (pushback), a QUESTION asked. Each carries {t, end, kind, score,
+    reason, quote}. Everything here is a pure function of the transcript the
+    corpus already holds — no wall clock — so the edition stays byte-idempotent.
+
+    `score` is czcore.moments.score_segments' normalized 0..1 salience (the same
+    ranker Highlighter, Publisher and the issue engine use), time-matched to the
+    moment; `end` is the segment's own end (a window when the segment is a
+    point). Votes float to the top because a roll call is always the record's
+    loudest moment; the rest sort by where they earned it."""
+    from czcore.moments import score_segments
+    scored = score_segments(segs) if segs else []
+    by_t, score_by_t = {}, {}
+    for s in segs or []:
+        t0 = int(float(s.get("start") or 0))
+        by_t.setdefault(t0, s)
+    for s in scored:
+        t0 = int(float(s.get("start") or 0))
+        score_by_t[t0] = max(score_by_t.get(t0, 0.0), float(s.get("score") or 0))
+
+    def seg_end(t):
+        s = by_t.get(int(t))
+        e = float(s.get("end") or 0) if s else 0.0
+        return round(e if e > t else t + 12.0, 1)
+
+    def sc(t, floor):
+        return round(max(floor, score_by_t.get(int(t), 0.0)), 3)
+
+    out, seen, vote_ts = [], set(), []
+
+    def add(t, end, kind, score, reason, quote):
+        t = float(t or 0)
+        key = (kind, int(t))
+        quote = str(quote or "").strip()
+        if key in seen or not quote:
+            return
+        seen.add(key)
+        out.append({"t": round(t, 1), "end": end, "kind": kind, "score": score,
+                    "reason": str(reason or "")[:90], "quote": quote[:220]})
+
+    for v in (votes or []):
+        t = float(v.get("t") or 0)
+        vote_ts.append(t)
+        reason = " · ".join(x for x in (v.get("outcome") or "",
+                                        v.get("tally") or "") if x)
+        add(t, seg_end(t), "vote", sc(t, 0.9), reason,
+            v.get("motion") or (by_t.get(int(t)) or {}).get("text"))
+    for d in (decisions or []):
+        t = float(d.get("t") or 0)
+        # a decision that IS a roll call already shipped as a VOTE; don't twin it
+        if any(abs(t - vt) <= 2 for vt in vote_ts):
+            continue
+        add(t, seg_end(t), "decision", sc(t, 0.5), d.get("outcome") or "decided",
+            d.get("text"))
+    for d in (tension or []):
+        t = float(d.get("t") or 0)
+        words = ", ".join(d.get("words") or [])
+        add(t, round(float(d.get("end") or seg_end(t)), 1), "tension",
+            sc(t, 0.45), (f"pushback: {words}" if words else "pushback"),
+            d.get("text"))
+    for q in (questions or []):
+        t = float(q.get("t") or 0)
+        add(t, seg_end(t), "question", sc(t, 0.35), q.get("type") or "question",
+            q.get("text"))
+    # keep the strongest ~20, then read them back in the order they happened
+    out.sort(key=lambda mo: (-mo["score"], mo["t"]))
+    out = out[:20]
+    out.sort(key=lambda mo: mo["t"])
+    return out
+
+
 def _milestones_for(beads: list, decisions: list, votes: list = None) -> list:
     """A milestone on a timeline node: a roll-call vote — or, where none is near,
     a heuristic decision — within ±90s of one of the issue's beads. Votes win
@@ -268,6 +342,9 @@ class Bake:
                     "tension": [{"t": d["t"], "text": d["text"],
                                  "words": d.get("words", [])} for d in tension[:10]],
                 },
+                # the moments plane (specs/20 §6) — pressed, never re-analyzed
+                "moments": _build_moments(
+                    segs, mvotes, an.get("decisions") or [], quests, tension),
             }
             n = _json(self.out / "meetings" / f"{p}.json",
                       {k: v for k, v in doc.items()})

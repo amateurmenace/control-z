@@ -426,6 +426,49 @@ class TestBakeEdition(unittest.TestCase):
         self.assertIn(line, home, "the masthead mark is not the brand mark")
         self.assertEqual((self.out / "favicon.svg").read_text().strip(), mark)
 
+    def test_front_page_is_a_newspaper(self):
+        """The front page reads like a paper, not a dashboard: a lead story, a
+        briefs column, by-the-numbers, the long view, the access ledger and the
+        latest roll calls — all real HTML, so it reads linearly with JS off
+        (specs/20 §5)."""
+        home = (self.out / "index.html").read_text()
+        for kicker in ("the latest meeting on the record", "also on the record",
+                       "by the numbers", "the long view", "the access ledger",
+                       "the latest roll calls"):
+            self.assertIn(kicker, home, f"front page missing '{kicker}'")
+        # the lead IS the latest meeting (vid2, June), as a real article
+        self.assertIn('class="lead"', home)
+        self.assertIn("School Committee — June", home)
+        # briefs are the scope-filterable meeting cards
+        self.assertIn('class="mcard"', home)
+        # by-the-numbers, and every figure is a link (roll calls → the votes)
+        self.assertIn('class="statband"', home)
+        self.assertIn('<a class="statcell" href="/app/officials">', home)
+
+    def test_front_page_pull_moments_link_into_the_tape(self):
+        """The lead's pull-moments come from the moments plane and deep-link
+        into the tape — nothing hand-typed."""
+        home = (self.out / "index.html").read_text()
+        self.assertIn('class="pull"', home)
+        self.assertRegex(home, r'class="pull" href="/app/m/vid2#t\d+"')
+
+    def test_meeting_carries_the_moments_plane(self):
+        """Each meeting.json carries the pressed moments (specs/20 §6): a ranked,
+        chronological list of {t, end, kind, score, reason, quote}. vid1 has a
+        roll call, so it carries a VOTE moment scored above everything else."""
+        mj = self._read("meetings/vid1.json")
+        self.assertIn("moments", mj)
+        ms = mj["moments"]
+        self.assertTrue(ms, "vid1 should have moments")
+        for mo in ms:
+            self.assertEqual(set(mo), {"t", "end", "kind", "score", "reason", "quote"})
+            self.assertGreaterEqual(mo["end"], mo["t"])
+        votes = [mo for mo in ms if mo["kind"] == "vote"]
+        self.assertTrue(votes, "the roll call should press as a VOTE moment")
+        self.assertGreaterEqual(votes[0]["score"], 0.9)
+        # chronological
+        self.assertEqual([mo["t"] for mo in ms], sorted(mo["t"] for mo in ms))
+
     def test_the_thirteen_tool_doors_left_the_masthead(self):
         """The desk tools no longer share the record's masthead: the rail is
         gone and the section line is the paper's own (specs/20 §5). The tools
