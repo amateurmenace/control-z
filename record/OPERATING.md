@@ -44,9 +44,12 @@ index is how a degraded search ships for a month, so this never reports one.
 - `neural.available: true` — the key is wired. If this ever reads `false`, the
   `reason` names the cause, and search silently falls back to words with an
   honest line rather than erroring.
-- `steward_console: "RECORD_GOOGLE_CLIENT_ID is not set"` — the console is
-  configured-off. **Normal right now.** Every steward route returns 503; it
-  fails *closed*, never open.
+- `steward_console: true` — the console is wired. A steward route without a
+  valid token answers **401** ("sign in"); a verified Google account that is not
+  on the allowlist gets **403** ("you may not"), because retrying the sign-in
+  cannot help and the message should not send someone round a loop. If this
+  key ever reads a sentence instead of `true`, that sentence names the missing
+  variable and every steward route is 503 — it fails *closed*, never open.
 - HTTP 503 with `"the corpus is unreachable"` — the database is down or the
   connector is broken. Go to §6.
 
@@ -302,9 +305,10 @@ Honest list. None of it is broken; all of it is unfinished.
 3. ~~No Gemini key~~ — **done.** `neural.available: true`. Nothing has been
    embedded yet because the corpus is empty; the backfill job is created after
    the import lands, and it runs under the cap in §7.
-4. **The steward console is configured-off.** It needs an OAuth web client id
-   (`RECORD_GOOGLE_CLIENT_ID`) and `RECORD_STEWARD_ALLOWLIST` with your email.
-   Until then every steward route is 503 — deliberately, and it fails closed.
+4. ~~The steward console is configured-off~~ — **done.** Signed in with Google
+   against a server-side allowlist of one. `/api/steward/me` now answers 401
+   without a token rather than 503; the difference is "sign in" versus "there is
+   no console here", and both are honest.
 5. **The nightly scheduler is not created.** Polling is manual until it is.
 6. **The intake connector has never ingested a meeting end to end.** It polls,
    classifies and files correctly against all three real channels — but
