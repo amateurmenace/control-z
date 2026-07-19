@@ -49,6 +49,24 @@ _UNIT: ContextVar = ContextVar("record_unit", default=None)
 
 # The hit envelope, identical on both stores. Selected once here rather than
 # assembled per row, because this JOIN is what replaces the desk's N+1.
+# How far the HNSW walk reaches, relative to what the caller asked for. Pinned
+# here rather than left at Postgres's default of 40, because the default is
+# below the reader's own page size and an index that stops being used is not an
+# error anybody sees — it is the same answer, slower, until somebody times it.
+# The factor buys recall under a town or body filter, where candidates are
+# discarded after the index has already chosen them.
+HNSW_EF_MIN = 64
+HNSW_EF_FACTOR = 4
+# pgvector rejects an ef_search above 1000 rather than clamping it, so the
+# search must clamp first — a raised limit must never become a 500.
+HNSW_EF_MAX = 1000
+# How much wider the vector subquery pulls when a meetings-side filter (town or
+# body) will thin its results after the index has chosen. A recall/latency
+# trade: the index cost is dominated by ef_search, not the LIMIT, so
+# over-fetching a few multiples is cheap and keeps a scoped search from coming
+# back thin.
+HNSW_SCOPE_OVERFETCH = 4
+
 _HIT_COLS = """
     s.meeting_id, s.id AS seg_id, s.start AS t, s.end_s AS "end", s.text,
     NULLIF(s.speaker, '') AS speaker,
@@ -425,23 +443,68 @@ class PgCorpus:
 
     def _vector_rows(self, qvec, limit: int, town: str = "",
                      space: str = "lexical", body: str = ""):
-        """Nearest neighbours by cosine, through the HNSW index. No matrix, no
-        cache, no write counter — the index is the thing the desk's in-process
-        numpy matrix was standing in for."""
+        """Nearest neighbours by cosine, through the HNSW index — and it takes
+        a subquery to keep the index in play.
+
+        The obvious query is one SELECT: join segments to meetings, filter,
+        `ORDER BY emb_neural <=> q LIMIT k`. It is also a trap. The planner
+        cannot push an ordered index scan through the join, so it computes the
+        distance for **every** embedded segment and top-N sorts the lot.
+        Measured on the live record: 2s became 45s the moment the LIMIT crossed
+        the index's reach, on the same query, with nothing else running — a
+        cliff, which is what made it read as contention until the numbers were
+        taken twice.
+
+        So the vector ordering runs in a subquery over `segments` alone, where
+        the HNSW index is the only sensible plan and returns `k` candidates
+        instead of scanning eighty thousand. Every filter — `status`, `town`,
+        `body` — lives on `meetings` and applies *outside* the subquery, after
+        the index has chosen, so the subquery over-fetches to cover what the
+        outer filter drops. This is the standard approximate-NN-with-post-filter
+        shape: under a tight scope it may return fewer than `k`, which is honest
+        — the index looked at a bounded neighbourhood and that is what was in it.
+
+        The filter must be `m.town`, never the `town` denormalised onto
+        segments. That column lags a steward's town correction — two parity
+        tests exist because it does — and the lexical path already scopes on
+        `m.town`, so the two halves of one search have to agree on which town a
+        meeting is in.
+
+        `SET LOCAL` scopes `ef_search` to the transaction, so a pooled
+        connection never carries one search's tuning into the next; it is capped
+        at the parameter's own ceiling, above which Postgres refuses the value
+        rather than clamping it."""
         col = "emb_neural" if space == "neural" else "emb"
-        sql = (f"SELECT {_HIT_COLS}, 1 - (s.{col} <=> %s) AS sim "
-               "FROM segments s JOIN meetings m ON m.id=s.meeting_id "
-               f"WHERE s.{col} IS NOT NULL AND m.status='live'")
-        args: list = [qvec]
+
+        # Over-fetch whenever a filter can thin the candidates after the index
+        # has chosen them. status='live' matches nearly everything; town and
+        # body can each be selective, so their presence earns the wider pull.
+        overfetch = HNSW_SCOPE_OVERFETCH if (town or body) else 1
+        inner_limit = int(limit) * overfetch
+        ef = min(HNSW_EF_MAX, max(HNSW_EF_MIN, inner_limit * HNSW_EF_FACTOR))
+
+        outer_where = "m.status='live'"
+        outer_args: list = []
         if town:
-            sql += " AND m.town=%s"
-            args.append(town)
+            outer_where += " AND m.town=%s"
+            outer_args.append(town)
         if body:
-            sql += " AND m.body=%s"
-            args.append(body)
-        sql += f" ORDER BY s.{col} <=> %s LIMIT %s"
-        args += [qvec, limit]
+            outer_where += " AND m.body=%s"
+            outer_args.append(body)
+
+        sql = (
+            f"SELECT {_HIT_COLS}, 1 - (s.{col} <=> %s) AS sim FROM ("
+            f"  SELECT * FROM segments s WHERE s.{col} IS NOT NULL "
+            f"  ORDER BY s.{col} <=> %s LIMIT %s"
+            f") s JOIN meetings m ON m.id=s.meeting_id "
+            f"WHERE {outer_where} "
+            f"ORDER BY s.{col} <=> %s LIMIT %s")
+        # %s order, left to right: the sim vector in SELECT; the inner block's
+        # order-by vector and limit; the outer block's filters (town?, body?),
+        # order-by vector, and limit. Assembled in exactly that order.
+        args = [qvec, qvec, inner_limit] + outer_args + [qvec, limit]
         with self._con() as con:
+            con.execute(f"SET LOCAL hnsw.ef_search = {ef}")
             rows = con.execute(sql, args).fetchall()
         out = []
         for r in rows:

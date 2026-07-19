@@ -586,3 +586,88 @@ class PgStoreTest(StoreGuarantees, unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(PG_DSN, "RECORD_TEST_PG_DSN unset — the vector index "
+                             "tuning is UNPROVEN in this run")
+class HnswReachTest(unittest.TestCase):
+    """Vector search has to be shaped so the index is actually used.
+
+    The obvious join-then-order query cannot push an ordered index scan through
+    the join, so the planner computes a distance for every embedded segment and
+    top-N sorts them all. On the live record that was 2s at a limit the index
+    could serve and 45s the moment the limit crossed its reach — a cliff, on
+    the same query, which read as contention until the numbers were taken
+    twice. `_vector_rows` runs the ordering in a segments-only subquery so the
+    HNSW index drives it; these cases pin the shape, not a stopwatch (timing in
+    a suite is a flake generator).
+    """
+
+    def setUp(self):
+        from record.store import PgCorpus
+        self.c = PgCorpus(dsn=PG_DSN)
+        self.addCleanup(self.c.close)
+
+    def test_the_reach_always_exceeds_what_was_asked_for(self):
+        from record.store import HNSW_EF_FACTOR, HNSW_EF_MIN
+        for limit in (1, 10, 40, 60, 80, 200):
+            ef = max(HNSW_EF_MIN, limit * HNSW_EF_FACTOR)
+            self.assertGreater(ef, limit,
+                               f"limit {limit} would out-run the index walk")
+
+    def test_the_default_would_not_have_been_enough(self):
+        """Postgres ships ef_search=40; the reader pages at 80. If someone
+        lowers HNSW_EF_MIN back under the reader's page size, this says why
+        not."""
+        from record.store import HNSW_EF_MIN
+        self.assertGreater(HNSW_EF_MIN, 40)
+
+    def test_the_ordering_runs_in_a_subquery_not_across_the_join(self):
+        """The property that keeps the index in play: the vector ORDER BY is
+        over `segments` alone, then joined to meetings — never one flat SELECT
+        that orders across the join, which is the shape that scans everything."""
+        src = (Path(__file__).resolve().parents[1] / "record" / "store.py").read_text()
+        vr = src[src.index("def _vector_rows"):src.index("# -- stats")]
+        # the ordering is inside a subquery that selects from segments only
+        self.assertIn("FROM segments s WHERE", vr)
+        self.assertIn(") s JOIN meetings m", vr)
+        # and ef_search is set LOCAL, so a pooled connection cannot leak it
+        self.assertIn("SET LOCAL hnsw.ef_search", vr)
+        self.assertNotIn("SET hnsw.ef_search", vr.replace("SET LOCAL hnsw", "X"))
+
+    def test_scope_filters_on_the_meeting_never_the_segment(self):
+        """`town` must filter on `m.town`, not the copy denormalised onto
+        segments. That copy lags a steward's town correction — the two
+        `test_town_scope_*` cases prove it — and the lexical path scopes on
+        `m.town`, so both halves of one search have to agree."""
+        src = (Path(__file__).resolve().parents[1] / "record" / "store.py").read_text()
+        vr = src[src.index("def _vector_rows"):src.index("# -- stats")]
+        self.assertIn("m.town=%s", vr)          # the corrected town, on meetings
+        self.assertIn("m.body=%s", vr)
+        self.assertNotIn("s.town", vr)          # never the denormalised copy
+        self.assertIn("HNSW_SCOPE_OVERFETCH if (town or body)", vr)
+
+    def test_the_reach_is_capped_so_a_raised_limit_is_not_a_500(self):
+        """pgvector rejects ef_search above 1000; the search clamps first."""
+        from record.store import (HNSW_EF_FACTOR, HNSW_EF_MAX,
+                                   HNSW_SCOPE_OVERFETCH)
+        biggest = 200 * HNSW_SCOPE_OVERFETCH * HNSW_EF_FACTOR
+        self.assertGreater(biggest, HNSW_EF_MAX)     # the clamp actually bites
+        self.assertEqual(min(HNSW_EF_MAX, biggest), HNSW_EF_MAX)
+
+    def test_a_vector_search_still_returns_what_it_should(self):
+        """The rewrite must change the route, not the answer."""
+        with self.c._con() as con:
+            con.execute("TRUNCATE meetings, segments RESTART IDENTITY CASCADE")
+        self.c.upsert_meeting({"id": "m1", "status": "live", "town": "Testville",
+                               "body": "Select Board"})
+        self.c.replace_segments("m1", [
+            {"start": 0.0, "end": 5.0, "speaker": "Chair",
+             "text": "The Harvard Street rezoning article is before us."},
+            {"start": 5.0, "end": 9.0, "speaker": "Chair",
+             "text": "Next, the school budget."}])
+        # unscoped, town-scoped, and body-scoped all reach it
+        for kw in ({}, {"town": "Testville"}, {"body": "Select Board"}):
+            hits = self.c.search("rezoning", limit=80, **kw)
+            self.assertTrue(hits, kw)
+            self.assertIn("rezoning", hits[0]["text"].lower())
