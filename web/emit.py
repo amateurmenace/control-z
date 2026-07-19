@@ -95,7 +95,7 @@ def _api_meta() -> str:
 #
 # Module state rather than a parameter because the scope bar lives in the
 # shared chrome, and ten page functions call shell() — threading an eleventh
-# argument through page_door() so a keycap header can name a town would be
+# argument through a page function so a folio can name a town would be
 # ceremony that buys nothing. A bake is one process pressing one edition; this
 # is written before the first stub renders and never again.
 _EDITION = {"towns": [], "bodies": [], "untowned": 0, "meetings": 0}
@@ -127,15 +127,6 @@ def _brand_mark() -> str:
     used for both the masthead and the favicon, so the two can never drift."""
     return (BRAND / "logos" / "publicrecord-mark.svg").read_text(
         encoding="utf-8").strip()
-
-
-def _glyph(accent, square, ready=True):
-    fill = f'fill="{accent}" fill-opacity=".28"' if ready else 'fill="none"'
-    if square:
-        shape = f'<rect x="4" y="4" width="12" height="12" rx="3" {fill} stroke="{accent}" stroke-width="1.4"/>'
-    else:
-        shape = f'<rect x="5.5" y="5.5" width="9" height="9" rx="1.5" transform="rotate(45 10 10)" {fill} stroke="{accent}" stroke-width="1.4"/>'
-    return f'<svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">{shape}</svg>'
 
 
 # --------------------------------------------------------------------------
@@ -1162,41 +1153,85 @@ def page_still(manifest, base):
                  version=manifest["version"])
 
 
-def page_door(t, manifest, base):
-    beats = "".join(f'<div class="beat"><span>{i+1}</span>{esc(b)}</div>'
-                    for i, b in enumerate(t["beats"]))
-    demo = ""  # the demo slides never travelled to this domain; specs/20 §5
+CREDIT = ("designed + developed by Stephen Walter with Brookline Interactive "
+          "Group &amp; Neighborhood AI · CC BY-SA 4.0")
+
+
+def _tool_row(t):
     lives = ""
-    if t["lives_here"]:
-        lives = (f'<a class="liveshere" href="{esc(t["lives_here"]["href"])}">'
-                 f'but its work lives here → {esc(t["lives_here"]["label"])}</a>')
+    if t.get("lives_here"):
+        lives = (f' <a class="liveshere" href="{esc(t["lives_here"]["href"])}">'
+                 f'its work already lives here → {esc(t["lives_here"]["label"])}</a>')
+    return (f'<div class="toolrow" id="{esc(t["id"])}">'
+            f'<div class="toolname">{esc(t.get("long", t["name"]))}'
+            f'<span class="tverb">{esc(t["verb"])}</span></div>'
+            f'<div class="toolwhy">{esc(t["why_desk"] or t["one"])}{lives}</div>'
+            f'</div>')
+
+
+def page_press(manifest, base):
+    """The press behind the paper — one quiet page where the thirteen doors
+    used to shout (specs/20 §5). The civicmedia story in three sentences, the
+    tool list as one-line entries (name, verb, the true reason each needs the
+    desk), the DMG, and the cross-link to communityai.studio done once."""
+    suite = "".join(_tool_row(t) for t in tools.community()
+                    if t["surface"] != "web")
+    bench = "".join(_tool_row(t) for t in tools.workbench())
     body = f"""
-  <section class="door" style="--acc:{esc(t["accent"])}">
-    <div class="doorhead">
-      <span class="dglyph">{_glyph(t["accent"], t["group"]=="community")}</span>
-      <div><h1>{esc(t.get("long", t["name"]))}</h1>
-        <p class="dverb">{esc(t["verb"])} — {esc(t["one"])}</p></div>
-      <span class="desktag">desk</span>
+  <section class="press">
+    <a class="back" href="/app/">← the record</a>
+    <h1>The press behind the paper</h1>
+    <p class="presslede">The Public Record is the newspaper; <b>Civic Media
+      Studio</b> is the press that makes it. The Studio is a desktop suite that
+      fetches, transcribes, translates, describes and cuts civic video on your
+      own machine — your files, your GPU, nothing uploaded. Everything those
+      tools produce that can be <em>read</em> already lives here on the record;
+      the tools themselves stay at the desk, because they touch local media and
+      local compute — and below, for each one, is why.</p>
+    <div class="sectionhead"><span class="kicker">the civic media suite</span></div>
+    <div class="toollist">{suite}</div>
+    <div class="sectionhead"><span class="kicker">control-z — the finishing tools</span></div>
+    <div class="toollist">{bench}</div>
+    <div class="presscta">
+      <a class="btn primary" href="{DMG_LATEST}">Get the desktop app — macOS</a>
+      <span class="hint">macOS 12+ · Apple silicon · signed &amp; notarized</span>
     </div>
-    {demo}
-    <div class="beats">{beats}</div>
-    <p class="whydesk">{esc(t["why_desk"])}</p>
-    {lives}
-    <div class="doorcta">
-      <details class="mark-panel open"><summary class="btn primary">Get the desktop app</summary>
-        <div class="mark-body">
-          <p>Everything {esc(t["name"])} does happens on your own machine, with
-             your files. The desktop app is where that work lives.</p>
-          <p class="hint">macOS 12+ · Apple silicon · signed &amp; notarized</p>
-          <a class="btn primary" href="{DMG_LATEST}">Download for macOS</a>
-        </div></details>
-    </div>
+    <p class="hint">Civic Media Studio and The Public Record are
+      <a href="{COMMUNITYAI}">a Community AI Project</a> — {CREDIT}.</p>
   </section>
 """
-    return shell(f'{t.get("long", t["name"])} — publicrecord.studio',
-                 f'{t["verb"]} — {t["one"]}. A desk tool; its work lives on the record.',
-                 f"{base}/app/t/{t['id']}", body, t["id"], manifest,
+    return shell("The press — publicrecord.studio",
+                 "Civic Media Studio, the desktop press that makes the record: "
+                 "what each tool does, and why it lives at the desk.",
+                 f"{base}/app/press", body, "press", manifest,
                  version=manifest["version"])
+
+
+def page_door_stub(t, manifest, base):
+    """A citation must never die (specs/20 §5). Every /app/t/<tool>/ URL the
+    old doors answered survives as a slim redirect into /app/press#<tool> — a
+    meta-refresh (CSP-safe, no inline script) with a real link underneath for
+    the reader whose browser honours neither. No slide, no site/ asset, nothing
+    to break."""
+    dest = f"/app/press#{esc(t['id'])}"
+    name = esc(t.get("long", t["name"]))
+    return f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{csp()}">
+<meta http-equiv="refresh" content="0; url={dest}">
+<title>{name} — the press · publicrecord.studio</title>
+<meta name="description" content="{name} is a desk tool; its page is on the press.">
+<link rel="canonical" href="{esc(base)}/app/press#{esc(t['id'])}">
+<link rel="stylesheet" href="/app/app.css?v={esc(manifest['version'])}">
+</head><body>
+<main class="main paper"><section class="press">
+  <h1>{name}</h1>
+  <p class="presslede">{name} is a desk tool. Its page is now part of
+    <a href="{dest}">the press</a> — you are being redirected there.</p>
+</section></main>
+</body></html>"""
 
 
 # --------------------------------------------------------------------------
@@ -1376,6 +1411,10 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
     (out / "graph" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "graph" / "index.html").write_text(
         page_graph(graph or {}, manifest, base), encoding="utf-8")
+    # the press page — the one place the thirteen doors now lead
+    (out / "press" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "press" / "index.html").write_text(
+        page_press(manifest, base), encoding="utf-8")
     for m in meetings:
         d = out / "m" / m["pid"]
         d.mkdir(parents=True, exist_ok=True)
@@ -1385,8 +1424,10 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
         d = out / "i" / i["slug"]
         d.mkdir(parents=True, exist_ok=True)
         (d / "index.html").write_text(page_issue(i, manifest, base), encoding="utf-8")
+    # the thirteen door URLs survive as slim redirect stubs into /app/press
     for t in tools.TOOLS:
         if t["surface"] != "web":
             d = out / "t" / t["id"]
             d.mkdir(parents=True, exist_ok=True)
-            (d / "index.html").write_text(page_door(t, manifest, base), encoding="utf-8")
+            (d / "index.html").write_text(
+                page_door_stub(t, manifest, base), encoding="utf-8")

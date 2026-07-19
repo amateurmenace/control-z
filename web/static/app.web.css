@@ -480,30 +480,6 @@ mark{background:var(--tint-2);color:inherit;border-radius:2px;padding:0 1px}
   padding-top:var(--space-4);display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:center}
 .presscta .hint{font-family:var(--font-mono)}
 
-/* legacy door pages (until they become stubs) render quietly */
-.door{max-width:760px}
-.doorhead{display:flex;align-items:center;gap:var(--space-4)}
-.doorhead h1{font-size:24px}
-.dverb{color:var(--text-secondary)}
-.desktag{margin-left:auto;font-family:var(--font-mono);font-size:9px;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);
-  border:var(--border-w) solid var(--border-hairline);border-radius:var(--radius-sm);padding:2px 7px}
-.door .beats{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-3);margin:var(--space-4) 0}
-.beat{background:var(--surface-card);border:var(--border-w) solid var(--border-hairline);
-  border-radius:var(--radius-sm);padding:var(--space-3);font-size:var(--text-sm)}
-.beat span{display:inline-flex;width:22px;height:22px;border-radius:50%;align-items:center;
-  justify-content:center;margin-bottom:6px;background:var(--accent);color:var(--text-inverse);
-  font:var(--weight-bold) var(--text-xs)/1 var(--font-mono)}
-.whydesk{font-size:var(--text-md);color:var(--text-primary);max-width:62ch;margin:var(--space-2) 0}
-.liveshere{display:inline-block;margin:6px 0;color:var(--accent);font-weight:var(--weight-medium)}
-.doorcta{margin-top:var(--space-4)}
-.mark-panel>summary{list-style:none;cursor:pointer}
-.mark-panel>summary::-webkit-details-marker{display:none}
-.mark-body{margin-top:var(--space-3);border:var(--border-w) solid var(--border-hairline);
-  border-radius:var(--radius-sm);padding:var(--space-3) var(--space-4);max-width:360px}
-.mark-body ul{margin:var(--space-2) 0;padding-left:18px;color:var(--text-secondary);font-size:var(--text-sm)}
-.mark-body .hint{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-muted);margin:6px 0 10px}
-
 /* ============================ vote ledger ============================ */
 .ledger .vledger{display:flex;flex-direction:column;gap:var(--space-3)}
 .vrow{border:var(--border-w) solid var(--border-hairline);border-radius:var(--radius-sm);
@@ -631,7 +607,6 @@ table.twin a{color:var(--accent)}
   .grid2,.leadrow,.storyrow{grid-template-columns:1fr}
   .briefscol{border-left:0;padding-left:0;border-top:var(--border-w) solid var(--border-hairline);
     padding-top:var(--space-4);margin-top:var(--space-4)}
-  .door .beats{grid-template-columns:1fr}
   .toolrow{grid-template-columns:1fr;gap:var(--space-1)}
   .lead-hl h2{font-size:24px}
   .acc{grid-template-columns:1fr;gap:2px}

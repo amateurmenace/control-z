@@ -301,14 +301,46 @@ class TestBakeEdition(unittest.TestCase):
             self.assertIn(str(int(t)), anchors[mi],
                           f"search deep-link #t{int(t)} has no anchor in meeting {mi}")
 
-    def test_covenant_and_doors_present(self):
+    def test_covenant_and_the_press_present(self):
         self.assertTrue((self.out / "covenant" / "index.html").exists())
-        # every desk tool has a door; memory (web surface) does not
+        # the desk tools no longer own a door each; their URLs redirect to the
+        # press, and memory (a web surface) never had one
         self.assertTrue((self.out / "t" / "stencil" / "index.html").exists())
         self.assertFalse((self.out / "t" / "memory").exists())
-        door = (self.out / "t" / "stencil" / "index.html").read_text()
-        self.assertIn("desk", door)
-        self.assertIn("Get the desktop app", door)
+        stub = (self.out / "t" / "stencil" / "index.html").read_text()
+        self.assertIn('http-equiv="refresh"', stub)
+        self.assertIn("/app/press#stencil", stub)
+        self.assertIn("Content-Security-Policy", stub)   # a real page, CSP intact
+        # the press page is where they land: the tool, and the one download
+        press = (self.out / "press" / "index.html").read_text()
+        self.assertIn('id="stencil"', press)
+        self.assertIn("Civic Media Studio", press)
+        self.assertIn("Get the desktop app", press)
+        self.assertIn("communityai.studio", press)   # the cross-link, done once
+
+    def test_all_thirteen_door_urls_still_answer_as_stubs(self):
+        """A citation never dies (specs/20 §5): every /app/t/<tool>/ URL the old
+        doors answered is a redirect stub now — 200, CSP, pointed at the press."""
+        doors = [t["id"] for t in tools.TOOLS if t["surface"] != "web"]
+        self.assertEqual(len(doors), 13)
+        press = (self.out / "press" / "index.html").read_text()
+        for tid in doors:
+            p = self.out / "t" / tid / "index.html"
+            self.assertTrue(p.is_file(), f"/app/t/{tid}/ vanished")
+            html = p.read_text()
+            self.assertIn(f"/app/press#{tid}", html)
+            self.assertIn('http-equiv="refresh"', html)
+            self.assertIn(f'id="{tid}"', press, f"the press has no anchor for {tid}")
+
+    def test_nothing_references_the_slides_that_never_travelled(self):
+        """The broken door images leave this domain structurally (specs/20 §5):
+        no pressed file references site/content/assets, and no /app/assets/slide
+        survives anywhere — so there is no broken image on the domain."""
+        for p in self.out.rglob("*"):
+            if p.is_file() and p.suffix in (".html", ".css", ".js", ".json"):
+                txt = p.read_text(errors="ignore")
+                self.assertNotIn("site/content/assets", txt, str(p))
+                self.assertNotIn("/app/assets/slide-", txt, str(p))
 
     def test_covenant_explains_the_licence_and_links_the_source(self):
         """The covenant page named AGPL-3.0 for a year while the repository was
@@ -655,9 +687,14 @@ class TestBakeEdition(unittest.TestCase):
 
     def test_scope_banner_slot_on_every_page(self):
         """The un-trapping banner lands above what the reader came for, on
-        every page — so it is markup, not something script invents late."""
+        every readable page — so it is markup, not something script invents
+        late. A door redirect stub is not a page the reader lands on, so it is
+        the one exception (it carries a meta refresh instead)."""
         for stub in self.out.rglob("index.html"):
-            self.assertIn('id="scopebanner"', stub.read_text(), str(stub))
+            html = stub.read_text()
+            if 'http-equiv="refresh"' in html:
+                continue
+            self.assertIn('id="scopebanner"', html, str(stub))
 
     def test_body_filter_degrades_to_a_readable_sentence(self):
         """JS-off there is no dead control: the filter rail is empty and
