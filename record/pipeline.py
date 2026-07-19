@@ -161,13 +161,20 @@ def park_asr_task(corpus, meeting_id: str, town: str, url: str,
     return task_id
 
 
-def _embed(corpus, town: str, quiet: bool = False) -> dict:
+def _embed(corpus, town: str, meeting_id: str = "",
+           quiet: bool = False) -> dict:
     """Give the new meeting its meaning vectors, under the cap.
 
     Separate from `ingest.run` because `replace_segments` writes the lexical
     vector and nothing else — so without this stage a meeting is on the record,
     readable, cited, and invisible to `space=neural`, which is the exact
     silent-degradation the search endpoint's honest note exists to prevent.
+
+    Scoped to the one meeting on purpose. Handed only a town, `backfill` walks
+    every unembedded segment that town has — correct and capped, and on a
+    corpus with a backlog it is hours of work this stage did not ask for, so
+    the nightly ingest times out on somebody else's job. The backlog is
+    `record-embed`'s; this is the meeting that just arrived.
 
     A cap that stops this is reported, not raised. The meeting has landed; what
     is behind is meaning-search, and the record is designed to read without it."""
@@ -178,7 +185,8 @@ def _embed(corpus, town: str, quiet: bool = False) -> dict:
             print(f"    meaning-search skipped — {why or 'no neural half here'}")
         return {"embedded": 0, "note": why}
     try:
-        r = embed_neural.backfill(corpus, town=town, verbose=False)
+        r = embed_neural.backfill(corpus, town=town, meeting_id=meeting_id,
+                                  verbose=False)
     except Exception as exc:
         if not quiet:
             print(f"    meaning-search deferred — {exc}")
@@ -221,6 +229,28 @@ def ingest_one(corpus, sub: dict, workdir: Path, quiet: bool = False) -> dict:
                 "status": "exists"}
 
     _mark(corpus, sub["id"], QUEUED)
+
+    # The shell, before the job — exactly as `suite/tools/memory.py` does it at
+    # the desk, and for a reason that only shows up here. `ingest.run` opens
+    # with `set_status`, which is an UPDATE: on a meeting that does not exist
+    # it changes nothing and says nothing. The desk never noticed because its
+    # submissions route creates the shell first. Postgres notices immediately —
+    # `replace_segments` runs before `upsert_meeting` inside `ingest.run`, and
+    # `segments.meeting_id` carries a foreign key SQLite was not enforcing. So
+    # the first meeting this pipeline ever fetched captions for died on the
+    # constraint after doing all the work.
+    #
+    # Creating it here rather than reordering `ingest.run` keeps one ingest
+    # contract for both stores: the caller owns the shell, the engine fills it.
+    corpus.upsert_meeting({
+        "id": plan["id"], "status": "queued",
+        "url": plan.get("url", ""), "url_canon": plan.get("url_canon", ""),
+        "source_kind": plan["kind"], "video_id": plan.get("video_id", ""),
+        "source_hash": plan.get("source_hash", ""),
+        "title": plan.get("title", ""), "town": plan.get("town", ""),
+        "body": plan.get("body", ""), "date": plan.get("date", ""),
+    })
+
     job = JobLog(label=label, quiet=quiet)
     try:
         result = ingest.run(corpus, plan, job, workdir=workdir)
@@ -252,8 +282,13 @@ def ingest_one(corpus, sub: dict, workdir: Path, quiet: bool = False) -> dict:
               reason="already on the record")
         return {"submission": sub["id"], "meeting_id": mid, "status": "exists"}
 
-    emb = _embed(corpus, sub.get("town", ""), quiet=quiet)
+    # Linked before embedded, and the order matters. The meeting is on the
+    # record the moment ingest returns; embedding adds a way to find it. If the
+    # job dies in the embed stage — a timeout, a refused batch — a submission
+    # marked afterwards would still read `queued` against a meeting that is
+    # live and unlinked, which is the one state the console cannot explain.
     _mark(corpus, sub["id"], LIVE, meeting_id=mid)
+    emb = _embed(corpus, sub.get("town", ""), meeting_id=mid, quiet=quiet)
     return {"submission": sub["id"], "meeting_id": mid, "status": LIVE,
             "segments": result.get("segments", 0),
             "origin": result.get("origin", ""),

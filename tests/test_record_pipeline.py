@@ -81,16 +81,22 @@ class PipelineTest(unittest.TestCase):
     def fake_ingest(self, result):
         """Stand in for `memory.ingest.run`, which would reach the network.
 
-        Also writes the meeting the real one would have written, so the
-        submission's `meeting_id` points at something that exists."""
+        **It writes in the real one's order, and that order is the point.**
+        `ingest.run` calls `replace_segments` and *then* `upsert_meeting`,
+        leaning on the caller having already created the meeting shell — which
+        the desk's submissions route does and nothing here did. SQLite let that
+        pass; Postgres has a foreign key on `segments.meeting_id`, so the first
+        real meeting died on the constraint after fetching all its captions.
+        A stand-in that wrote the meeting first would have kept the test green
+        and the pipeline broken."""
         def _run(corpus, plan, job, workdir=None):
             job.message = "finding a transcript…"
             if result.get("status") == "live":
+                corpus.replace_segments(plan["id"], CAPTIONS)
                 corpus.upsert_meeting({
                     "id": plan["id"], "status": "live", "town": plan["town"],
                     "body": plan["body"], "title": "Select Board",
                     "date": "2026-07-14", "n_segments": len(CAPTIONS)})
-                corpus.replace_segments(plan["id"], CAPTIONS)
             return {"meeting_id": plan["id"], **result}
         return _run
 
@@ -273,3 +279,64 @@ class WorkdirSeamTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(PG_DSN, "RECORD_TEST_PG_DSN unset — the ingest contract is "
+                             "UNPROVEN in this run")
+class ShellBeforeTheEngineTest(unittest.TestCase):
+    """`ingest.run` fills a meeting in; it does not create one.
+
+    An implicit contract that cost the first hosted meeting. `ingest.run` opens
+    with `set_status`, which is an UPDATE — on a row that does not exist it
+    changes nothing and reports nothing — and then writes segments before it
+    writes the meeting. The desk's submissions route creates the shell first
+    (`suite/tools/memory.py`), so the desk never saw it. Postgres enforces the
+    foreign key SQLite was not, so the hosted pipeline hit it on its first real
+    meeting, after doing every expensive thing.
+    """
+
+    def setUp(self):
+        from record.store import PgCorpus
+        self.c = PgCorpus(dsn=PG_DSN)
+        self.addCleanup(self.c.close)
+        with self.c._con() as con:
+            con.execute("TRUNCATE meetings, segments, submissions "
+                        "RESTART IDENTITY CASCADE")
+
+    def test_segments_cannot_be_written_before_the_meeting_exists(self):
+        """The constraint itself, asserted — so nobody 'simplifies' the shell
+        away on the grounds that ingest writes the meeting anyway."""
+        with self.assertRaises(Exception) as e:
+            self.c.replace_segments("ghost", CAPTIONS)
+        self.assertIn("foreign key", str(e.exception).lower())
+
+    def test_the_pipeline_creates_the_shell_before_calling_ingest(self):
+        from record import pipeline
+        seen = {}
+
+        def _run(corpus, plan, job, workdir=None):
+            # what ingest.run assumes when it starts
+            seen["shell"] = corpus.get_meeting(plan["id"])
+            corpus.replace_segments(plan["id"], CAPTIONS)
+            corpus.upsert_meeting({"id": plan["id"], "status": "live",
+                                   "n_segments": len(CAPTIONS)})
+            return {"meeting_id": plan["id"], "status": "live", "segments": 2}
+
+        now = time.time()
+        with self.c._con() as con:
+            con.execute(
+                "INSERT INTO submissions (id, url, url_canon, town, body, date, "
+                "note, status, added_at, updated_at) VALUES "
+                "(%s,%s,'',%s,%s,'','','approved',%s,%s)",
+                ("sub:s", "https://www.youtube.com/watch?v=bbbbbbbbbbb",
+                 "Boston", "City Council", now, now))
+        with mock.patch("memory.ingest.run", _run), \
+             mock.patch.object(pipeline, "_embed", lambda *a, **k: {"embedded": 0}):
+            r = pipeline.drain(self.c, quiet=True)
+        self.assertEqual(r["landed"], 1)
+        self.assertIsNotNone(seen["shell"], "ingest was called with no shell")
+        self.assertEqual(seen["shell"]["status"], "queued")
+        # and the plan's town/body reached it, so a meeting that fails mid-way
+        # is still findable as the town's rather than as an orphan
+        self.assertEqual(seen["shell"]["town"], "Boston")
+        self.assertEqual(seen["shell"]["body"], "City Council")

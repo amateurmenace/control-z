@@ -42,6 +42,14 @@ RUN pip install --no-cache-dir \
 # except this one runs in, and the tests still cover it.
 RUN pip install --no-cache-dir "google-genai>=1.0"
 
+# The edition's ride to the bucket. `record/press.py` treats this as optional
+# and says so when it is missing — it presses to disk and reports plainly that
+# the edition did not travel — which is the right behaviour for a desk and the
+# wrong one for the job whose entire purpose is to put the record where readers
+# reach it. A press that "succeeds" without uploading is the quiet failure this
+# line removes.
+RUN pip install --no-cache-dir "google-cloud-storage>=2.14"
+
 COPY czcore/    /app/czcore/
 COPY memory/    /app/memory/
 COPY web/       /app/web/

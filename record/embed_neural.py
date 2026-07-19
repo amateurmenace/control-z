@@ -337,7 +337,8 @@ def embed_query(q: str, corpus=None, town: str = ""):
 # -- the backfill ----------------------------------------------------------
 
 def backfill(corpus, town: str = "", limit: int = 0,
-             verbose: bool = True, cap_usd: float = 0.0) -> dict:
+             verbose: bool = True, cap_usd: float = 0.0,
+             meeting_id: str = "") -> dict:
     """Fill `segments.emb_neural` wherever it is NULL, in batches.
 
     Returns `{"embedded", "skipped", "failed", "available"}`. When the
@@ -349,7 +350,14 @@ def backfill(corpus, town: str = "", limit: int = 0,
     The cursor walks `id` rather than re-asking for NULLs, because a text the
     API refuses stays NULL and would otherwise be handed back forever. Those
     rows are simply picked up again by the next run, when the refusal may have
-    been temporary after all."""
+    been temporary after all.
+
+    `meeting_id` narrows this to one meeting, which is what the ingest pipeline
+    wants and the nightly backfill does not. Without it, ingesting a single
+    meeting into a corpus with an embedding backlog embeds the entire town —
+    correct, capped, and hours long, so the nightly job times out every night
+    on work that was never its business. The backlog belongs to `record-embed`;
+    a freshly ingested meeting belongs to the stage that ingested it."""
     from .settings import settings
     cap = cap_usd if cap_usd > 0 else settings.spend_cap_usd
     out = {"embedded": 0, "skipped": 0, "failed": 0, "available": available(),
@@ -387,6 +395,9 @@ def backfill(corpus, town: str = "", limit: int = 0,
         if town:
             sql += " AND town=%s"
             args.append(town)
+        if meeting_id:
+            sql += " AND meeting_id=%s"
+            args.append(meeting_id)
         sql += " ORDER BY id LIMIT %s"
         args.append(want)
         with corpus._con() as con:
