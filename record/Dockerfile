@@ -31,10 +31,16 @@ RUN pip install --no-cache-dir \
         "google-auth[requests]>=2.30" \
         "numpy"
 
-# google-genai is deliberately NOT installed here. Without it publicrecord runs,
-# search is lexical, and the reader is told in one honest line. Add it when a
-# key exists and the spend is intended:
-#   RUN pip install --no-cache-dir "google-genai>=1.0"
+# The neural half. Installed now that a key exists and the spend is intended:
+# a project-scoped key restricted to generativelanguage only, billed to the
+# same budget as everything else here.
+#
+# Note what this does NOT do. Installing the SDK starts no spending. Embedding
+# happens at ingest, batched, and at query time only when a caller asks for
+# space=neural. Without a key the module reports itself unavailable and search
+# stays lexical with an honest line — which remains the state every environment
+# except this one runs in, and the tests still cover it.
+RUN pip install --no-cache-dir "google-genai>=1.0"
 
 COPY czcore/    /app/czcore/
 COPY memory/    /app/memory/
