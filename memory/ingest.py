@@ -42,6 +42,23 @@ def meetings_dir() -> Path:
     return d
 
 
+def workdir_root(root=None) -> Path:
+    """Where per-meeting sidecars land — the desk's media folder, or wherever
+    the caller says.
+
+    `media_dir` resolves `~/Movies` and *creates* it as a side effect of being
+    asked where it is, which is right at a desk and meaningless in a container
+    (`record/settings.py` refuses to import it for that reason). So the hosted
+    pipeline passes its own root and gets a scratch directory it chose, rather
+    than a `~/Videos` tree invented under `/root`.
+
+    This mirrors the resolver `web.bake.Bake` already takes and `record/press.py`
+    already passes — the same problem, solved the same way, so there is one
+    pattern to learn instead of two. Default `None` keeps every desk caller on
+    the behaviour it has always had."""
+    return Path(root) if root else meetings_dir()
+
+
 # --------------------------------------------------------------------------
 # input classification — cheap, no network, safe to run before queueing a job
 # --------------------------------------------------------------------------
@@ -101,8 +118,11 @@ def submit_dedupe(corpus, plan: dict) -> Optional[dict]:
 # the pipeline
 # --------------------------------------------------------------------------
 
-def run(corpus, plan: dict, job) -> dict:
-    """The whole pipeline, inside one job. Returns a JSON-safe result dict."""
+def run(corpus, plan: dict, job, workdir=None) -> dict:
+    """The whole pipeline, inside one job. Returns a JSON-safe result dict.
+
+    `workdir` overrides where sidecars land (see `workdir_root`); a desk leaves
+    it None and gets `~/Movies`, the hosted pipeline passes a scratch path."""
     from czcore.appshell.jobs import JobCancelled
 
     mid = plan["id"]
@@ -110,7 +130,7 @@ def run(corpus, plan: dict, job) -> dict:
         corpus.set_status(mid, "transcribing")
         job.progress = -1
         job.message = "finding a transcript…"
-        tr = _resolve_transcript(corpus, plan, job)
+        tr = _resolve_transcript(corpus, plan, job, workdir)
         segs = tr["segments"]
         if not segs:
             if plan["kind"] in ("youtube", "url"):
@@ -207,9 +227,9 @@ def run(corpus, plan: dict, job) -> dict:
         raise
 
 
-def _resolve_transcript(corpus, plan: dict, job) -> dict:
+def _resolve_transcript(corpus, plan: dict, job, root=None) -> dict:
     """{segments, origin, meta, media_path, duration}. Captions-first."""
-    workdir = meetings_dir() / _safe(plan["id"])
+    workdir = workdir_root(root) / _safe(plan["id"])
     workdir.mkdir(parents=True, exist_ok=True)
     sc = workdir / "meeting.scribe.json"
     info_p = workdir / "meeting.info.json"
@@ -419,7 +439,18 @@ def _captions_file(d: Path) -> Optional[Path]:
 def _local_media(workdir: Path, plan: dict) -> str:
     if plan.get("kind") == "file" and plan.get("path") and Path(plan["path"]).is_file():
         return plan["path"]
-    from indexer.catalog import AUDIO_EXTS, VIDEO_EXTS
+    try:
+        from indexer.catalog import AUDIO_EXTS, VIDEO_EXTS
+    except ImportError:
+        # No Indexer here, so there is no local media library to find anything
+        # in — which is the hosted pipeline's permanent condition, not a fault.
+        # The record's container ships no ASR and no tool directories on
+        # purpose, and after specs/18 splits the repo this import is gone for
+        # good. A meeting with no captions parks for the drain either way; what
+        # must not happen is an ImportError surfacing on a job retry, which is
+        # the one moment this branch becomes reachable and the worst moment to
+        # discover it.
+        return ""
     for p in sorted(workdir.iterdir()) if workdir.exists() else []:
         if p.suffix.lower() in VIDEO_EXTS | AUDIO_EXTS:
             return str(p)

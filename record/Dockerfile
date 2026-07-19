@@ -51,7 +51,14 @@ COPY highlighter/ /app/highlighter/
 
 # Scale-to-zero on Cloud Run means this is also the cold-start path; keep it
 # to an import check rather than anything that touches the network.
-RUN python -c "import record.app, record.store, record.press, record.connectors.youtube"
+#
+# `record.pipeline` and `memory.ingest` are on this line for a specific reason:
+# the ingest engine is desk code running in a container that ships neither
+# Scribe nor the tool directories, so its imports are the ones most likely to
+# reach for something that is not here. Catching that at build time costs a
+# second; catching it at 3am costs a night's meetings.
+RUN python -c "import record.app, record.store, record.press, record.pipeline, \
+    record.connectors.youtube, memory.ingest"
 
 EXPOSE 8330
 CMD ["uvicorn", "record.app:app", "--host", "0.0.0.0", "--port", "8330"]
