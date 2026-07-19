@@ -157,7 +157,30 @@ far — their CLIs come with their next waves.
   `.venv/bin/python -m rise.convert`. Until then Rise falls back to lanczos,
   labeled as a scaler, never as synthesis.
 
-Every tool follows the suite covenant: free forever (MIT), works with the **free**
+Every tool follows the suite covenant: free forever, works with the **free**
 version of Resolve, local-only processing, shows its work, honest limitations.
 
-MIT © Weird Machine / Brookline Interactive Group
+## Licence
+
+Two licences, drawn along the line where the difference actually bites.
+
+The **Resolve tools** — `czcore`, Pivot, Stencil, Scribe, Clear, Rise, Depth,
+Grabber, Slate, Index — are **MIT**, and stay MIT. A desktop tool has no server,
+so copyleft's network clause would buy nothing here and cost adoption.
+
+The **civic stack** — the record at publicrecord.studio, the suite at
+civicmedia.studio — is **AGPL-3.0**. That one has a server, and §13 is the whole
+point: fork it, run it as your town's public record, and your residents can ask
+you for the source of the version you are running. It keeps a vendor from taking
+publicly-funded civic code, hosting it as a black box, and selling a town its
+own record back. The record's *content* is CC BY-SA 4.0, which is a separate
+thing from the code.
+
+Everything released before this point stays MIT — a licence already granted
+cannot be withdrawn. See [LICENSING.md](LICENSING.md) for the full argument,
+including what the AGPL does *not* oblige.
+
+Copyright © 2026 Stephen Walter (Weird Machine). Built with
+**Brookline Interactive Group** and **Neighborhood AI**, who are partners on
+this work rather than parties to the licence — the credit and the copyright are
+deliberately kept apart.

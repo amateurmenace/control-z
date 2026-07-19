@@ -311,21 +311,27 @@ runbook assumes it. **specs/12 §9 still lists AGPL ratification as an open
 question blocking In-a-Box Phase 1. It is still open. This spec does not
 close it.**
 
-And one thing this spec got wrong on an earlier pass, corrected here because
-it is the sort of error that reads as reassurance: `git shortlog` showing a
-single human author is **not** evidence that a single party holds the
-copyright. Authorship is a record of who typed. Ownership is decided by
-employment, commission, grant terms, and institutional policy — and the
-repository's own `LICENSE` asserts the holder is *"Weird Machine /
-Brookline Interactive Group"*, naming a second party on the face of the
-grant. `NOTICE` and the standard credit string also name Neighborhood AI.
+**Consent is settled, and it was settled by asking the only person who could
+know.** An earlier pass in this session reasoned from `git shortlog` that a
+single author meant a single owner, which is not a valid inference — authorship
+records who typed, and employment, commission or grant terms can move ownership
+elsewhere. A later pass read the `LICENSE` file naming *"Weird Machine /
+Brookline Interactive Group"* and treated that as a live claim by a second
+party. Both were the same mistake in opposite directions: guessing at a fact
+that is not in the repository.
 
-**A relicensing binds only with every copyright holder's agreement.** If BIG
-holds any interest in this code — and its own licence file says it does —
-that consent is a prerequisite, not a formality, and it should be in
-writing before the AGPL repository is published. `specs/12` §9 has listed
-"AGPL ratification" as an open legal question all along; this is what it
-was pointing at.
+The fact, from the holder: **copyright is Stephen Walter's**, working under the
+trade name Weird Machine, which is a brand and not a legal entity. Brookline
+Interactive Group and Neighborhood AI are **partners** — credited on every
+footer, in `NOTICE`, and in the standard credit string, and named there because
+that is where partners belong. The old `LICENSE` line put a partner on the face
+of the grant, which overstated their role and left the actual holder unnamed;
+it now reads `Copyright (c) 2026 Stephen Walter (Weird Machine)`.
+
+So the relicensing needs no third-party sign-off. What it still deserves is a
+note to both partners before the AGPL repository is public — not to obtain
+permission, but because a partner should hear the licence of the thing they are
+credited on from the project rather than from GitHub.
 
 What *is* certain: **everything already released under MIT stays MIT
 forever.** Anyone may fork repo 2 at the last pre-split commit and continue

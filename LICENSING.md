@@ -153,34 +153,50 @@ The Resolve tools are unaffected. They were MIT, they stay MIT, and the
 covenant printed in their README — free forever, works with the free version of
 Resolve, local-only, shows its work — is unchanged.
 
-### The copyright question, unresolved
+### Who holds the copyright, and who is credited
 
-**Read this part before relying on any of the above.**
+These are two different things, and this project had been conflating them.
 
-Relicensing is a right of the copyright holder. It follows that the civic stack
-can only move to AGPL-3.0 if everyone who holds copyright in it agrees.
+**The copyright is held by Stephen Walter**, an individual, working under the
+trade name *Weird Machine*. Weird Machine is a brand, not a legal entity — no
+company holds anything here, because there is no company. Copyright in code
+vests in the human who wrote it unless something moves it, and nothing did.
 
-The current `LICENSE` file names the copyright holder as **"Weird Machine /
-Brookline Interactive Group."** `NOTICE` and the project's standard credit
-string name **Brookline Interactive Group** and **Neighborhood AI** as
-collaborators. Whether those are attributions of partnership and funding, or
-assertions of copyright in contributed code, cannot be determined from the
-repository. The git history shows a single author identity, but git authorship
-is evidence about who typed, not about who owns — work for hire, grant terms, a
-contributor agreement, or an institutional policy can all place copyright
-somewhere other than the commit line.
+**Brookline Interactive Group and Neighborhood AI are partners**, and the
+project would not exist without them. BIG produces the meetings this record is
+made of and is the reason the Brookline corpus is possible at all; Neighborhood
+AI co-designs the governance and runs the compute the local-first values depend
+on. They are named in the credit string, in `NOTICE`, and on every page footer,
+and that is the correct place for a partner to be named.
 
-So this is an open legal question, and it is a blocking one:
+Until now the `LICENSE` file said `Copyright (c) 2026 Weird Machine / Brookline
+Interactive Group`, which put a partner on the face of the grant. That was
+generous and it was wrong in both directions: it implied BIG holds rights it
+does not claim, and it left the actual holder unnamed. It now reads
+`Copyright (c) 2026 Stephen Walter (Weird Machine)`, which is simply what is
+true. Nothing about the partnership changes; the credit is untouched.
 
-> Does anyone besides Stephen Walter hold copyright in the civic stack's code?
-> If Brookline Interactive Group or Neighborhood AI hold any, their written
-> agreement is required before the relicensing is valid.
+**A note on the form of the name.** The parenthetical is deliberate. "d/b/a
+Weird Machine" is the form for a registered fictitious business name; where no
+DBA has been filed, naming the person and putting the brand beside them says
+the same thing without asserting a registration that does not exist.
 
-`specs/12-community-program.md` §9 already lists AGPL ratification as an open
-question blocking In-a-Box Phase 1, which suggests this was known and has not
-been closed. It should be closed in writing — a short signed acknowledgement
-from each named party is enough — before the split is executed, and certainly
-before the AGPL is described publicly as settled.
+**What is still worth doing, and is not a legal question.** A short note to BIG
+and Neighborhood AI — *the code is licensed by me, you are credited as
+partners, here is what AGPL means for the record you help produce* — costs one
+email and removes the ambiguity permanently. It is worth sending before the
+AGPL repository is public, not because consent is owed, but because a partner
+should learn the licence of the thing they are named on from you rather than
+from GitHub. If either of them ever funded specific work under terms that
+assign or license the output, that agreement governs and this paragraph does
+not — that is the one case where the answer above would change, and only the
+parties to it would know.
+
+`specs/12-community-program.md` §9 lists "AGPL ratification" as an open
+question. As to *consent*, it is closed: the holder is one person and he is
+doing the relicensing. What remains open there is the muni-IT conversation —
+procurement offices do balk at copyleft — and that is a sales problem, not an
+ownership one.
 
 ## Third-party code, and why the AGPL sits comfortably with it
 
