@@ -227,6 +227,24 @@ score bar in the tint scale. Click seeks the tape. If the current
 array per meeting (t, end, kind, score, reason, quote) — press what the
 analyzer already knows; never re-analyze at read time.
 
+**P1 follow-up — the labels earn their kicker.** A moment is only as good as
+its kind. The shared analyzer matched its keyword classes as bare substrings,
+so a celebration read as a `DECISION` (`voted` inside "de**voted**", `motion`
+inside "e**motion**"/"com**motion**") and `TENSION` fired on any bare "concern"
+or "problem" ("solve problems", "my question **concerns** equity"). The fix is
+two-layered: `czcore.moments.hits_in` matches word-like keywords on a *leading*
+word boundary (so "vote" still reaches votes/voted, "unanimous" reaches
+unanimously, but never de**voted**/e**motion**) — a shared correctness fix,
+since a leading boundary is strictly narrower than a substring, so no genuine
+motion is lost; and the paper holds a *higher* bar than Highlighter's fuller
+recall — stored decisions are re-validated on that boundary and gated for
+narration ("passed away", "sent … for approval"), soft tension words have to be
+*owned* (a felt worry, an act of raising it, an intensifier) to count, and pure
+roll-call mechanics ("want to vote?") stay procedure. Across the 10-meeting
+corpus this drops ~70 keyword false positives and lets the same number of real
+questions and decisions rise into the ranked cap. Newspaper-only lives in
+`web/bake.py`; the shared boundary fix is verified against every consumer.
+
 **The reel composer (Highlighter's composing half, P1).** On any meeting:
 tick moments into a reel tray; reorder; trim to segment bounds; live total
 runtime. Output, in order of covenant-cleanliness: a **share link** (state

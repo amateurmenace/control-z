@@ -2,6 +2,47 @@
 
 ## unreleased
 
+### The moment labels earn their kicker: a word-boundary fix + a higher bar for the paper — 2026-07-20
+
+A moment is only as good as its kind. The shared analyzer matched its keyword
+classes as bare substrings, so the moments plane read a celebration as a
+`DECISION` — "thank you for joining us … staff who have **devoted** three
+decades" (`voted` inside devoted) — and `emotion` / `commotion` as motions,
+`coffee` as a fee, `immigrant` as a grant. And `TENSION` fired on any bare
+"concern" or "problem": "solve problems", "my question **concerns** equity"
+(the verb, not the worry), "there aren't crises" (a negation).
+
+- **The shared fix** (`czcore/moments.py`). `hits_in()` matches word-like
+  keywords on a *leading* word boundary — the convention `insight.FRAMING_LENSES`
+  already uses. "vote" still reaches votes / voted / voting and "unanimous"
+  reaches unanimously, but none reach de**voted** / e**motion** / com**motion**;
+  symbolic keywords (`$`, `[applause]`) keep literal substring matching. A
+  leading boundary is strictly narrower than a substring, so no genuine motion
+  is lost — a correctness fix inherited by `score_segments` and
+  `insight.decisions` / `disagreements` / `dynamics`, so Highlighter, Publisher,
+  and Memory all get it. An adversarial audit of every consumer found it
+  net-positive; two prefixed civic terms worth keeping got their own keywords
+  (`disapprove` / `disapproval`; `unfunded` / `underfunded`).
+
+- **The paper's higher bar** (`web/bake.py`, newspaper-only). Stored decisions
+  are re-validated on the boundary (so the corpus's baked-in substring FPs drop
+  without a re-ingest) and gated for narration — a death ("passed away"), a
+  described process ("submitted … approved by", "sent … for approval"). Soft
+  tension words (concern / problem) have to be *owned* — a felt worry ("I'm
+  concerned about…"), an act of raising it ("express the concern"), an
+  intensifier — while a strong word (oppose / crisis / frustrated) still
+  carries alone; the gate reads the *windowed sentence*, because the ASR splits
+  "but I'm a little / concerned that…" across segments. Pure roll-call mechanics
+  ("want to vote?") stay procedure. Highlighter keeps its fuller recall.
+
+- **Verified.** Reproduced from the 10 real Brookline transcripts (63.9h):
+  ~70 keyword false positives drop and the same number of real questions and
+  decisions rise into the ranked cap. An independent judge panel (one per
+  meeting) graded every removed and added label, and a blast-radius panel
+  audited each shared consumer; their findings drove the narration gate and the
+  keyword restorations. 832 tests green. **Not deployed — pending Stephen's
+  review of the before/after, since it changes every meeting page.**
+
 ### The reel composer: specs/20 P1 moves Highlighter's composing half into the browser — 2026-07-20
 
 The rule that governed P0 governs this: reading and composing live in the web;

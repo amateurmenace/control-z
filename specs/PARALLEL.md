@@ -157,7 +157,40 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-20 (latest) — **specs/20 P1: the reel composer + the `/app/r`
+- 2026-07-20 (latest) — **specs/20 P1 follow-up: the moment labels earn their
+  kicker.** The moments plane read a celebration as a `DECISION` because the
+  shared analyzer matched keywords as bare substrings (`voted` inside
+  "de**voted**", `motion` inside "e**motion**"), and `TENSION` fired on any bare
+  "concern"/"problem". `czcore.moments.hits_in` now matches word-like keywords
+  on a *leading* word boundary (votes/voted/unanimously survive; deVOTEd/eMOTION
+  don't; `$`/`[applause]` stay substring) — a correctness fix inherited by
+  `score_segments` and `insight.decisions`/`disagreements`/`dynamics`. The paper
+  holds a bar above Highlighter's recall, all in `web/bake.py`: stored decisions
+  re-validated on the boundary + gated for narration ("passed away", "sent … for
+  approval"), soft tension words gated unless *owned*, roll-call mechanics gated.
+  Verified against the 10 real transcripts (~70 keyword FPs drop, as many real
+  moments rise) + an independent judge/blast-radius panel. 832 green.
+  - **`czcore/moments.py`, `highlighter/highlights.py`, `highlighter/insight.py`
+    CHANGED** — `hits_in` (leading-boundary matcher, re-exported by
+    `highlights.py`); `decisions`/`disagreements`/`dynamics` route through it;
+    `KEYWORD_CLASSES` gains `disapprove`/`disapproval` (decision) and
+    `unfunded`/`underfunded` (money). **The shared-analyzer change touches every
+    czcore consumer** — audited net-positive, but lane B/C should know the match
+    is now leading-boundary, not substring. **`web/bake.py` CHANGED** —
+    `_real_decisions`, `_is_weak_tension`, `_is_narrated_decision`, the
+    procedural + narration decision gates; `_build_moments` recomputes nothing
+    it didn't already, it re-validates the stored decisions it reads.
+    **`tests/test_highlights.py`, `tests/test_web_bake.py` CHANGED** — the
+    boundary matcher (inflections kept, substrings dropped, symbols intact) and
+    the newspaper gates.
+  - **NOT deployed** — the change alters every meeting page's moment cards, so
+    it's pending Stephen's review of the before/after. When it ships it's a
+    code-only edition change: a **version bump** (`--version 2.1.2`) so the
+    service worker doesn't serve returning readers the cached JS, and the same
+    P0/P1 deploy flow (image rebuild → job updates → press → Pages rsync +
+    gunzip). No new data plane.
+
+- 2026-07-20 — **specs/20 P1: the reel composer + the `/app/r`
   viewer.** Highlighter's composing half, moved into the browser — client-only,
   over the `moments` plane P0 presses. On every meeting page, a tick on each
   Moments card builds a reel tray (reorder, trim to segment bounds, live
