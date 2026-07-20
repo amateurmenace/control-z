@@ -1,8 +1,9 @@
 # 20 — The newspaper: the record gets its own face
 
-**Status:** v1.1 · **Stage:** **P0 shipped — publicrecord.studio serves the
-newspaper (2026-07-19)**; P1 (the reel composer) and P2 (kits, dark mode) not
-started, per the roadmap's finish-before-feature rule ·
+**Status:** v1.2 · **Stage:** **P0 + P1 shipped — publicrecord.studio serves the
+newspaper (P0, 2026-07-19) and the reel composer + `/app/r` viewer (P1,
+2026-07-20)**; P2 (kits, dark mode, cross-meeting reels) not started, per the
+roadmap's finish-before-feature rule ·
 **Owner:** Stephen Walter (Weird Machine) · **Related:**
 `.claude/rules/branding.md` and `brand/` (the brand law and its vendored
 assets), specs/16 (the reader — restyled here, and partly superseded on this
@@ -262,13 +263,19 @@ meeting's moments slot in without a redesign.
    explanation page with the audit date; pressed idempotently (audit rows are
    stored state, not wall clock).
 
-### P1 — the composer
+### P1 — the composer  ✓ shipped 2026-07-20
 
 7. The reel tray, share links, cite sheet, `reel.json`, and the `/app/r`
    viewer. *Acceptance:* a reel of 3 clips from one meeting plays through the
    facade, survives a fresh browser via its URL alone, and the JSON opens at
-   the desk.
-8. Transcript follow-along + peeks polish; `/` global search focus.
+   the desk. **Met:** the tray ticks / reorders / trims-to-segment-bounds with a
+   live runtime; the share link carries the whole reel
+   (`?v=1&m=<pid>&c=<t>-<end>,…`) with no server; the viewer decodes it and
+   seeks clip to clip through the youtube-nocookie facade; the `reel.json` maps
+   onto `highlighter/reel.py`'s `render_reel`. The client-only covenant and the
+   encode/decode round-trip are pinned by tests executed in node.
+8. Transcript follow-along + peeks polish; `/` global search focus. **Met** in
+   P0 (`followAlong`, `wireSlashFocus`).
 
 ### P2 — the wide paper
 

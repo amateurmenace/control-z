@@ -2,6 +2,54 @@
 
 ## unreleased
 
+### The reel composer: specs/20 P1 moves Highlighter's composing half into the browser — 2026-07-20
+
+The rule that governed P0 governs this: reading and composing live in the web;
+only rendering media stays at the desk, and the page says so. Highlighter cuts
+a reel at the desk — this is the *composing* half, in a browser, over the
+`moments` plane P0 already presses. No accounts, no server, no new `/api/`: the
+reel lives in the URL and this browser's localStorage, nowhere else.
+
+- **The composer** (§20.6, P1a). Every Moments card gains a tick into a reel
+  tray: reorder, trim each clip to the transcript's own segment bounds, a live
+  total runtime. Three outputs, in order of covenant-cleanliness — a **share
+  link** (the reel state URL-encoded and versioned, `/app/r?v=1&m=<pid>&c=<t>-<end>,…`,
+  no server); a **cite sheet** (quote · speaker · body · date · deep link per
+  clip, one copy, the shape `copyCite` writes extended to a sequence); and a
+  **`reel.json`** the desk Highlighter opens to render — the one desk-bound
+  step, stated: *"rendering the video needs the desk."* Its clips map straight
+  onto `highlighter/reel.py`'s `render_reel`. The model is per-meeting but
+  shaped so a second meeting's moments slot in (cross-meeting reels stay R3).
+
+- **The viewer** (§20.6/§20.7, P1b). A shared link opens **`/app/r`** — one
+  static stub for every reel — and app.js decodes its state, fetches the
+  meeting's own plane, and plays the sequence through the existing
+  youtube-nocookie facade, seeking clip to clip (on `currentTime ≥ clip.end` →
+  the next clip's start; the seek engine's `armed` gate keeps a stale time
+  report from skipping a clip when the reel order runs backward through the
+  tape). It shows the current clip's quote and the reel as a deep-linked cite
+  list. JS-off, the stub is honest that decoding and playing a reel need
+  JavaScript, and sends the reader to the record.
+
+- **Tests.** The share-link encode/decode round-trip, the cite sheet, the
+  `reel.json` shape, the clip-to-clip seek engine (including the out-of-order
+  guard) — all executed in node against the lifted reader code — plus the
+  `/app/r` stub and its JS-off cite fallback, and the covenant (no server on the
+  reel path). 822 green.
+
+- **Hardened before ship** (an adversarial review pass over the diff, findings
+  verified in node). A clip's identity is now `(kind, time)` — matching the
+  bake's own moment dedup key — so the vote and the tension a contested roll
+  call emits at the same second no longer collide (ticking one had silently
+  toggled the other). The seek engine arms only on a report *inside* the clip
+  and before its end, so two stale time reports during a backward seek can't
+  arm-then-skip a short clip. And two AA gates: the tray's functional labels
+  move off `--text-muted` (2.4:1) to `--text-secondary` (7.2:1), and the moment
+  tick clears the 24px minimum target size.
+
+- **Tidy.** The coverage-strip label for an undated meeting read `ed`
+  (`"undated"[5:]`); it now reads a dash. Shows only after a re-press.
+
 ### The record gets its own face: specs/20 P0 ships the newspaper — 2026-07-19
 
 publicrecord.studio was live wearing the desk's clothes — cream paper, oxblood

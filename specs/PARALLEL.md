@@ -157,7 +157,31 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-19 (latest) — **specs/20 P0: the record gets its own face.**
+- 2026-07-20 (latest) — **specs/20 P1: the reel composer + the `/app/r`
+  viewer.** Highlighter's composing half, moved into the browser — client-only,
+  over the `moments` plane P0 presses. On every meeting page, a tick on each
+  Moments card builds a reel tray (reorder, trim to segment bounds, live
+  runtime) with three outputs: a **share link** (`/app/r?v=1&m=<pid>&c=<t>-<end>,…`,
+  state in the URL + localStorage, no server), a **cite sheet**, and a
+  **`reel.json`** the desk Highlighter opens to render (mapped onto
+  `highlighter/reel.py`'s `render_reel`). `/app/r` decodes a shared link, fetches
+  the meeting's own plane, and plays the sequence clip to clip through the
+  youtube-nocookie facade. Verified on a local press (real video → real
+  playback) + 822 tests green.
+  - **`web/static/app.js`, `web/static/app.web.css`, `web/emit.py` CHANGED** —
+    the composer + viewer + `page_reel` stub (written in `emit_stubs`, so
+    `record/press.py` mirrors it for free); Moment cards wrap in `.mo-card` and
+    carry `data-end/kind/quote`. **No new `/api/`, no new server call**: the
+    reel path's only fetch is the meeting plane under `/app/`, and the R1.6
+    degradation proofs still pass (`js.count("/api/")==1`). **`tests/test_web_bake.py`
+    CHANGED** — a `TestReel` class runs the round-trip / cite sheet / reel.json /
+    seek-engine in node, plus the stub + JS-off fallback + the reel-path
+    covenant. Tidy: the undated coverage-strip label (`ed` → `—`).
+  - **Deploy**: same flow as P0 (`record/OPERATING.md` §5) — image rebuild
+    (`record/api:r22`), `record-press` + `record-api` job updates, press, Pages
+    rsync + gunzip-in-place. No new data plane, so no new bake stage.
+
+- 2026-07-19 — **specs/20 P0: the record gets its own face.**
   publicrecord.studio now serves an ink-on-white newspaper, pressed from the
   cloud (image `record/api:r21`, corpus `66c05a95`) and live. The edition takes
   publicrecord's own tokens from `brand/` (the single source for this product;
