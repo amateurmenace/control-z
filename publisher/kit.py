@@ -17,8 +17,19 @@ from pathlib import Path
 from typing import List, Optional
 
 from czcore.moments import build_reel, score_segments
+# The pure copy-assembly core, shared with the record's press so a kit opened
+# at the desk and a kit read on the record are the same object (czcore/kit.py).
+# Imported under the private names this module has always used internally, so
+# every call site below — and `publisher.bundle`'s `from .kit import fmt_t`, and
+# `tests.test_publisher`'s `from publisher.kit import copy_extractive` — is
+# unchanged: the definitions moved, the surface did not.
+from czcore.kit import (RATIO_NAMES, copy_extractive, fmt_t, kit_from_parts,
+                        brief_text as _brief_text, clip_label as _clip_label,
+                        sentences as _sentences, top_entities as _top_entities)
 
-RATIO_NAMES = ("16x9", "1x1", "9x16")
+__all__ = ["RATIO_NAMES", "copy_extractive", "fmt_t", "kit_from_parts",
+           "candidates", "meeting_meta", "new_kit", "sidecars", "load_kit",
+           "save_kit", "copy_generative", "stamp_today"]
 
 
 # -- sources & sidecars (the highlighter convention, restated) ----------------
@@ -144,111 +155,20 @@ def save_kit(source: str, kit: dict) -> Path:
 
 def new_kit(source: str, n: int = 5) -> dict:
     """A fresh kit: candidates picked, extractive copy drafted, nothing
-    rendered yet. The review page edits this dict; renders fill `files`."""
-    meta = meeting_meta(source)
-    cands = candidates(source, n=n)
+    rendered yet. The review page edits this dict; renders fill `files`. The
+    shape is assembled by `czcore.kit.kit_from_parts`, the core the record's
+    press shares — the desk's only difference is where the parts come from
+    (the sidecars beside a local video)."""
     ins = _read_json(sidecars(source)["insight"]) or {}
-    kit = {
-        "version": 1,
-        "meta": meta,
-        "candidates": cands,
-        "clips": [{**c, "keep": i < 3, "ratios": ["16x9", "9x16"],
-                   "offset": 0.0, "label": _clip_label(c)}
-                  for i, c in enumerate(cands)],
-        "copy": copy_extractive(meta, cands, ins),
-        "files": [],
-    }
-    return kit
+    return kit_from_parts(meeting_meta(source), candidates(source, n=n), ins)
 
 
-# -- copy: extractive always --------------------------------------------------
-
-def _clip_label(c: dict) -> str:
-    """A human handle for a clip — its first strong words, tidied."""
-    text = re.sub(r"\s+", " ", str(c.get("text", ""))).strip()
-    text = re.sub(r"^\W+", "", text)
-    return (text[:64].rsplit(" ", 1)[0] + "…") if len(text) > 64 else text
-
-
-def _sentences(text: str, limit: int) -> str:
-    parts = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", text).strip())
-    out = ""
-    for s in parts:
-        if len(out) + len(s) + 1 > limit:
-            break
-        out = (out + " " + s).strip()
-    return out or text[:limit].strip()
-
-
-def fmt_t(t: float) -> str:
-    """0:42 · 14:59 · 3:27:31 — hours only when the meeting earns them."""
-    t = int(t)
-    return (f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}" if t >= 3600
-            else f"{t // 60}:{t % 60:02d}")
-
-
-def _top_entities(insight: dict, k: int = 4) -> List[str]:
-    ents = (insight.get("entities") or {})
-    ranked: List[tuple] = []
-    for kind in ("people", "places", "organizations", "things"):
-        for e in ents.get(kind) or []:
-            name = str(e.get("name", "")) if isinstance(e, dict) else str(e)
-            count = int(e.get("count", 1)) if isinstance(e, dict) else 1
-            if name:
-                ranked.append((count, name))
-    return [n for _, n in sorted(ranked, reverse=True)[:k]]
-
-
-def _brief_text(insight: dict) -> str:
-    """The extractive brief as prose — insight ships it as [{t, text}]
-    sentences; older shapes were dict or plain string. Join, don't invent."""
-    b = insight.get("brief")
-    if isinstance(b, list):
-        return " ".join(str(s.get("text", "")).strip().rstrip(".") + "."
-                        for s in b if isinstance(s, dict) and s.get("text"))
-    if isinstance(b, dict):
-        return str(b.get("text") or b.get("summary") or "")
-    return str(b or "")
-
-
-def copy_extractive(meta: dict, cands: List[dict], insight: dict) -> dict:
-    """Copy assembled from the record itself, labeled so. Every field is a
-    working draft a producer can ship or rewrite — never placeholder-speak."""
-    title = meta.get("title") or "Community program"
-    when = meta.get("date", "")
-    names = _top_entities(insight)
-    brief = _brief_text(insight)
-    top = cands[0] if cands else {}
-
-    dated = bool(re.search(r"\d{4}|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|"
-                           r"oct|nov|dec)", title, re.I))
-    titles = [t for t in [
-        _sentences(str(top.get("text", "")), 70) if top else "",
-        title + (f" — {when}" if when and not dated else ""),
-        (f"{names[0]} and {names[1]}: {title}" if len(names) > 1 else ""),
-    ] if t]
-    chapters = [{"t": float(c["start"]), "label": _clip_label(c)}
-                for c in cands]
-    desc_lines = [title + (f" · {when}" if when and not dated else ""), ""]
-    if brief:
-        desc_lines += [_sentences(brief, 500), ""]
-    if chapters:
-        desc_lines += ["Moments:"] + [
-            f"{fmt_t(ch['t'])} — {ch['label']}" for ch in chapters] + [""]
-    desc_lines += ["Full program and record at the station. "
-                   "Assembled locally from the transcript."]
-    alt = [f"Video clip from {title}: {_clip_label(c)}" for c in cands]
-    blurb = _sentences(brief or (top.get("text") or title), 320)
-    social = {
-        "vertical": (_clip_label(top) if top else title)
-        + (f" — {title}" if top else ""),
-        "feed": _sentences(brief or str(top.get("text") or ""), 200)
-        + " (full program at the station)",
-    }
-    return {"origin": "extractive — assembled from the transcript, no model",
-            "titles": titles, "description": "\n".join(desc_lines),
-            "chapters": chapters, "alt_text": alt,
-            "newsletter": blurb, "social": social}
+# -- copy: extractive always lives in czcore.kit ------------------------------
+# `_clip_label`, `_sentences`, `fmt_t`, `_top_entities`, `_brief_text` and
+# `copy_extractive` moved to czcore/kit.py so the record's press shares one
+# implementation; they are imported at the top of this module under their old
+# names. `copy_generative` stays here — it is the one path that calls a model,
+# and only the desk has the key.
 
 
 # -- copy: generative only with the user's key --------------------------------
