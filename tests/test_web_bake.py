@@ -530,6 +530,48 @@ class TestBakeEdition(unittest.TestCase):
         self.assertRegex(stub, r'class="moment" href="#t\d+"')
         self.assertIn("salience", stub)   # the score bar is a measurement
 
+    def test_moment_cards_carry_the_reel_composer_hooks(self):
+        """Each moment card wraps in .mo-card and the anchor carries the whole
+        moment (end, kind, quote), so the reel composer (specs/20 §6, P1) can
+        cut a clip from a tick without a second fetch — and the card stays a
+        plain deep link with JavaScript off."""
+        stub = (self.out / "m" / "vid1" / "index.html").read_text()
+        self.assertIn('class="mo-card"', stub)
+        self.assertRegex(stub, r'class="moment"[^>]*data-end="[^"]+"[^>]*data-kind="')
+        self.assertRegex(stub, r'data-quote="')
+
+    def test_reel_viewer_stub_and_its_js_off_fallback(self):
+        """/app/r is one static stub for every reel — the reel lives in the
+        link, not the page (specs/20 §7). It has the mount points app.js
+        hydrates, and a JS-off fallback that is honest about needing JavaScript
+        and sends the reader to the record where the moments read in place."""
+        stub = (self.out / "r" / "index.html").read_text()
+        self.assertIn('id="reelstage"', stub)
+        self.assertIn('id="reelcites"', stub)
+        # honest JS-off degradation: it names the dependency and points home
+        self.assertIn("needs JavaScript", stub)
+        self.assertIn('href="/app/"', stub)
+        # and it states the one desk-bound step plainly
+        self.assertIn("needs the desk", stub)
+        # the route exists in the reader
+        js = (REPO / "web" / "static" / "app.js").read_text()
+        self.assertIn(r"/\/app\/r$/.test(path)", js)
+
+    def test_the_reel_path_touches_no_server(self):
+        """The covenant, on the reel path: composing and playing a reel reach no
+        backend (specs/20 §7 hard constraint). The viewer's only fetch is the
+        meeting's own plane under /app/, and none of the reel code reaches the
+        Studio helper."""
+        js = (REPO / "web" / "static" / "app.js").read_text()
+        block = js[js.index("THE REEL — compose here"):js.index("SEARCH ==")]
+        for forbidden in ("askStudio", "API +", "/api/", "http://", "run.app"):
+            self.assertNotIn(forbidden, block,
+                             f"the reel path reached for {forbidden!r}")
+        # every plane the reel reads is a same-origin edition path
+        for plane in re.findall(r"getJSON\(`([^`]+)`", block):
+            self.assertTrue(plane.startswith("${BASE}/"),
+                            f"{plane} is not an edition path")
+
     def test_the_thirteen_tool_doors_left_the_masthead(self):
         """The desk tools no longer share the record's masthead: the rail is
         gone and the section line is the paper's own (specs/20 §5). The tools
@@ -1227,3 +1269,171 @@ class TestReaderDegradesToStatic(unittest.TestCase):
         r = self.node(body)
         self.assertEqual(r.returncode, 0,
                          f"why() mishandled an unknown value:\n{r.stdout}{r.stderr}")
+
+
+class TestReel(unittest.TestCase):
+    """The reel's client-only machinery (specs/20 §6/§7, P1), executed for real
+    in node. A share link is a covenant with whoever you send it to: it must
+    round-trip. So the encode/decode, the cite sheet, and the reel.json the desk
+    opens are lifted from the reader and run — the same treatment canon() and
+    resolve() get, and for the same reason.
+    """
+
+    JS = (REPO / "web" / "static" / "app.js").read_text()
+    PRELUDE = "\n".join([
+        'const BASE = "/app";',
+        'const location = { origin: "https://publicrecord.studio" };',
+    ])
+
+    def node(self, body):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not available")
+        return subprocess.run([node, "-e", body], capture_output=True, text=True)
+
+    def lift(self, pattern):
+        m = re.search(pattern, self.JS, re.S)
+        self.assertTrue(m, f"{pattern!r} not found in the reader — did it move?")
+        return m.group(0)
+
+    def helpers(self):
+        return "\n".join([
+            self.lift(r"const hms = t => \{.+?\};"),
+            self.lift(r"const REEL_V = .+?;"),
+            self.lift(r"const r1 = .+?;"),
+            self.lift(r"const clipLen = .+?;"),
+            self.lift(r"const reelRuntime = .+?;"),
+            self.lift(r"const encodeClips = .+?;"),
+            self.lift(r"function shareURL\(pid, clips\) \{.+?\n  \}"),
+            self.lift(r"function decodeReel\(search\) \{.+?\n  \}"),
+            self.lift(r"function citeSheet\(meta, clips\) \{.+?\n  \}"),
+            self.lift(r"function reelJSON\(meta, clips\) \{.+?\n  \}"),
+        ])
+
+    def test_share_link_round_trips(self):
+        """encode → decode is the identity on a reel's clips, and a link that
+        lost a character in an email degrades to fewer clips, never a throw."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "const clips = [{start:900.2,end:907.3},{start:1147.6,end:1151.2},{start:12.0,end:24.0}];",
+            "const url = shareURL('2Yhg', clips);",
+            "const back = decodeReel(url.slice(url.indexOf('?')));",
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "if (back.v !== '1') fail('v='+back.v);",
+            "if (back.pid !== '2Yhg') fail('pid='+back.pid);",
+            "if (back.clips.length !== 3) fail('len='+back.clips.length);",
+            "for (let i=0;i<3;i++){ if (back.clips[i].start!==clips[i].start || back.clips[i].end!==clips[i].end)",
+            "  fail('clip'+i+' '+JSON.stringify(back.clips[i])); }",
+            # 'garbage' has no pair; '5-3' has end<=start — both dropped, 2 remain
+            "const bad = decodeReel('?v=1&m=x&c=1-2,garbage,5-3,7-9');",
+            "if (bad.clips.length !== 2) fail('bad drop '+JSON.stringify(bad.clips));",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"reel round-trip failed:\n{r.stdout}{r.stderr}")
+
+    def test_cite_sheet_carries_every_clip_with_a_deep_link(self):
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "const meta = {pid:'2Yhg', title:'Select Board — March', town:'Brookline', "
+            "body:'Select Board', date:'2026-03-10'};",
+            "const clips = [{start:900.2,end:907.3,kind:'vote',quote:'the override passes',speaker:'Chair:'},"
+            "{start:12.0,end:24.0,kind:'question',quote:'how much is the levy'}];",
+            "const s = citeSheet(meta, clips);",
+            "function fail(m){ console.log('FAIL', m, '\\n', s); process.exit(1); }",
+            "for (const n of ['Select Board — March','a reel of 2 moments','the override passes',"
+            "'how much is the levy','https://publicrecord.studio/app/m/2Yhg#t900','#t12',"
+            "'Select Board · Brookline · 2026-03-10','— Chair'])",
+            "  if (!s.includes(n)) fail('missing '+JSON.stringify(n));",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"cite sheet malformed:\n{r.stdout}{r.stderr}")
+
+    def test_reel_json_maps_onto_the_desk_renderer(self):
+        """The reel.json's clips carry the {start,end} highlighter/reel.py's
+        render_reel needs, in reel order, plus the media locator and the plain
+        hand-off sentence. The one desk-bound step, made openable."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "const meta = {pid:'2Yhg', title:'Select Board — March', town:'Brookline', "
+            "body:'Select Board', date:'2026-03-10', video_id:'2YhgO14jXys', "
+            "url:'https://youtube.com/watch?v=2YhgO14jXys'};",
+            "const clips = [{start:900.2,end:907.3,kind:'vote',quote:'passes',t:900.2},"
+            "{start:12.0,end:24.0,kind:'question',quote:'how much',t:12.0}];",
+            "const j = reelJSON(meta, clips);",
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "if (j.schema !== 'publicrecord.reel/1') fail('schema '+j.schema);",
+            "if (j.clips.length !== 2) fail('clips '+j.clips.length);",
+            "if (j.clips[0].start !== 900.2 || j.clips[0].end !== 907.3) fail('clip0 '+JSON.stringify(j.clips[0]));",
+            "if (j.clips[1].start !== 12 || j.clips[1].end !== 24) fail('clip1 '+JSON.stringify(j.clips[1]));",
+            "if (j.meeting.video_id !== '2YhgO14jXys') fail('video_id '+j.meeting.video_id);",
+            "if (typeof j.runtime !== 'number' || j.runtime <= 0) fail('runtime '+j.runtime);",
+            "if (!/desk/i.test(j.note)) fail('note lacks the desk hand-off');",
+            "if (!j.share.includes('/app/r?v=1&m=2Yhg')) fail('share '+j.share);",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"reel.json malformed:\n{r.stdout}{r.stderr}")
+
+    def test_the_viewer_advances_clip_to_clip_even_out_of_order(self):
+        """The acceptance's hard half, executed: the reel plays clip to clip
+        (specs/20 §7). Clips play in reel order, not chronological, so the next
+        clip can be *earlier* in the tape. A short clip reached by a backward
+        seek is the trap: while the seek buffers, the facade repeats the old
+        (past-the-clip) time, and TWO such stale reports must not arm-then-skip
+        the clip. The `armed` gate — which arms only on a report inside the clip
+        and before its end — is what proves the short clip actually plays."""
+        adv = self.lift(r"  function reelAdvance\(t\) \{.+?\n  \}")
+        body = "\n".join([
+            "const seeks = [];",
+            "function ytSeek(t){ seeks.push(t); }",
+            "function ytSend(){}",
+            "function reelShow(){}",
+            "function fail(m){ console.log('FAIL', m, 'seeks='+JSON.stringify(seeks),"
+            " 'i='+REELPLAY.i, 'armed='+REELPLAY.armed, 'active='+REELPLAY.active); process.exit(1); }",
+            # clip 1 is a 1s clip {19,20} placed AFTER {10,20}: reaching it is a
+            # backward seek of 1s, so the two stale 20s sit inside the arm window
+            "let REELPLAY = { active:true, armed:false, i:0, clips:"
+            "[{start:10,end:20},{start:19,end:20},{start:30,end:35}] };",
+            adv,
+            # play clip0 to its end, then TWO stale 20s while the seek to 19 buffers
+            "[10,11,19,20, 20,20].forEach(t => reelAdvance(t));",
+            # the fix holds here: still on clip1, NOT armed by a stale time, not skipped
+            "if (REELPLAY.i !== 1) fail('a stale time skipped the short clip');",
+            "if (REELPLAY.armed !== false) fail('a stale time armed the short clip');",
+            "if (JSON.stringify(seeks) !== JSON.stringify([19])) fail('advanced too far on stale time');",
+            # now the real clip1 times arrive and it plays through to clip2, then stops
+            "[19,19.5,20, 20, 30,31,35].forEach(t => reelAdvance(t));",
+            "if (JSON.stringify(seeks) !== JSON.stringify([19,30])) fail('wrong seeks');",
+            "if (REELPLAY.active !== false) fail('did not stop after the last clip');",
+            "if (REELPLAY.i !== 2) fail('final clip index');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"the seek engine misfired:\n{r.stdout}{r.stderr}")
+
+    def test_a_clip_is_identified_by_kind_and_time_not_time_alone(self):
+        """A contested roll call is emitted as two moments — a vote and a
+        tension — anchored to the same segment start (web/bake.py dedups on
+        `(kind, int(t))`, not time). The composer must tell them apart, or
+        ticking one silently toggles the other. Its identity key must match the
+        bake's: (kind, time)."""
+        body = "\n".join([
+            self.lift(r"const r1 = .+?;"),
+            self.lift(r"  const clipId = c => .+?;"),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const vote = {kind:'vote', t:100.0}, tension = {kind:'tension', t:100.0};",
+            "if (clipId(vote) === clipId(tension)) fail('same-second twins collide');",
+            # the same moment ticked twice is the same identity (toggle off works)
+            "if (clipId(vote) !== clipId({kind:'vote', t:100.04})) fail('rounding split one moment in two');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"clip identity is wrong:\n{r.stdout}{r.stderr}")

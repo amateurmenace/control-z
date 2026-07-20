@@ -449,7 +449,9 @@ def page_home(meetings, issues, stats, manifest, base):
         f'<div class="covbar" data-month="{esc(m["month"])}" '
         f'title="{esc(m["month"])}: {m["total"]} meeting(s)">'
         f'<span style="height:{max(6, round(56*m["total"]/mx))}px"></span>'
-        f'<label>{esc((m["month"] or "?")[5:] or "?")}</label></div>'
+        # an undated meeting's month is the literal "undated" — slicing [5:] off
+        # that spells "ed"; show a dash for the no-date bucket instead
+        f'<label>{esc("—" if m["month"] == "undated" else (m["month"] or "?")[5:] or "?")}</label></div>'
         for m in stats["coverage"])
 
     body = f"""
@@ -618,8 +620,14 @@ def page_meeting(m, manifest, base):
         for mo in m["moments"]:
             score = max(0.0, min(1.0, float(mo.get("score") or 0)))
             reason = mo.get("reason") or ""
+            # the anchor carries the whole moment (end, kind, quote) so the reel
+            # composer (specs/20 §6, P1) can build a clip from a tick without a
+            # second fetch — and the card stays a plain deep link with JS off.
             cards += (
-                f'<a class="moment" href="#t{int(mo["t"])}" data-t="{mo["t"]}">'
+                '<div class="mo-card">'
+                f'<a class="moment" href="#t{int(mo["t"])}" data-t="{mo["t"]}" '
+                f'data-end="{mo.get("end") or mo["t"]}" data-kind="{esc(mo["kind"])}" '
+                f'data-quote="{esc(mo["quote"])}">'
                 f'<div class="mo-head"><span class="ts">{hms(mo["t"])}</span>'
                 f'<span class="mo-kind">{esc(mo["kind"])}</span></div>'
                 f'<p class="mo-quote">{esc(mo["quote"])}</p>'
@@ -627,7 +635,7 @@ def page_meeting(m, manifest, base):
                    f'<span class="mo-score" title="salience {round(score*100)}%">'
                    f'<i style="width:{round(score*100)}%"></i></span></div>'
                    if reason or score else "")
-                + '</a>')
+                + '</a></div>')
         moments_html = (
             '<section class="card moments"><span class="tag">the moments — the '
             'analyzer’s scored read of this meeting; click one to jump the '
@@ -635,7 +643,8 @@ def page_meeting(m, manifest, base):
             f'<div class="mo-grid">{cards}</div>'
             '<p class="hint">Scored, not chosen for you — the salience bar is a '
             'measurement, and every moment is a receipt into the transcript '
-            'below.</p></section>')
+            'below. With JavaScript on, tick moments to compose a reel.</p>'
+            '</section>')
     meta = " · ".join([x for x in (m["body"], m["town"], m["date"] or "undated",
                                    f'{m["n_speakers"]} speakers' if m["n_speakers"] else "")
                        if x])
@@ -813,6 +822,47 @@ def page_tombstone(slug, name, date, manifest, base):
     return shell(f"{name or 'Removed'} — removed from the record",
                  f"This issue was removed from the record by a steward{when}.",
                  f"{base}/app/i/{slug}", body, "", manifest,
+                 version=manifest["version"])
+
+
+def page_reel(manifest, base):
+    """The reel viewer — /app/r (specs/20 §6/§7, P1). A shared reel lives
+    entirely in its link (?v=1&m=<pid>&c=<start>-<end>,…); this page is the
+    same static stub for every reel, and app.js decodes the link, fetches the
+    meeting's own plane, and plays the sequence through the youtube-nocookie
+    facade, clip to clip. No server, no reader state — the reel is in the URL
+    and nowhere else.
+
+    JS-off, a reel is just its citations, and a static page cannot read the
+    query string to list them — so the honest fallback says exactly that, and
+    sends the reader to the record where every moment reads in place. app.js
+    replaces this with the decoded cite list (and the player) when it runs."""
+    body = f"""
+  <section class="reel" id="reel">
+    <a class="back" href="/app/">← the record</a>
+    <h1>A reel from the record</h1>
+    <p class="presslede">A <b>reel</b> is a short sequence of moments — roll
+      calls, decisions, questions, the turns of an argument — pulled from one
+      meeting on the record and strung together in order. The whole reel rides
+      in the link that brought you here: which meeting, which moments, in what
+      order. Nothing was uploaded, and nothing about you was kept.</p>
+    <div class="reelstage" id="reelstage"></div>
+    <div class="reelcites" id="reelcites">
+      <p class="hint">Playing the reel — seeking the tape from clip to clip —
+        needs JavaScript, and so does listing its clips (they live in the link,
+        not on any page). With JavaScript off, open <a href="/app/">the
+        record</a> or <a href="/app/s">search it</a> to read the moments in
+        place.</p>
+    </div>
+    <p class="disclose">The tape is embedded from YouTube, never rehosted. The
+      reel lives in this link and your browser — there is no account and no
+      server holding it. Rendering it as a video needs the desk.</p>
+  </section>
+"""
+    return shell("A reel — publicrecord.studio",
+                 "A sequence of moments from one meeting on the record, played "
+                 "clip to clip — the reel lives entirely in its link.",
+                 f"{base}/app/r", body, "", manifest,
                  version=manifest["version"])
 
 
@@ -1440,6 +1490,10 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
     (out / "press" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "press" / "index.html").write_text(
         page_press(manifest, base), encoding="utf-8")
+    # the reel viewer — one static stub; the reel itself lives in the link
+    (out / "r" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "r" / "index.html").write_text(
+        page_reel(manifest, base), encoding="utf-8")
     for m in meetings:
         d = out / "m" / m["pid"]
         d.mkdir(parents=True, exist_ok=True)
