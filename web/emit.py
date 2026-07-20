@@ -133,7 +133,18 @@ def _brand_mark() -> str:
 # shared chrome
 # --------------------------------------------------------------------------
 
-def head(title, desc, canonical, og_image="", version="0"):
+def _feed_link(feed) -> str:
+    """A page's own RSS feed, advertised in the head for reader auto-discovery
+    (specs/20 §7.9 C). An issue page carries its own long-view feed; it sits
+    before the firehose so a reader who subscribes from an issue gets that
+    issue, not the whole record."""
+    if not feed:
+        return ""
+    return (f'<link rel="alternate" type="application/rss+xml" '
+            f'title="{esc(feed["title"])}" href="{esc(feed["href"])}">')
+
+
+def head(title, desc, canonical, og_image="", version="0", feed=None):
     og = (f'<meta property="og:image" content="{esc(og_image)}">'
           f'<meta name="twitter:card" content="summary_large_image">'
           if og_image else
@@ -159,7 +170,7 @@ def head(title, desc, canonical, og_image="", version="0"):
 <meta name="theme-color" content="#f8fafc">
 <link rel="icon" href="/app/favicon.svg">
 <link rel="manifest" href="/app/manifest.webmanifest">
-<link rel="alternate" type="application/rss+xml" title="The record — new meetings and resurfacings" href="/app/feeds/firehose.xml">
+{_feed_link(feed)}<link rel="alternate" type="application/rss+xml" title="The record — new meetings and resurfacings" href="/app/feeds/firehose.xml">
 {preload}<link rel="stylesheet" href="/app/app.css?v={esc(version)}">
 </head><body>"""
 
@@ -275,13 +286,13 @@ def footer(manifest):
 
 
 def shell(title, desc, canonical, body, current, manifest,
-          og_image="", version="0"):
+          og_image="", version="0", feed=None):
     # The banner slot rides in the markup rather than being minted by script so
     # it lands in one known place on every page — top of the main column, above
     # whatever the reader came for, which is the only position that can honestly
     # claim to have warned them before they read.
     slot = '<div class="scopebanner" id="scopebanner" hidden></div>'
-    return (head(title, desc, canonical, og_image, version)
+    return (head(title, desc, canonical, og_image, version, feed)
             + masthead(current, manifest)
             + f'<main class="main paper" id="app">{slot}{body}</main>'
             + footer(manifest)
@@ -798,7 +809,9 @@ def page_issue(i, manifest, base):
             f'on the record, {(i["first_seen"] or "")[:4]}–{(i["last_seen"] or "")[:4]}')
     return shell(f'{i["name"]} — the long view', desc,
                  f"{base}/app/i/{i['slug']}", body, "memory", manifest,
-                 version=manifest["version"])
+                 version=manifest["version"],
+                 feed={"href": f"/app/feeds/{i['slug']}.xml",
+                       "title": f'“{i["name"]}” — the long view (RSS)'})
 
 
 def page_tombstone(slug, name, date, manifest, base):

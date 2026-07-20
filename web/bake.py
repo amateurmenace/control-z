@@ -68,6 +68,23 @@ def _month(date: str) -> str:
     return (date or "")[:7]     # YYYY-MM, '' when undated
 
 
+def _rfc822(date_str: str) -> str:
+    """A corpus date (YYYY-MM-DD) → RFC-822 for an RSS <pubDate>, deterministically
+    — midnight UTC on that day, English names via email.utils (locale-independent),
+    no wall-clock. Empty for an absent/malformed date, so the item just carries no
+    pubDate and the edition stays byte-idempotent."""
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", (date_str or "").strip())
+    if not m:
+        return ""
+    from datetime import datetime, timezone
+    from email.utils import format_datetime
+    try:
+        return format_datetime(datetime(*(int(x) for x in m.groups()),
+                                        tzinfo=timezone.utc))
+    except ValueError:
+        return ""
+
+
 def _write(path: Path, text: str) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = text if isinstance(text, str) else json.dumps(text)
@@ -1046,7 +1063,9 @@ class Bake:
                 f"<item><title>{emit.xesc(i['title'])}</title>"
                 f"<link>{emit.xesc(i['link'])}</link>"
                 f"<guid isPermaLink=\"true\">{emit.xesc(i['link'])}</guid>"
-                f"<description>{emit.xesc(i['desc'])}</description></item>"
+                + (f"<pubDate>{_rfc822(i.get('date', ''))}</pubDate>"
+                   if _rfc822(i.get('date', '')) else "")
+                + f"<description>{emit.xesc(i['desc'])}</description></item>"
                 for i in items)
             return ('<?xml version="1.0" encoding="UTF-8"?>\n'
                     '<rss version="2.0"><channel>'
@@ -1057,6 +1076,7 @@ class Bake:
         # firehose: newest meetings + resurfacings
         items = [{"title": f"{m['title']} — {m['date'] or 'undated'}",
                   "link": f"{site_base}/app/m/{m['pid']}",
+                  "date": m["date"],
                   "desc": f"{m['body']} · {_minutes(m['duration'])} min"}
                  for m in sorted(meetings, key=lambda x: x["date"] or "",
                                  reverse=True)[:30]]
@@ -1067,6 +1087,7 @@ class Bake:
         for i in issues:
             items = [{"title": f"{n['title']} — {n['date'] or 'undated'}",
                       "link": f"{site_base}/app/m/{n['pid']}",
+                      "date": n.get("date", ""),
                       "desc": f"{n['n']} appearance(s) of “{i['name']}”"}
                      for n in i["timeline"]]
             _write(self.out / "feeds" / f"{i['slug']}.xml",
