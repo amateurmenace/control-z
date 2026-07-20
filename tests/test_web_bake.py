@@ -171,6 +171,75 @@ class TestScopeResolution(unittest.TestCase):
                              f"resolve() must not {forbidden} — it is read-only")
 
 
+class TestMomentQualityGates(unittest.TestCase):
+    """The newspaper's moment plane holds a higher bar than the shared
+    analyzer (specs/20 §6 quality pass): stored decisions are re-validated on
+    a word boundary, and soft tension words have to be *owned* to count."""
+
+    def test_real_decisions_drops_the_substring_false_positives(self):
+        from web.bake import _real_decisions
+        stored = [
+            {"t": 10.0, "text": "staff who have devoted three decades", "outcome": "discussed"},
+            {"t": 20.0, "text": "I heard a commotion in the hallway", "outcome": "discussed"},
+            {"t": 30.0, "text": "the motion carries, unanimous", "outcome": "passed"},
+            {"t": 40.0, "text": "and the chair votes I", "outcome": "passed"},
+        ]
+        kept = _real_decisions(stored)
+        texts = [d["text"] for d in kept]
+        self.assertIn("the motion carries, unanimous", texts)   # real motion
+        self.assertIn("and the chair votes I", texts)           # real roll call
+        self.assertNotIn("staff who have devoted three decades", texts)
+        self.assertNotIn("I heard a commotion in the hallway", texts)
+
+    def test_weak_tension_keeps_the_felt_and_drops_the_incidental(self):
+        from web.bake import _is_weak_tension
+        felt = [
+            ("I am deeply concerned about the plan", ["concern", "concerned"]),
+            ("but I'm a little concerned that this fails kids", ["concern"]),
+            ("we strongly oppose this cut", ["oppose", "opposed"]),
+            ("the concern was that the language was vague", ["concern"]),
+        ]
+        incidental = [
+            ("training to invent new things and solve problems", ["problem"]),
+            ("as capable problem solvers", ["problem"]),
+            ("my next question concerns equity", ["concern"]),
+            ("fees as opposed to fines", ["oppose", "opposed"]),
+            ("and there aren't crises on the finance side", ["concern"]),
+            ("you don't concern yourself with opinion", ["concern"]),
+        ]
+        for text, words in felt:
+            self.assertFalse(_is_weak_tension(text, words),
+                             f"real pushback dropped: {text!r}")
+        for text, words in incidental:
+            self.assertTrue(_is_weak_tension(text, words),
+                            f"incidental mention kept: {text!r}")
+
+    def test_moments_gate_procedural_roll_call_and_own_tension(self):
+        """A decision that is pure roll-call mechanics ("how do you vote?")
+        is procedure, not a moment; a tension word owned a segment away from
+        its subject still lands, because the gate reads the windowed sentence."""
+        from web.bake import _build_moments
+        segs = [
+            {"start": 100.0, "end": 103.0, "text": "Okay, want to vote?"},
+            {"start": 200.0, "end": 203.0, "text": "we have a consent agenda to vote on"},
+            {"start": 300.0, "end": 303.0, "text": "So, so I understand, but I'm a little"},
+            {"start": 303.0, "end": 306.0, "text": "concerned that this eliminates a class."},
+        ]
+        decisions = [
+            {"t": 100.0, "text": "Okay, want to vote?", "outcome": "discussed"},
+            {"t": 200.0, "text": "we have a consent agenda to vote on", "outcome": "discussed"},
+        ]
+        tension = [{"t": 303.0, "text": "concerned that this eliminates a class.",
+                    "words": ["concern", "concerned"]}]
+        ms = _build_moments(segs, [], decisions, [], tension)
+        quotes = " || ".join(m["quote"] for m in ms)
+        self.assertNotIn("want to vote", quotes)                  # procedure gated
+        self.assertIn("consent agenda", quotes)                   # real decision kept
+        te = [m for m in ms if m["kind"] == "tension"]
+        self.assertTrue(te, "owned tension one segment from its subject should land")
+        self.assertIn("concerned", te[0]["quote"])
+
+
 class TestBakeEdition(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

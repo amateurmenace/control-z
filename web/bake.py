@@ -154,6 +154,20 @@ def _decisions(m: dict) -> list:
     return out
 
 
+def _real_decisions(decisions) -> list:
+    """Keep only the stored decisions that survive the word-boundary matcher.
+    They were flagged at ingest with a bare-substring scan, so a celebration
+    ("staff who have devoted three decades"), an aside ("a commotion in the
+    hallway"), or a stray "emotion" could read as a motion. A leading word
+    boundary is strictly narrower than a substring, so every genuine motion
+    the old scan caught is caught again — only the false positives fall out,
+    and no corpus re-ingest is needed."""
+    from czcore.moments import KEYWORD_CLASSES, hits_in
+    decide = KEYWORD_CLASSES["decision"][1]
+    return [d for d in (decisions or [])
+            if hits_in(d.get("text", ""), decide)]
+
+
 # ---- moment windowing + quality (specs/20 §6, P1 follow-up) ----------------
 # A moment is a *thought*, not the 2-second ASR fragment a keyword happened to
 # land in. The anchor `t` marks where it hit; the clip [start, end] spans the
@@ -167,12 +181,34 @@ _MIN_CLIP = 6.0
 _MAX_CLIP = 40.0
 _MOMENT_CAP = 24
 _SENT_END = re.compile(r"[.!?][\"')\]]?\s*$")
+# decision words that are really narration, not an action taken: a death
+# ("passed away"), a description of who approves in general or a future
+# approval step ("submitted … approved by", "sent to DESE for approval",
+# "up for approval"), or reflective "find resolutions". A leading word
+# boundary can't tell these from a motion — this can, and it's newspaper-only.
+_DECISION_NARRATION = re.compile(
+    r"\bpass(?:ed|es|ing)?\s+(away|on|down)\b"
+    r"|\b(for|seeking|pending|await\w*|requir\w*|up for|needs?|needing)\s+"
+    r"approval\b"
+    r"|\bsent\s+(to|for)\b[^.?!]*\bapprov"
+    r"|\bsubmitted\b[^.?!]*\bapprov"
+    r"|\bapproval\s+process\b"
+    r"|\bfind\w*\s+resolution", re.I)
+
+
+def _is_narrated_decision(text) -> bool:
+    """A decision-shaped sentence that describes a process or an idiom rather
+    than recording a decision made in the room."""
+    return bool(_DECISION_NARRATION.search(str(text or "")))
+
+
 _PROCEDURAL = re.compile(
     r"\b(want to vote|how (are you|we|are we) doing|did i (say|get)|"
     r"do we send|can (you|everyone|anyone) hear|is that (okay|correct|right)|"
     r"are we (ready|good|set|all set)|shall we|roll ?call|next slide|"
     r"hear me|ready to (go|start|begin)|call the roll|is there a second|"
-    r"do i have a (second|motion))\b", re.I)
+    r"do i have a (second|motion)|how (do|does|did|will|would) \w+ vote|"
+    r"cast (your|their|a) vote|record (the|your) vote)\b", re.I)
 
 
 def _sentence_span(ss, i):
@@ -209,6 +245,70 @@ def _is_procedural_question(text, qtype=None) -> bool:
     if len(words) < 9 and (qtype or "information") not in _SUBSTANTIVE_Q:
         return True
     return False
+
+
+_NEGATOR = re.compile(
+    r"\b(not|no|never|without|hardly|aren'?t|isn'?t|wasn'?t|weren'?t|"
+    r"don'?t|doesn'?t|didn'?t|won'?t|can'?t|cannot)\b", re.I)
+
+# tension words that carry a moment on their own vs. ones that need context.
+# "oppose / disagree / crisis / frustrated" are almost always friction;
+# "concern / problem" have benign senses ("solve problems", "concerns
+# equity" = is about, "no problem") and have to earn it.
+_STRONG_TENSION = {"opposed", "oppose", "objection", "objections", "disagree",
+                   "disagreement", "complaint", "complaints", "frustrated",
+                   "unacceptable", "crisis", "urgent", "emergency"}
+_SOFT_TENSION = {"problem", "problems", "concern", "concerns", "concerned"}
+
+# a soft word is *owned* — real pushback — when it's a felt worry (a subject
+# near "concerned/worried"), an act of raising it ("express a concern"), an
+# intensified worry ("serious concern", "very concerned"), or the noun as
+# subject/predicate ("the problem is…"). Otherwise it's just a mention.
+_TENSION_OWNED = re.compile(
+    r"\b(i'?m|i am|we'?re|we are|they'?re|he'?s|she'?s|residents?|parents?|"
+    r"neighbou?rs?|folks|people|families|community|very|deeply|really|so|"
+    r"quite|extremely|increasingly|genuinely|honestly|frankly|more|most|too|"
+    r"pretty|greatly)\b[^.?!]{0,18}\b(concerned|worried|frustrated|upset|"
+    r"angry|troubled)\b"
+    r"|\b(express\w*|rais\w*|voic\w*|shar\w*|register\w*|flag\w*|have|having|"
+    r"has|had|serious|deep\w*|grave|major|real|big|significant|growing|main|"
+    r"primary|only|genuine|legitimate)\s+(the\s+|a\s+|an\s+|our\s+|their\s+|"
+    r"his\s+|her\s+|some\s+|my\s+|its\s+)?(concern|concerns|problem|problems)\b"
+    r"|\bmy\s+(concern|concerns|problem|problems)\b"
+    r"|\b(concerned|worried)\s+(about|that|by|over|for|with)\b"
+    r"|\b(concern|concerns|problem|problems)\s+(is|are|was|were|about|that|"
+    r"with|over|remains?|here|i\s+have|we\s+have)\b", re.I)
+
+
+def _is_weak_tension(text, words) -> bool:
+    """Tension has to be *felt*, not merely mentioned. The disagreement
+    scorer keys on a short vocabulary; this raises the bar for the paper.
+    A word is dropped when negated ("there aren't crises", "you don't
+    concern yourself") or when the only signal is a soft word (concern /
+    problem) that nobody owns — "solve problems", "as opposed to",
+    "my question concerns equity". A strong word (oppose / crisis /
+    frustrated) still carries on its own. Newspaper-only: Highlighter
+    keeps the fuller, higher-recall list; the paper surfaces the friction
+    that lands."""
+    low = str(text or "").lower()
+    ws = {str(w).lower() for w in (words or [])}
+    if not ws:
+        return True
+    # a negated tension word is the opposite of tension
+    for w in ws:
+        m = re.search(r"\b" + re.escape(w), low)
+        if m and _NEGATOR.search(low[max(0, m.start() - 22):m.start()]):
+            return True
+    # a strong word stands on its own — except "as opposed (to)", a
+    # comparison rather than opposition
+    if ws & _STRONG_TENSION:
+        if ws <= {"opposed", "oppose"} and re.search(r"\bas opposed\b", low) \
+                and not re.search(r"\b(strongly|firmly|i|we|they|who)\s+oppos",
+                                  low):
+            return True
+        return False
+    # only soft words remain — they must be owned to count
+    return not _TENSION_OWNED.search(low)
 
 
 def _overlap_frac(a, b) -> float:
@@ -282,8 +382,23 @@ def _build_moments(segs, votes, decisions, questions, tension) -> list:
         # a decision that IS a roll call already shipped as a VOTE; don't twin it
         if any(abs(t - vt) <= 2 for vt in vote_ts):
             continue
+        # pure roll-call mechanics ("want to vote?", "how do you vote?") are
+        # procedure, not a decision — the substance rides the motion they poll,
+        # and any real tally ships as a VOTE
+        if (d.get("outcome") or "discussed") == "discussed" \
+                and _PROCEDURAL.search(str(d.get("text") or "")):
+            continue
+        # narration wearing a decision word — a death, a process, a reflection
+        if _is_narrated_decision(d.get("text")):
+            continue
         add(t, "decision", 0.6, d.get("outcome") or "decided")
     for d in (tension or []):
+        # gate on the windowed sentence, not the bare anchor line: the ASR
+        # splits "but I'm a little / concerned that…" across segments, so the
+        # felt worry that owns the word often sits one line over from it
+        wtext = window(float(d.get("t") or 0))[2]
+        if _is_weak_tension(wtext, d.get("words")):
+            continue
         words = ", ".join(d.get("words") or [])
         add(float(d.get("t") or 0), "tension", 0.45,
             f"pushback: {words}" if words else "pushback")
@@ -365,6 +480,11 @@ class Bake:
             framing = insight.framing(segs) if segs else {"lenses": [], "total": 0}
             quests = insight.questions(segs) if segs else []
             tension = insight.disagreements(segs) if segs else []
+            # stored decisions, re-validated against the word-boundary matcher
+            # so the substring false positives baked in at ingest ("devoted",
+            # "emotion", "commotion") drop out without a corpus re-ingest —
+            # while every genuine motion the desk recorded is kept as-is.
+            decisions = _real_decisions(an.get("decisions"))
             mvotes = self.c.votes_of(m["id"])
             mdocs = [{"doc_id": d["id"], "kind": d.get("kind", ""),
                       "title": d.get("title", ""), "date": d.get("date", ""),
@@ -392,7 +512,7 @@ class Bake:
                           for v in mvotes],
                 "documents": mdocs,
                 "analysis": {
-                    "decisions": (an.get("decisions") or [])[:20],
+                    "decisions": (decisions or [])[:20],
                     "topics": (an.get("topics") or [])[:16],
                     "entities": {k: (an.get("entities") or {}).get(k, [])[:8]
                                  for k in ("people", "places",
@@ -422,7 +542,7 @@ class Bake:
                 },
                 # the moments plane (specs/20 §6) — pressed, never re-analyzed
                 "moments": _build_moments(
-                    segs, mvotes, an.get("decisions") or [], quests, tension),
+                    segs, mvotes, decisions, quests, tension),
             }
             n = _json(self.out / "meetings" / f"{p}.json",
                       {k: v for k, v in doc.items()})
