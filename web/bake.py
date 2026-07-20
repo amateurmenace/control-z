@@ -154,78 +154,156 @@ def _decisions(m: dict) -> list:
     return out
 
 
+# ---- moment windowing + quality (specs/20 §6, P1 follow-up) ----------------
+# A moment is a *thought*, not the 2-second ASR fragment a keyword happened to
+# land in. The anchor `t` marks where it hit; the clip [start, end] spans the
+# whole sentence around it, with a lead-in and a lead-out, so a reel plays the
+# full line instead of cutting it off. And a moment has to earn its place:
+# procedure ("right, Betsy?", "want to vote?") is not a key moment, however many
+# question marks it carries.
+_LEAD_IN = 1.5          # seconds of run-up before the sentence starts
+_LEAD_OUT = 2.0         # seconds of tail after it ends
+_MIN_CLIP = 6.0
+_MAX_CLIP = 40.0
+_MOMENT_CAP = 24
+_SENT_END = re.compile(r"[.!?][\"')\]]?\s*$")
+_PROCEDURAL = re.compile(
+    r"\b(want to vote|how (are you|we|are we) doing|did i (say|get)|"
+    r"do we send|can (you|everyone|anyone) hear|is that (okay|correct|right)|"
+    r"are we (ready|good|set|all set)|shall we|roll ?call|next slide|"
+    r"hear me|ready to (go|start|begin)|call the roll|is there a second|"
+    r"do i have a (second|motion))\b", re.I)
+
+
+def _sentence_span(ss, i):
+    """Segment indices [lo, hi] of the sentence containing segment i — bounded
+    so a monologue with no punctuation cannot swallow the whole meeting."""
+    t0 = float(ss[i].get("start") or 0)
+    lo = i
+    while lo > 0 and not _SENT_END.search(str(ss[lo - 1].get("text", ""))) \
+            and t0 - float(ss[lo - 1].get("start") or 0) <= 22:
+        lo -= 1
+    hi = i
+    while hi < len(ss) - 1 and not _SENT_END.search(str(ss[hi].get("text", ""))) \
+            and float(ss[hi + 1].get("end") or 0) - t0 <= 25:
+        hi += 1
+    return lo, hi
+
+
+_SUBSTANTIVE_Q = {"budget", "timeline", "accountability", "rationale"}
+
+
+def _is_procedural_question(text, qtype=None) -> bool:
+    """A question that runs the meeting rather than probes it — too short to
+    carry a point, aimed at a named person, small talk, or pure procedure.
+    A question typed by what it asks about (budget/timeline/…) is spared the
+    length rule; the catch-all "information" question has to earn its length."""
+    t = str(text or "").strip()
+    words = re.findall(r"[A-Za-z']+", t)
+    if len(words) < 6 or _PROCEDURAL.search(t):
+        return True
+    # a vocative check-in: "…, Betsy?" / "okay Mark?" — a name, then the mark
+    if re.search(r"[,\s]([A-Z][a-z]+)\s*\?+$", t) and len(words) < 10:
+        return True
+    # a short, un-typed question is small talk, not a line of inquiry
+    if len(words) < 9 and (qtype or "information") not in _SUBSTANTIVE_Q:
+        return True
+    return False
+
+
+def _overlap_frac(a, b) -> float:
+    inter = max(0.0, min(a["end"], b["end"]) - max(a["start"], b["start"]))
+    return inter / max(1e-6, min(a["end"] - a["start"], b["end"] - b["start"]))
+
+
 def _build_moments(segs, votes, decisions, questions, tension) -> list:
     """The moments plane (specs/20 §6) — the analyzer's scored moments, pressed
-    once so the meeting page never re-analyzes at read time. Four kinds, in one
-    ranked, chronological list: a roll-call VOTE, a heuristic DECISION, a moment
-    of TENSION (pushback), a QUESTION asked. Each carries {t, end, kind, score,
-    reason, quote}. Everything here is a pure function of the transcript the
-    corpus already holds — no wall clock — so the edition stays byte-idempotent.
+    once so the meeting page never re-analyzes at read time. Four kinds, ranked
+    and chronological: a roll-call VOTE, a heuristic DECISION, a moment of
+    TENSION (pushback), a QUESTION asked. Each carries {t, start, end, kind,
+    score, reason, quote}.
 
-    `score` is czcore.moments.score_segments' normalized 0..1 salience (the same
-    ranker Highlighter, Publisher and the issue engine use), time-matched to the
-    moment; `end` is the segment's own end (a window when the segment is a
-    point). Votes float to the top because a roll call is always the record's
-    loudest moment; the rest sort by where they earned it."""
+    `t` is the anchor (where the keyword hit); [start, end] is the clip — the
+    whole sentence around the anchor, padded — and the quote is that sentence,
+    not the fragment. `score` mixes a per-kind base (a roll call is always the
+    record's loudest moment) with czcore.moments' normalized salience over the
+    clip. Everything is a pure function of the transcript → byte-idempotent.
+    P1 follow-up: windowed clips + a quality gate, so the plane surfaces the
+    meaning, not the procedure around it."""
+    import bisect
     from czcore.moments import score_segments
-    scored = score_segments(segs) if segs else []
-    by_t, score_by_t = {}, {}
-    for s in segs or []:
-        t0 = int(float(s.get("start") or 0))
-        by_t.setdefault(t0, s)
-    for s in scored:
-        t0 = int(float(s.get("start") or 0))
-        score_by_t[t0] = max(score_by_t.get(t0, 0.0), float(s.get("score") or 0))
+    ss = sorted((s for s in (segs or [])),
+                key=lambda s: float(s.get("start") or 0))
+    if not ss:
+        return []
+    scored = score_segments(ss)
+    sal = [float(s.get("score") or 0) for s in scored]      # aligned with ss
+    starts = [float(s.get("start") or 0) for s in ss]
 
-    def seg_end(t):
-        s = by_t.get(int(t))
-        e = float(s.get("end") or 0) if s else 0.0
-        return round(e if e > t else t + 12.0, 1)
+    def window(t):
+        i = min(max(bisect.bisect_right(starts, t) - 1, 0), len(ss) - 1)
+        lo, hi = _sentence_span(ss, i)
+        cs = max(0.0, float(ss[lo].get("start") or 0) - _LEAD_IN)
+        ce = float(ss[hi].get("end") or ss[hi].get("start") or 0) + _LEAD_OUT
+        ce = cs + max(_MIN_CLIP, min(_MAX_CLIP, ce - cs))
+        text = " ".join(str(ss[j].get("text", "")).strip()
+                        for j in range(lo, hi + 1)).strip()
+        wsal = max([sal[j] for j in range(lo, hi + 1)] or [0.0])
+        return round(cs, 1), round(ce, 1), text, wsal
 
-    def sc(t, floor):
-        return round(max(floor, score_by_t.get(int(t), 0.0)), 3)
+    out, seen = [], set()
 
-    out, seen, vote_ts = [], set(), []
-
-    def add(t, end, kind, score, reason, quote):
+    def add(t, kind, base, reason, quote_override=None):
         t = float(t or 0)
-        key = (kind, int(t))
-        quote = str(quote or "").strip()
-        if key in seen or not quote:
+        if (kind, int(t)) in seen:
             return
-        seen.add(key)
-        out.append({"t": round(t, 1), "end": end, "kind": kind, "score": score,
+        cs, ce, wtext, wsal = window(t)
+        quote = str(quote_override or wtext or "").strip()
+        if not quote:
+            return
+        # tension/question have to be a real utterance, not a scrap; votes and
+        # decisions are milestones and keep their place even when terse
+        if kind in ("tension", "question") and len(wtext.split()) < 6:
+            return
+        seen.add((kind, int(t)))
+        out.append({"t": round(t, 1), "start": cs, "end": ce, "kind": kind,
+                    "score": round(min(1.0, base + 0.45 * wsal), 3),
                     "reason": str(reason or "")[:90], "quote": quote[:220]})
 
+    vote_ts = []
     for v in (votes or []):
         t = float(v.get("t") or 0)
         vote_ts.append(t)
         reason = " · ".join(x for x in (v.get("outcome") or "",
                                         v.get("tally") or "") if x)
-        add(t, seg_end(t), "vote", sc(t, 0.9), reason,
-            v.get("motion") or (by_t.get(int(t)) or {}).get("text"))
+        add(t, "vote", 0.92, reason, quote_override=v.get("motion"))
     for d in (decisions or []):
         t = float(d.get("t") or 0)
         # a decision that IS a roll call already shipped as a VOTE; don't twin it
         if any(abs(t - vt) <= 2 for vt in vote_ts):
             continue
-        add(t, seg_end(t), "decision", sc(t, 0.5), d.get("outcome") or "decided",
-            d.get("text"))
+        add(t, "decision", 0.6, d.get("outcome") or "decided")
     for d in (tension or []):
-        t = float(d.get("t") or 0)
         words = ", ".join(d.get("words") or [])
-        add(t, round(float(d.get("end") or seg_end(t)), 1), "tension",
-            sc(t, 0.45), (f"pushback: {words}" if words else "pushback"),
-            d.get("text"))
+        add(float(d.get("t") or 0), "tension", 0.45,
+            f"pushback: {words}" if words else "pushback")
     for q in (questions or []):
-        t = float(q.get("t") or 0)
-        add(t, seg_end(t), "question", sc(t, 0.35), q.get("type") or "question",
-            q.get("text"))
-    # keep the strongest ~20, then read them back in the order they happened
+        if _is_procedural_question(q.get("text"), q.get("type")):
+            continue
+        add(float(q.get("t") or 0), "question", 0.4, q.get("type") or "question")
+
+    # strongest first, then drop any moment whose clip mostly repeats one already
+    # kept — a stretch of tape earns one moment, not five overlapping ones
     out.sort(key=lambda mo: (-mo["score"], mo["t"]))
-    out = out[:20]
-    out.sort(key=lambda mo: mo["t"])
-    return out
+    kept = []
+    for mo in out:
+        if any(_overlap_frac(mo, k) > 0.5 for k in kept):
+            continue
+        kept.append(mo)
+        if len(kept) >= _MOMENT_CAP:
+            break
+    kept.sort(key=lambda mo: mo["t"])
+    return kept
 
 
 def _milestones_for(beads: list, decisions: list, votes: list = None) -> list:

@@ -47,6 +47,16 @@ reel lives in the URL and this browser's localStorage, nowhere else.
   move off `--text-muted` (2.4:1) to `--text-secondary` (7.2:1), and the moment
   tick clears the 24px minimum target size.
 
+- **Moments are thoughts now, not fragments** (§20.6 follow-up, edition v2.1.1).
+  A moment was anchored to a single 2–3s ASR segment, so the reel cut off
+  mid-sentence and the plane surfaced procedure ("right, Betsy?", "How we
+  doing?"). `_build_moments` now windows each moment out to the whole sentence
+  around its anchor with a lead-in/lead-out (6–40s, bounded), quotes that full
+  sentence, and gates procedural/short/vocative questions out. The moment gains
+  a `start` (the padded clip open) beside its `t` (the anchor); the reel plays
+  `[start, end]`, the panel still seeks `t`. On the real Brookline meeting this
+  turned 20 mostly-trivial 2s clips into 15 substantive ~17s ones.
+
 - **Tidy.** The coverage-strip label for an undated meeting read `ed`
   (`"undated"[5:]`); it now reads a dash. Shows only after a re-press.
 

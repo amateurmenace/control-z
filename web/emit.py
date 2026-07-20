@@ -626,6 +626,7 @@ def page_meeting(m, manifest, base):
             cards += (
                 '<div class="mo-card">'
                 f'<a class="moment" href="#t{int(mo["t"])}" data-t="{mo["t"]}" '
+                f'data-start="{mo.get("start", mo["t"])}" '
                 f'data-end="{mo.get("end") or mo["t"]}" data-kind="{esc(mo["kind"])}" '
                 f'data-quote="{esc(mo["quote"])}">'
                 f'<div class="mo-head"><span class="ts">{hms(mo["t"])}</span>'

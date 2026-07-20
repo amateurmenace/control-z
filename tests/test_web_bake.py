@@ -493,13 +493,46 @@ class TestBakeEdition(unittest.TestCase):
         ms = mj["moments"]
         self.assertTrue(ms, "vid1 should have moments")
         for mo in ms:
-            self.assertEqual(set(mo), {"t", "end", "kind", "score", "reason", "quote"})
+            self.assertEqual(set(mo),
+                             {"t", "start", "end", "kind", "score", "reason", "quote"})
+            # the anchor sits inside its own padded clip window
+            self.assertLessEqual(mo["start"], mo["t"])
             self.assertGreaterEqual(mo["end"], mo["t"])
+            self.assertGreaterEqual(mo["end"] - mo["start"], 6.0)   # min clip
         votes = [mo for mo in ms if mo["kind"] == "vote"]
         self.assertTrue(votes, "the roll call should press as a VOTE moment")
         self.assertGreaterEqual(votes[0]["score"], 0.9)
         # chronological
         self.assertEqual([mo["t"] for mo in ms], sorted(mo["t"] for mo in ms))
+
+    def test_moments_window_the_sentence_and_gate_procedure(self):
+        """specs/20 §6 P1 follow-up: a moment is the whole sentence around its
+        anchor (padded into a watchable clip), and procedure is gated out — a
+        reel is built from meaning, not from 'right, Betsy?'."""
+        from web.bake import _build_moments
+        segs = [
+            {"start": 100.0, "end": 103.0, "text": "Right, Betsy?"},
+            {"start": 200.0, "end": 203.0, "text": "How much will this override"},
+            {"start": 203.0, "end": 206.0, "text": "cost the average household this year?"},
+            {"start": 300.0, "end": 303.0, "text": "I am deeply concerned about the plan"},
+            {"start": 303.0, "end": 306.0, "text": "to eliminate a kindergarten classroom."},
+        ]
+        questions = [
+            {"t": 100.0, "text": "Right, Betsy?", "type": "information"},
+            {"t": 200.0, "text": "How much will this override cost the average "
+                                 "household this year?", "type": "budget"},
+        ]
+        tension = [{"t": 300.0, "text": "I am deeply concerned about the plan",
+                    "words": ["concern"]}]
+        ms = _build_moments(segs, [], [], questions, tension)
+        quotes = " || ".join(m["quote"] for m in ms)
+        self.assertNotIn("Right, Betsy", quotes)   # procedure gated out
+        q = next(m for m in ms if m["kind"] == "question")
+        self.assertIn("cost the average household", q["quote"])   # full sentence
+        self.assertLessEqual(q["start"], q["t"])                  # padded clip
+        self.assertGreaterEqual(q["end"] - q["start"], 6.0)
+        te = next(m for m in ms if m["kind"] == "tension")
+        self.assertIn("eliminate a kindergarten", te["quote"])    # fragment → sentence
 
     def test_search_is_instant_and_peeks_over_the_static_floor(self):
         """Instant search (debounced, never under three characters), hover peeks
