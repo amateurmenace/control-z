@@ -438,6 +438,14 @@ class TestBakeEdition(unittest.TestCase):
         kidx = (self.out / "k" / "index.html").read_text()
         self.assertEqual(kidx.count('class="mcard"'), 2)
 
+    def test_meeting_page_surfaces_its_kit_and_cross_meeting_reels(self):
+        """The moments panel is the produce-zone: it links a meeting to its kit
+        (P2-A) and says a reel can span meetings (P2-B), so both are findable."""
+        stub = (self.out / "m" / "vid1" / "index.html").read_text()
+        self.assertIn("/app/k/vid1", stub)
+        self.assertIn("publish kit for this meeting", stub)
+        self.assertIn("a reel can span the record", stub)
+
     def test_press_publisher_row_points_at_the_kits(self):
         """The door stays honest until kits press (specs/20 §6): this edition has
         kits, so Publisher's line now cross-links into /app/k."""

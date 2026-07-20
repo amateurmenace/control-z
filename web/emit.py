@@ -648,6 +648,13 @@ def page_meeting(m, manifest, base):
                    f'<i style="width:{round(score*100)}%"></i></span></div>'
                    if reason or score else "")
                 + '</a></div>')
+        # a meeting with a tape has a publish kit (web/kit.py's gate); link it
+        # from the moments it was cut from, so a producer can find it.
+        kitlink = (
+            f'<p class="hint"><a class="liveshere" href="/app/k/{esc(m["pid"])}">'
+            '→ the publish kit for this meeting</a> — the clips worth cutting and '
+            'draft copy, for a producer.</p>'
+            if m.get("video_id") else "")
         moments_html = (
             '<section class="card moments"><span class="tag">the moments — the '
             'analyzer’s scored read of this meeting; click one to jump the '
@@ -655,7 +662,9 @@ def page_meeting(m, manifest, base):
             f'<div class="mo-grid">{cards}</div>'
             '<p class="hint">Scored, not chosen for you — the salience bar is a '
             'measurement, and every moment is a receipt into the transcript '
-            'below. With JavaScript on, tick moments to compose a reel.</p>'
+            'below. With JavaScript on, tick moments to compose a reel — and tick '
+            'moments on other meetings too; a reel can span the record.</p>'
+            f'{kitlink}'
             '</section>')
     meta = " · ".join([x for x in (m["body"], m["town"], m["date"] or "undated",
                                    f'{m["n_speakers"]} speakers' if m["n_speakers"] else "")
