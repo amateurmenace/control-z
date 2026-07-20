@@ -1596,9 +1596,10 @@ class TestReel(unittest.TestCase):
             "function fail(m){ console.log('FAIL', m, 'seeks='+JSON.stringify(seeks),"
             " 'i='+REELPLAY.i, 'armed='+REELPLAY.armed, 'active='+REELPLAY.active); process.exit(1); }",
             # clip 1 is a 1s clip {19,20} placed AFTER {10,20}: reaching it is a
-            # backward seek of 1s, so the two stale 20s sit inside the arm window
-            "let REELPLAY = { active:true, armed:false, i:0, clips:"
-            "[{start:10,end:20},{start:19,end:20},{start:30,end:35}] };",
+            # backward seek of 1s, so the two stale 20s sit inside the arm window.
+            # all one meeting (video X) → reelSeek is a plain same-tape ytSeek.
+            "let REELPLAY = { active:true, armed:false, i:0, vid:'X', clips:"
+            "[{start:10,end:20,video_id:'X'},{start:19,end:20,video_id:'X'},{start:30,end:35,video_id:'X'}] };",
             adv,
             # play clip0 to its end, then TWO stale 20s while the seek to 19 buffers
             "[10,11,19,20, 20,20].forEach(t => reelAdvance(t));",
@@ -1675,6 +1676,38 @@ class TestReel(unittest.TestCase):
         r = self.node(body)
         self.assertEqual(r.returncode, 0,
                          f"reel tape-switch failed:\n{r.stdout}{r.stderr}")
+
+    def test_a_tape_less_clip_is_skipped_never_played_on_the_wrong_tape(self):
+        """A cross-meeting reel can include a clip whose meeting has no video
+        (audio-only civic tape). It must NOT play on the previous meeting's tape
+        under a label naming another — reelAdvance skips it to the next clip that
+        has a tape, and reelSeek never falls back to the loaded video."""
+        adv = self.lift(r"  function reelAdvance\(t\) \{.+?\n  \}")
+        rseek = self.lift(r"  function reelSeek\(c\) \{.+?\n  \}")
+        body = "\n".join([
+            "const sent = []; const seeks = [];",
+            "const YT = { win:{}, ready:true };",
+            "function ytSend(kind, func, args){ sent.push([func, args]); }",
+            "function ytSeek(t){ seeks.push(t); }",
+            "function reelShow(){}",
+            # clip1 has NO video_id (cite-only); clip2 is meeting Y
+            "let REELPLAY = { active:true, armed:false, i:0, vid:'X', clips:"
+            "[{start:10,end:20,video_id:'X'},{start:30,end:40},{start:5,end:9,video_id:'Y'}] };",
+            rseek, adv,
+            "function fail(m){ console.log('FAIL', m, JSON.stringify({i:REELPLAY.i,sent,seeks})); process.exit(1); }",
+            # play clip0 to its end → advance must SKIP the tape-less clip1 → clip2
+            "[10,15,20].forEach(t => reelAdvance(t));",
+            "if (REELPLAY.i !== 2) fail('did not skip the tape-less clip');",
+            "if (!sent.some(s => s[0]==='loadVideoById' && s[1][0].videoId==='Y')) fail('did not switch to the playable clip');",
+            # reelSeek on a tape-less clip is a no-op — no seek onto the wrong tape
+            "seeks.length = 0; sent.length = 0;",
+            "reelSeek({start:30,end:40});",
+            "if (seeks.length || sent.length) fail('a tape-less clip seeked the wrong tape');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"tape-less clip handling failed:\n{r.stdout}{r.stderr}")
 
     def test_a_clip_is_identified_by_kind_and_time_not_time_alone(self):
         """A contested roll call is emitted as two moments — a vote and a

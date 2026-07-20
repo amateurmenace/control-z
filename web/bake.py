@@ -1058,15 +1058,16 @@ class Bake:
 
     # -- feeds (RSS) ------------------------------------------------------
     def bake_feeds(self, meetings, issues, stats, site_base):
+        def item(i):
+            pd = _rfc822(i.get("date", ""))
+            return (f"<item><title>{emit.xesc(i['title'])}</title>"
+                    f"<link>{emit.xesc(i['link'])}</link>"
+                    f"<guid isPermaLink=\"true\">{emit.xesc(i['link'])}</guid>"
+                    + (f"<pubDate>{pd}</pubDate>" if pd else "")
+                    + f"<description>{emit.xesc(i['desc'])}</description></item>")
+
         def rss(title, desc, link, items):
-            it = "".join(
-                f"<item><title>{emit.xesc(i['title'])}</title>"
-                f"<link>{emit.xesc(i['link'])}</link>"
-                f"<guid isPermaLink=\"true\">{emit.xesc(i['link'])}</guid>"
-                + (f"<pubDate>{_rfc822(i.get('date', ''))}</pubDate>"
-                   if _rfc822(i.get('date', '')) else "")
-                + f"<description>{emit.xesc(i['desc'])}</description></item>"
-                for i in items)
+            it = "".join(item(i) for i in items)
             return ('<?xml version="1.0" encoding="UTF-8"?>\n'
                     '<rss version="2.0"><channel>'
                     f"<title>{emit.xesc(title)}</title>"
