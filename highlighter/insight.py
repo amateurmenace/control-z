@@ -13,7 +13,7 @@ import re
 from collections import Counter, defaultdict
 from typing import Dict, List, Optional
 
-from .highlights import KEYWORD_CLASSES, score_segments
+from .highlights import KEYWORD_CLASSES, hits_in, score_segments
 
 STOPWORDS = set("""a about above after again against all am an and any are as
 at be because been before being below between both but by could did do does
@@ -284,11 +284,10 @@ def dynamics(segments: List[dict], bins: int = 50) -> dict:
     ten_words = KEYWORD_CLASSES["tension"][1]
     for s in segments:
         text = str(s.get("text", ""))
-        low = text.lower()
         b = min(bins - 1, int(float(s.get("start", 0)) / dur * bins))
         lanes["questions"][b] += text.count("?")
-        lanes["decisions"][b] += sum(1 for w in dec_words if w in low)
-        lanes["tension"][b] += sum(1 for w in ten_words if w in low)
+        lanes["decisions"][b] += len(hits_in(text, dec_words))
+        lanes["tension"][b] += len(hits_in(text, ten_words))
     return {"bins": bins, "lanes": lanes, "duration": round(dur, 1)}
 
 
@@ -350,8 +349,7 @@ def disagreements(segments: List[dict], top: int = 14) -> List[dict]:
     ten = KEYWORD_CLASSES["tension"][1]
     out = []
     for s in segments:
-        low = str(s.get("text", "")).lower()
-        hits = [w for w in ten if w in low]
+        hits = hits_in(str(s.get("text", "")), ten)
         if hits:
             out.append({"t": round(float(s.get("start", 0)), 1),
                         "end": round(float(s.get("end", 0)), 1),
@@ -479,12 +477,13 @@ def decisions(segments: List[dict], top: int = 12) -> List[dict]:
                      ("postponed", "tabled"))
     decide_words = KEYWORD_CLASSES["decision"][1]
     for i, s in enumerate(segments):
-        low = " " + str(s.get("text", "")).lower() + " "
-        if not any(w in low for w in decide_words):
+        if not hits_in(s.get("text", ""), decide_words):
             continue
-        window = " ".join(str(segments[j].get("text", "")).lower()
+        window = " ".join(str(segments[j].get("text", ""))
                           for j in range(i, min(len(segments), i + 3)))
-        outcome = next((tag for w, tag in outcome_words if w in window), "discussed")
+        owords = set(hits_in(window, [w for w, _ in outcome_words]))
+        outcome = next((tag for w, tag in outcome_words if w in owords),
+                       "discussed")
         out.append({"t": round(float(s.get("start", 0)), 1),
                     "text": str(s.get("text", ""))[:300],
                     "outcome": outcome})

@@ -26,14 +26,15 @@ from typing import Callable, Dict, List, Optional
 KEYWORD_CLASSES = {
     "decision": (2.5, (
         "motion", "second the", "seconded", "vote", "voted", "voting",
-        "approve", "approved", "approval", "denied", "deny", "passes",
-        "passed", "carried", "carries", "unanimous", "adopted", "adopt",
-        "resolution", "ordinance", "amendment", "amended", "so moved",
+        "approve", "approved", "approval", "disapprove", "disapproval",
+        "denied", "deny", "passes", "passed", "carried", "carries",
+        "unanimous", "adopted", "adopt", "resolution", "ordinance",
+        "amendment", "amended", "so moved",
     )),
     "money": (1.5, (
         "budget", "dollar", "million", "thousand", "funding", "funded",
-        "grant", "cost", "costs", "tax", "taxes", "fee", "appropriation",
-        "$",
+        "unfunded", "underfunded", "grant", "cost", "costs", "tax", "taxes",
+        "fee", "appropriation", "$",
     )),
     "community": (1.2, (
         "resident", "residents", "neighbor", "public comment", "petition",
@@ -49,6 +50,38 @@ KEYWORD_CLASSES = {
         "[applause]", "[laughter]", "[cheering]", "(applause)", "(laughter)",
     )),
 }
+
+import functools
+
+
+@functools.lru_cache(maxsize=512)
+def _kw_rx(kw: str):
+    """A leading-word-boundary matcher for one keyword, or None when the
+    keyword opens on punctuation (\"$\", \"[applause]\") — those match as
+    literal substrings, since \\b before a non-word char would never fire."""
+    if kw[:1].isalnum():
+        return re.compile(r"\b" + re.escape(kw), re.I)
+    return None
+
+
+def hits_in(text: str, words) -> List[str]:
+    """Which of `words` occur in `text` — the one keyword matcher the whole
+    wing shares. Word-like keywords match on a *leading* word boundary, so
+    \"vote\" reaches votes / voted / voting and \"unanimous\" reaches
+    unanimously, but neither reaches deVOTEd, eMOTION, or comMOTION — the
+    substring false positives that let a celebration read as a decision.
+    (Same convention as insight.FRAMING_LENSES: \"sustainab\" → sustainability,
+    but \"tree\" never answers for \"street\".) Symbolic keywords (\"$\",
+    \"[applause]\") keep literal substring matching. Preserves the keyword,
+    not its surface form, so `reasons` stays stable."""
+    low = " " + str(text).lower() + " "
+    out = []
+    for kw in words:
+        rx = _kw_rx(kw)
+        if rx.search(low) if rx is not None else kw in low:
+            out.append(kw)
+    return out
+
 
 _EMPHASIS = (
     (re.compile(r"!"), 0.6, "exclamation"),
@@ -73,7 +106,7 @@ def score_segments(segments: List[dict],
         low = " " + text.lower() + " "
         score, reasons = 0.0, []
         for cls, (w, words) in KEYWORD_CLASSES.items():
-            hits = [kw for kw in words if kw in low]
+            hits = hits_in(text, words)
             if hits:
                 score += w * min(len(hits), 3)
                 reasons.append(f"{cls}: " + ", ".join(f"“{h}”" for h in hits[:3]))

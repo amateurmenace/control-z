@@ -1,7 +1,8 @@
 import unittest
 
-from highlighter.highlights import (blend_energy, build_reel, parse_vtt,
-                                    score_segments, transcript_dict)
+from czcore.moments import KEYWORD_CLASSES
+from highlighter.highlights import (blend_energy, build_reel, hits_in,
+                                    parse_vtt, score_segments, transcript_dict)
 
 
 def seg(start, end, text):
@@ -15,6 +16,54 @@ MEETING = [
     seg(24, 30, "The motion carries, unanimous. [applause]"),
     seg(40, 52, "Now the long weather report, nothing notable here at all."),
 ]
+
+
+class TestKeywordBoundary(unittest.TestCase):
+    """hits_in matches word-like keywords on a *leading* word boundary, so a
+    keyword reaches its own inflections but never a longer word that merely
+    contains it — the fix that stops a celebration reading as a motion."""
+
+    DECIDE = KEYWORD_CLASSES["decision"][1]
+
+    def test_keyword_reaches_its_inflections(self):
+        # a leading boundary with an open suffix: "vote" reaches votes/voted,
+        # "unanimous" reaches unanimously, "adopt" reaches adoption — the
+        # record's real language survives (one keyword can cover several forms)
+        self.assertEqual(set(hits_in("and the chair votes I", self.DECIDE)),
+                         {"vote"})
+        self.assertEqual(set(hits_in("they voted to adopt it", self.DECIDE)),
+                         {"vote", "voted", "adopt"})
+        self.assertIn("unanimous", hits_in("passed unanimously last night",
+                                           self.DECIDE))
+        self.assertIn("adopt", hits_in("the board's adoption of the plan",
+                                       self.DECIDE))
+
+    def test_keyword_never_reaches_a_word_that_merely_contains_it(self):
+        # devoted / emotion / commotion / emotional / promotion — the exact
+        # substring false positives that read a celebration as a decision
+        for phrase in ("staff who have devoted three decades", "a stand-up, "
+                       "emotion, and comedy", "a commotion in the hallway",
+                       "I'll try not to get emotional", "up for promotion"):
+            self.assertEqual(hits_in(phrase, self.DECIDE), [],
+                             f"a decision keyword leaked into {phrase!r}")
+
+    def test_symbolic_keywords_stay_substring(self):
+        # "$" and "[applause]" open on punctuation — a leading \b would never
+        # fire, so they keep literal substring matching
+        money = KEYWORD_CLASSES["money"][1]
+        react = KEYWORD_CLASSES["reaction"][1]
+        self.assertIn("$", hits_in("it will cost $2 million", money))
+        self.assertIn("[applause]", hits_in("carries [applause]", react))
+
+    def test_score_segments_ignores_the_substring_false_positive(self):
+        # a celebration no longer scores as a decision, a real motion still does
+        scored = {s["text"]: s for s in score_segments([
+            seg(0, 6, "staff who have devoted three decades to our schools"),
+            seg(6, 12, "I move that we adopt the budget, second the motion")])}
+        celebration = scored["staff who have devoted three decades to our schools"]
+        self.assertFalse(any("decision" in r for r in celebration["reasons"]))
+        motion = scored["I move that we adopt the budget, second the motion"]
+        self.assertTrue(any("decision" in r for r in motion["reasons"]))
 
 
 class TestScoring(unittest.TestCase):

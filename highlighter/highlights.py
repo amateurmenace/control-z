@@ -13,6 +13,7 @@ from czcore.moments import (  # noqa: F401
     audio_energy,
     blend_energy,
     build_reel,
+    hits_in,
     parse_vtt,
     score_segments,
     transcript_dict,
