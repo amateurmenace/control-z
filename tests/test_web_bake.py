@@ -214,6 +214,28 @@ class TestMomentQualityGates(unittest.TestCase):
             self.assertTrue(_is_weak_tension(text, words),
                             f"incidental mention kept: {text!r}")
 
+    def test_narrated_decisions_and_bare_vote_tokens_are_not_decisions(self):
+        """A decision word inside narration (a death, a described process) or a
+        lone roll-call token is not a decision made — the audit's finds."""
+        from web.bake import _is_narrated_decision, _build_moments
+        for narration in ("the original author passed away last spring",
+                          "it is submitted and then approved by PSB Finance",
+                          "signed by the superintendent and sent to DESE for approval",
+                          "as we try to find resolutions we keep working"):
+            self.assertTrue(_is_narrated_decision(narration),
+                            f"narration read as a decision: {narration!r}")
+        self.assertFalse(_is_narrated_decision("I move that we approve the budget"))
+        # a bare "Aye." window is a vote cast, not a decision card
+        segs = [{"start": 50.0, "end": 53.0, "text": "Aye."},
+                {"start": 200.0, "end": 204.0, "text": "the board voted to adopt the budget"}]
+        decisions = [{"t": 50.0, "text": "Aye.", "outcome": "discussed"},
+                     {"t": 200.0, "text": "the board voted to adopt the budget",
+                      "outcome": "passed"}]
+        ms = _build_moments(segs, [], decisions, [], [])
+        quotes = " || ".join(m["quote"] for m in ms if m["kind"] == "decision")
+        self.assertNotIn("Aye", quotes)
+        self.assertIn("adopt the budget", quotes)
+
     def test_moments_gate_procedural_roll_call_and_own_tension(self):
         """A decision that is pure roll-call mechanics ("how do you vote?")
         is procedure, not a moment; a tension word owned a segment away from

@@ -208,7 +208,8 @@ _PROCEDURAL = re.compile(
     r"are we (ready|good|set|all set)|shall we|roll ?call|next slide|"
     r"hear me|ready to (go|start|begin)|call the roll|is there a second|"
     r"do i have a (second|motion)|how (do|does|did|will|would) \w+ vote|"
-    r"cast (your|their|a) vote|record (the|your) vote)\b", re.I)
+    r"cast (your|their|a) vote|record (the|your) vote|"
+    r"why don'?t (we|you|i)|who else in here)\b", re.I)
 
 
 def _sentence_span(ss, i):
@@ -294,10 +295,11 @@ def _is_weak_tension(text, words) -> bool:
     ws = {str(w).lower() for w in (words or [])}
     if not ws:
         return True
-    # a negated tension word is the opposite of tension
+    # a negated tension word is the opposite of tension ("there aren't crises",
+    # "not hearing from anybody who's opposed")
     for w in ws:
         m = re.search(r"\b" + re.escape(w), low)
-        if m and _NEGATOR.search(low[max(0, m.start() - 22):m.start()]):
+        if m and _NEGATOR.search(low[max(0, m.start() - 32):m.start()]):
             return True
     # a strong word stands on its own — except "as opposed (to)", a
     # comparison rather than opposition
@@ -382,14 +384,24 @@ def _build_moments(segs, votes, decisions, questions, tension) -> list:
         # a decision that IS a roll call already shipped as a VOTE; don't twin it
         if any(abs(t - vt) <= 2 for vt in vote_ts):
             continue
+        # probe the anchor line *and* the windowed sentence a reader sees — the
+        # decision word ("passed away", "find resolutions") can sit in either
+        probe = (str(d.get("text") or "") + " " + window(t)[2]).strip()
         # pure roll-call mechanics ("want to vote?", "how do you vote?") are
         # procedure, not a decision — the substance rides the motion they poll,
         # and any real tally ships as a VOTE
         if (d.get("outcome") or "discussed") == "discussed" \
-                and _PROCEDURAL.search(str(d.get("text") or "")):
+                and _PROCEDURAL.search(probe):
             continue
         # narration wearing a decision word — a death, a process, a reflection
-        if _is_narrated_decision(d.get("text")):
+        if _is_narrated_decision(probe):
+            continue
+        # a bare roll-call token ("Aye.", "No.") is a vote cast, not a decision
+        # described — the tally it belongs to ships as a VOTE
+        win_words = re.findall(r"[a-z']+", window(t)[2].lower())
+        if win_words and len(win_words) <= 2 and all(
+                w in {"aye", "yes", "no", "nay", "abstain", "present", "i",
+                      "opposed", "favor"} for w in win_words):
             continue
         add(t, "decision", 0.6, d.get("outcome") or "decided")
     for d in (tension or []):
