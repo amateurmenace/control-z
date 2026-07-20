@@ -1,9 +1,10 @@
 # 20 — The newspaper: the record gets its own face
 
-**Status:** v1.2 · **Stage:** **P0 + P1 shipped — publicrecord.studio serves the
-newspaper (P0, 2026-07-19) and the reel composer + `/app/r` viewer (P1,
-2026-07-20)**; P2 (kits, dark mode, cross-meeting reels) not started, per the
-roadmap's finish-before-feature rule ·
+**Status:** v1.3 · **Stage:** **P0 + P1 shipped; P2 begun — publicrecord.studio
+serves the newspaper (P0, 2026-07-19), the reel composer + `/app/r` viewer (P1,
+2026-07-20), and now the kit plane: `/app/k`, Publisher's reading half, a
+read-only publish kit per meeting (P2-A, 2026-07-20)**. Remaining P2:
+cross-meeting reels (B), per-issue RSS (C), dark mode (open Q3 — Stephen's call) ·
 **Owner:** Stephen Walter (Weird Machine) · **Related:**
 `.claude/rules/branding.md` and `brand/` (the brand law and its vendored
 assets), specs/16 (the reader — restyled here, and partly superseded on this
@@ -214,7 +215,7 @@ says so in one sentence.**
 |---|---|---|
 | Memory | everything | the record itself (done since wave 1) |
 | **Highlighter** | `analysis_json` — framing, questions, tension moments | **Moments panel + reel composer** (below) |
-| Publisher | nothing yet (`kit.json` unpressed) | `/app/k/<slug>` pages the moment kits exist (P2; the door line stays honest until then) |
+| Publisher | `kit.json` pressed per meeting with a tape | **`/app/k/<slug>` — a read-only publish kit per meeting (P2-A, shipped 2026-07-20); clips + draft copy, the desk render stated** |
 | Interpreter | track slots (0 languages in the cloud corpus today) | the language menu, honest about the drain filling it (R2) |
 | Narrator | AD track slots (same) | described-transcript view when tracks exist |
 | Scribe / Grabber / Index / Clear / Rise / Depth / Slate / Stencil / Pivot | — | one-line entries on `/app/press`: your files, your GPU, your Resolve |
@@ -299,6 +300,16 @@ meeting's moments slot in without a redesign.
 
 9. Kits pages when kit.json presses; cross-meeting reel groundwork; dark
    mode decision; per-issue RSS surfacing in the paper's chrome.
+   - **9a — kits ✓ shipped 2026-07-20.** `/app/k` pages a read-only publish kit
+     per meeting with a video and moments, derived from the pressed planes
+     (`web/kit.py`), pressed by a `bake_kits` stage mirrored into the hosted
+     press. The kit is extractive (no model), the `kit.json` opens at the desk,
+     rendering stays there, and `/app/press`'s Publisher line points at the kits
+     once an edition presses some. The pure copy writer is now shared
+     (`czcore/kit.py`), so desk and record kits can't drift. **Met**: auto-derive
+     + quiet, per Stephen's call; covenant-clean; byte-idempotent (incl. a
+     cross-process guard); five-lens adversarial review folded in.
+   - 9b–9d — cross-meeting reels, per-issue RSS, dark mode: not started.
 
 ## 8. Architecture notes
 

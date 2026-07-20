@@ -2,6 +2,42 @@
 
 ## unreleased
 
+### specs/20 P2 — Publisher's reading half: the record presses a kit per meeting — 2026-07-20
+
+The newspaper (P0) and the reel composer (P1) already moved the *reading* halves
+of Memory and Highlighter into the browser. This does the same for **Publisher**:
+`/app/k` — a publish kit for every meeting that has a tape to cut from.
+
+A kit is the clips worth cutting plus draft copy to ship them with — titles, a
+description with chapters, alt text — and every input it needs was already
+pressed (the `moments` plane, the meeting's entities, its summary). So the
+record assembles the kit deterministically, with no model (the press is the one
+pipeline stage that calls no AI), and pages it read-only. The one desk-bound
+step — rendering the clips as video — stays at the desk, and the page says so;
+the emitted `kit.json` is a real Publisher kit a producer downloads and opens
+there to carry on from the draft.
+
+- **The shared writer** (`czcore/kit.py`, new). The pure copy-assembly logic
+  moved out of `publisher/kit.py` into the shared core both the desk and the
+  record import, so one artifact has one writer and the two can't drift.
+  `publisher.kit` imports it back under its old names — the surface is unchanged.
+- **The kit plane** (`web/kit.py`, `web/bake.py`, `record/press.py`).
+  `kit_from_meeting` derives a kit from a pressed meeting; `bake_kits` writes
+  `kits/<pid>.json` + `kits/index.json`. The stage is mirrored into the hosted
+  press, and a new parity test holds the two orchestrations equal.
+- **The reader** (`web/emit.py`, `web/static/app.web.css`). `/app/k` index +
+  a page per kit; the clips deep-link the tape and "play as a reel" hands off to
+  the `/app/r` viewer. Publisher's line on `/app/press` flips from "nothing yet"
+  to the kits — but only in an edition that pressed some, so the door stays
+  honest. Quiet palette, JS-off readable, verified at desktop + 375px.
+- **Guards**. A cross-process idempotence test (two presses under different
+  `PYTHONHASHSEED` must be byte-identical — the determinism the deploy needs);
+  the container's cold-start import check now names `web.bake`/`web.emit`/
+  `web.kit` so a bad import fails the build, not the 3am press.
+
+Reviewed by a five-lens adversarial panel (covenant, idempotence, desk-compat,
+refactor blast radius, brand + a11y); every finding folded in. 847 tests green.
+
 ### The moment labels earn their kicker: a word-boundary fix + a higher bar for the paper — 2026-07-20
 
 A moment is only as good as its kind. The shared analyzer matched its keyword

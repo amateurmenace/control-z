@@ -157,7 +157,38 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-20 (latest) — **specs/20 P1 follow-up: the moment labels earn their
+- 2026-07-20 (latest) — **specs/20 P2-A: the kit plane — Publisher's reading
+  half moves in.** `/app/k` pages a read-only publish kit for every meeting with
+  a video and moments: the clips worth cutting (from the `moments` plane) + draft
+  copy assembled from the transcript, no model. The `kit.json` is a real
+  Publisher kit a producer opens at the desk to render; rendering stays there and
+  the page says so. Auto-derive + quiet, per Stephen's call. Covenant-clean (no
+  server call, `connect-src 'self'`, JS-off readable), byte-idempotent, palette
+  quiet. Five-lens adversarial review folded in. **847 green.**
+  - **`czcore/kit.py` NEW, `publisher/kit.py` CHANGED** — the pure copy writer
+    (`copy_extractive`, `kit_from_parts`, the small text helpers) moved to shared
+    core so desk + record kits can't drift; `publisher.kit` re-imports the old
+    names, surface unchanged. **Lane B/C: the desk's kit copy now lives in
+    `czcore.kit`, not `publisher.kit`.**
+  - **`web/kit.py` NEW** — `kit_from_meeting` derives a kit from a pressed
+    meeting (gates: no video or no moments → no kit).
+  - **`web/bake.py`, `record/press.py` CHANGED** — a `bake_kits` stage in both,
+    writing `kits/<pid>.json` + `kits/index.json`; **`tests/test_press_parity.py`
+    NEW** holds the bake/press stage sequences equal (the drift press.py warns of).
+  - **`web/emit.py`, `web/static/app.web.css` CHANGED** — `page_kits_index` +
+    `page_kit` (`/app/k`), the Publisher press-row flip (only when kits pressed).
+    New reader URLs: `/app/k`, `/app/k/<pid>`, `/app/kits/<pid>.json`,
+    `/app/kits/index.json` — additive, no existing plane touched.
+  - **`record/Dockerfile` CHANGED** — cold-start import check now names
+    `web.bake`/`web.emit`/`web.kit` (the press's lazy kit chain).
+  - **`tests/test_web_kit.py` NEW, `tests/test_web_bake.py` CHANGED** — the plane,
+    the pages, the press-row flip, and a **cross-process idempotence guard** (two
+    presses under different `PYTHONHASHSEED` must be byte-identical).
+  - **Deploying** — a new data plane + reader, so a full container reship:
+    image `r25`, version bump `2.1.3` (the SW must not serve cached JS), press,
+    Pages rsync + gunzip. Verify live on the real corpus (headless Chrome + 375px).
+
+- 2026-07-20 — **specs/20 P1 follow-up: the moment labels earn their
   kicker.** The moments plane read a celebration as a `DECISION` because the
   shared analyzer matched keywords as bare substrings (`voted` inside
   "de**voted**", `motion` inside "e**motion**"), and `TENSION` fired on any bare
@@ -183,12 +214,11 @@ section below, updated on main.
     **`tests/test_highlights.py`, `tests/test_web_bake.py` CHANGED** — the
     boundary matcher (inflections kept, substrings dropped, symbols intact) and
     the newspaper gates.
-  - **NOT deployed** — the change alters every meeting page's moment cards, so
-    it's pending Stephen's review of the before/after. When it ships it's a
-    code-only edition change: a **version bump** (`--version 2.1.2`) so the
-    service worker doesn't serve returning readers the cached JS, and the same
-    P0/P1 deploy flow (image rebuild → job updates → press → Pages rsync +
-    gunzip). No new data plane.
+  - **Shipped as v2.1.2 / image r24** (2026-07-20, after Stephen reviewed the
+    before/after artifact) — a code-only edition change with a version bump so
+    the service worker didn't serve returning readers the cached JS; same P0/P1
+    deploy flow (image rebuild → job updates → press → Pages rsync + gunzip);
+    verified live (no celebration-decision, real tension). No new data plane.
 
 - 2026-07-20 — **specs/20 P1: the reel composer + the `/app/r`
   viewer.** Highlighter's composing half, moved into the browser — client-only,
