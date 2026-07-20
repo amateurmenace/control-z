@@ -1492,11 +1492,15 @@ class TestReel(unittest.TestCase):
         return "\n".join([
             self.lift(r"const hms = t => \{.+?\};"),
             self.lift(r"const REEL_V = .+?;"),
+            self.lift(r"const REEL_VS = .+?;"),
             self.lift(r"const r1 = .+?;"),
             self.lift(r"const clipLen = .+?;"),
             self.lift(r"const reelRuntime = .+?;"),
             self.lift(r"const encodeClips = .+?;"),
+            self.lift(r"const encodeClipsX = .+?;"),
             self.lift(r"function shareURL\(pid, clips\) \{.+?\n  \}"),
+            self.lift(r"function reelShareURL\(clips\) \{.+?\n  \}"),
+            self.lift(r"const reelPids = .+?;"),
             self.lift(r"function decodeReel\(search\) \{.+?\n  \}"),
             self.lift(r"function citeSheet\(meta, clips\) \{.+?\n  \}"),
             self.lift(r"function reelJSON\(meta, clips\) \{.+?\n  \}"),
@@ -1580,11 +1584,15 @@ class TestReel(unittest.TestCase):
         the clip. The `armed` gate — which arms only on a report inside the clip
         and before its end — is what proves the short clip actually plays."""
         adv = self.lift(r"  function reelAdvance\(t\) \{.+?\n  \}")
+        rseek = self.lift(r"  function reelSeek\(c\) \{.+?\n  \}")
         body = "\n".join([
             "const seeks = [];",
+            "const YT = {};",   # no player window → reelSeek falls to ytSeek
             "function ytSeek(t){ seeks.push(t); }",
             "function ytSend(){}",
             "function reelShow(){}",
+            "const reelPids = clips => [...new Set(clips.map(c => c.pid).filter(Boolean))];",
+            rseek,
             "function fail(m){ console.log('FAIL', m, 'seeks='+JSON.stringify(seeks),"
             " 'i='+REELPLAY.i, 'armed='+REELPLAY.armed, 'active='+REELPLAY.active); process.exit(1); }",
             # clip 1 is a 1s clip {19,20} placed AFTER {10,20}: reaching it is a
@@ -1609,20 +1617,82 @@ class TestReel(unittest.TestCase):
         self.assertEqual(r.returncode, 0,
                          f"the seek engine misfired:\n{r.stdout}{r.stderr}")
 
+    def test_a_cross_meeting_reel_carries_each_clips_own_meeting(self):
+        """specs/20 §7.9 P2-B. A reel of one meeting stays the v1 link every
+        existing share + kit page already carries; the moment it spans two, it
+        becomes v2 (`<pid>:<start>-<end>`), and decode restores each clip's own
+        meeting. v1 remains readable — its clips inherit the single `m=`."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            # one meeting → v1, byte-identical to before
+            "const one = [{pid:'AAA',start:10,end:20},{pid:'AAA',start:30,end:40}];",
+            "const u1 = reelShareURL(one);",
+            "if (!u1.includes('/app/r?v=1&m=AAA&c=10-20,30-40')) fail('single-meeting not v1: '+u1);",
+            # two meetings → v2, each clip prefixed with its meeting
+            "const two = [{pid:'AAA',start:10,end:20},{pid:'B-b_9',start:5,end:9}];",
+            "const u2 = reelShareURL(two);",
+            "if (!u2.includes('/app/r?v=2&c=')) fail('cross-meeting not v2: '+u2);",
+            "const d = decodeReel(u2.slice(u2.indexOf('?')));",
+            "if (d.v !== '2') fail('v='+d.v);",
+            "if (d.clips.length !== 2) fail('len='+d.clips.length);",
+            "if (d.clips[0].pid !== 'AAA' || d.clips[1].pid !== 'B-b_9') fail('pids '+JSON.stringify(d.clips));",
+            "if (d.clips[1].start !== 5 || d.clips[1].end !== 9) fail('range '+JSON.stringify(d.clips[1]));",
+            # a v1 link still decodes, its clips inheriting the single m=
+            "const v1 = decodeReel('?v=1&m=Z9&c=1-2,3-4');",
+            "if (v1.clips.length !== 2 || v1.clips[0].pid !== 'Z9' || v1.clips[1].pid !== 'Z9') fail('v1 inherit '+JSON.stringify(v1.clips));",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"cross-meeting link failed:\n{r.stdout}{r.stderr}")
+
+    def test_reel_seek_switches_the_tape_only_across_meetings(self):
+        """The viewer plays clip to clip within one tape, and loads a new tape
+        (loadVideoById) only when the next clip is from another meeting — so a
+        cross-meeting reel actually crosses, and a same-meeting reel never
+        needlessly reloads the player."""
+        rseek = self.lift(r"  function reelSeek\(c\) \{.+?\n  \}")
+        body = "\n".join([
+            "const sent = []; const seeks = [];",
+            "const YT = { win: {}, ready: true };",
+            "function ytSend(kind, func, args){ sent.push([func, args]); }",
+            "function ytSeek(t){ seeks.push(t); }",
+            "let REELPLAY = { vid: 'AAA' };",
+            rseek,
+            "function fail(m){ console.log('FAIL', m, JSON.stringify({sent,seeks})); process.exit(1); }",
+            # same meeting → a plain seek, no tape reload
+            "reelSeek({video_id:'AAA', start:42});",
+            "if (seeks.length !== 1 || seeks[0] !== 42) fail('same-tape should seek');",
+            "if (sent.length !== 0) fail('same-tape must not reload');",
+            # another meeting → loadVideoById at the clip start, vid updated
+            "reelSeek({video_id:'BBB', start:7});",
+            "if (sent.length !== 1 || sent[0][0] !== 'loadVideoById') fail('cross should loadVideoById');",
+            "if (sent[0][1][0].videoId !== 'BBB' || sent[0][1][0].startSeconds !== 7) fail('bad load args '+JSON.stringify(sent[0]));",
+            "if (REELPLAY.vid !== 'BBB') fail('vid not updated');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"reel tape-switch failed:\n{r.stdout}{r.stderr}")
+
     def test_a_clip_is_identified_by_kind_and_time_not_time_alone(self):
         """A contested roll call is emitted as two moments — a vote and a
         tension — anchored to the same segment start (web/bake.py dedups on
         `(kind, int(t))`, not time). The composer must tell them apart, or
         ticking one silently toggles the other. Its identity key must match the
-        bake's: (kind, time)."""
+        bake's, plus the meeting (P2-B): (meeting, kind, time)."""
         body = "\n".join([
             self.lift(r"const r1 = .+?;"),
+            "const CREEL = { pid: 'M' };",   # a moment read off the page stands for this meeting
             self.lift(r"  const clipId = c => .+?;"),
             "function fail(m){ console.log('FAIL', m); process.exit(1); }",
             "const vote = {kind:'vote', t:100.0}, tension = {kind:'tension', t:100.0};",
             "if (clipId(vote) === clipId(tension)) fail('same-second twins collide');",
             # the same moment ticked twice is the same identity (toggle off works)
             "if (clipId(vote) !== clipId({kind:'vote', t:100.04})) fail('rounding split one moment in two');",
+            # the same kind+second from two meetings is NOT the same clip (P2-B)
+            "if (clipId({pid:'A',kind:'vote',t:100}) === clipId({pid:'B',kind:'vote',t:100})) fail('two meetings collided');",
             "console.log('ok');",
         ])
         r = self.node(body)

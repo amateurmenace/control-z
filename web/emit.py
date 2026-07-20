@@ -856,10 +856,11 @@ def page_reel(manifest, base):
     <a class="back" href="/app/">← the record</a>
     <h1>A reel from the record</h1>
     <p class="presslede">A <b>reel</b> is a short sequence of moments — roll
-      calls, decisions, questions, the turns of an argument — pulled from one
-      meeting on the record and strung together in order. The whole reel rides
-      in the link that brought you here: which meeting, which moments, in what
-      order. Nothing was uploaded, and nothing about you was kept.</p>
+      calls, decisions, questions, the turns of an argument — pulled from the
+      record, from one meeting or several, and strung together in order. The
+      whole reel rides in the link that brought you here: which meetings, which
+      moments, in what order. Nothing was uploaded, and nothing about you was
+      kept.</p>
     <div class="reelstage" id="reelstage"></div>
     <div class="reelcites" id="reelcites">
       <p class="hint">Playing the reel — seeking the tape from clip to clip —
