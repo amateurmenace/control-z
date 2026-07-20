@@ -66,8 +66,16 @@ COPY highlighter/ /app/highlighter/
 # Scribe nor the tool directories, so its imports are the ones most likely to
 # reach for something that is not here. Catching that at build time costs a
 # second; catching it at 3am costs a night's meetings.
+#
+# `web.bake`, `web.emit`, `web.kit` are here for the same reason: the nightly
+# press runs `record.press.press` → `web.bake` → `web.kit` → `czcore.kit`, but
+# those imports are all lazy (inside `press()` / `bake_kits`), so nothing above
+# exercises them. A top-level import added to one of them that reaches for an
+# unshipped package (e.g. `publisher/`, deliberately not copied) would pass the
+# build and fail only when the press runs. `web.bake` does NOT pull `web.kit`
+# transitively (bake_kits imports it lazily), so name it explicitly.
 RUN python -c "import record.app, record.store, record.press, record.pipeline, \
-    record.connectors.youtube, memory.ingest"
+    record.connectors.youtube, memory.ingest, web.bake, web.emit, web.kit"
 
 EXPOSE 8330
 CMD ["uvicorn", "record.app:app", "--host", "0.0.0.0", "--port", "8330"]

@@ -867,6 +867,148 @@ def page_reel(manifest, base):
                  version=manifest["version"])
 
 
+def _kit_card(k):
+    """A kit in the index — a meeting's still + deck, linking to its kit."""
+    meta = k.get("meta") or {}
+    thumb = meta.get("thumb") or ""
+    n = len(k.get("clips") or [])
+    return (f'<a class="mcard" href="/app/k/{esc(k.get("slug", ""))}" '
+            f'data-town="{esc(meta.get("town", ""))}" '
+            f'data-body="{esc(meta.get("body", ""))}">'
+            + (f'<img loading="lazy" src="{esc(thumb)}" alt="" width="96" height="54">'
+               if thumb else "")
+            + f'<div class="mc-body"><span class="chip">{esc(meta.get("body") or "meeting")}</span>'
+              f'<b>{esc(meta.get("title") or "Community program")}</b>'
+              f'<span class="mc-meta">{esc(meta.get("date") or "undated")} · '
+              f'{n} clip{"" if n == 1 else "s"}</span></div></a>')
+
+
+def page_kits_index(kits, manifest, base):
+    """The kits index — /app/k (specs/20 §6, §7.9 P2). Publisher's reading half:
+    one entry per meeting that has a video and moments to publish. When an
+    edition has none (nothing with a tape to cut), the page says so plainly
+    rather than standing empty — the same honesty the /app/press door keeps."""
+    if kits:
+        cards = "".join(_kit_card(k) for k in kits)
+        listing = f'<div class="kitgrid">{cards}</div>'
+    else:
+        listing = ('<p class="hint">No publish kits in this edition yet — a kit '
+                   'is pressed for each meeting that has a tape to cut from. '
+                   '<a href="/app/">Browse the record</a> in the meantime.</p>')
+    body = f"""
+  <section class="press">
+    <a class="back" href="/app/">← the record</a>
+    <div class="eyebrow"><span class="kicker">from Community Publisher</span></div>
+    <h1>Publish kits</h1>
+    <p class="presslede">A <b>publish kit</b> is what a producer needs to take a
+      meeting out to the world: the clips worth cutting, and draft copy to ship
+      them with — titles, a description, chapters — all assembled from the
+      transcript, no model. Every kit here reads in the browser; <b>cutting the
+      video and burning captions happen in Publisher at the desk</b>, and each
+      kit downloads as a file that opens there.</p>
+    {listing}
+    <p class="hint">Kits are drafts, not decisions — the analyzer scored the
+      moments and the copy is lifted from the record itself. A producer edits
+      the kit in <a href="/app/press#publisher">Community Publisher</a> before
+      anything is published.</p>
+  </section>
+"""
+    return shell("Publish kits — publicrecord.studio",
+                 "A publish kit for every meeting: the clips worth cutting and "
+                 "draft copy, assembled from the transcript.",
+                 f"{base}/app/k", body, "", manifest,
+                 version=manifest["version"])
+
+
+def page_kit(kit, manifest, base):
+    """One meeting's publish kit, read-only (specs/20 §6, §7.9 P2).
+
+    Publisher's reading half: the clips (the moments plane, as cut candidates)
+    and the draft copy, assembled from the transcript and labeled so. Rendering
+    the clips — the one step that touches local media — stays at the desk, and
+    the page says so. JS-off everything reads: the clips are server-rendered
+    cards deep-linking the tape, the copy is real text, kit.json is a plain
+    download, and 'play as a reel' is a link into the /app/r viewer (P1)."""
+    meta = kit.get("meta") or {}
+    slug = kit.get("slug") or ""
+    pid = esc(meta.get("pid") or "")
+    title = esc(meta.get("title") or "Community program")
+    where = " · ".join(x for x in [meta.get("body"), meta.get("town"),
+                                   meta.get("date")] if x)
+    clips = kit.get("clips") or []
+    copy = kit.get("copy") or {}
+
+    cards = ""
+    for c in clips:
+        t = float(c.get("t", c.get("start", 0)) or 0)
+        quote = esc(c.get("text") or c.get("label") or "")
+        span = f'{hms(c.get("start", 0))}–{hms(c.get("end", 0))}'
+        cards += (
+            '<div class="mo-card">'
+            f'<a class="moment" href="/app/m/{pid}#t{int(t)}" '
+            f'data-t="{c.get("t", c.get("start", 0))}">'
+            f'<div class="mo-head"><span class="ts">{hms(t)}</span>'
+            f'<span class="mo-kind">{esc(c.get("kind") or "moment")}</span></div>'
+            f'<p class="mo-quote">{quote}</p>'
+            f'<div class="mo-foot"><span class="mo-reason">clip {esc(span)}</span></div>'
+            '</a></div>')
+
+    # 'play as a reel' hands the whole kit to /app/r (P1), which plays clip to
+    # clip through the facade — the same clip encoding the composer writes.
+    # `%g` matches app.js's r1() stringification (0.1-quantized, no trailing
+    # ".0"), so a kit-page reel link is byte-identical to a composer share link.
+    def _b(v):
+        return "%g" % round(float(v or 0), 1)
+    reel_clips = ",".join(f"{_b(c.get('start'))}-{_b(c.get('end'))}" for c in clips)
+    reel_href = esc(f"/app/r?v=1&m={meta.get('pid', '')}&c={reel_clips}")
+    kit_href = esc(f"/app/kits/{slug}.json")
+
+    titles = copy.get("titles") or []
+    title_opts = "".join(f'<li>{esc(t)}</li>' for t in titles)
+    desc = esc(copy.get("description") or "").replace("\n", "<br>")
+    origin = esc(copy.get("origin") or "")
+
+    body = f"""
+  <section class="press kit">
+    <a class="back" href="/app/k">← all the kits</a>
+    <div class="eyebrow"><span class="kicker">a publish kit — Community Publisher</span></div>
+    <h1>{title}</h1>
+    <p class="hint">{esc(where)}</p>
+    <p class="presslede">The <b>publish kit</b> for this meeting: the clips worth
+      cutting and draft copy to ship them with, assembled from the transcript.
+      It reads here; <b>cutting the video, burning captions and choosing aspect
+      ratios happen in Publisher at the desk</b>, against the program file on
+      your own machine. Download the kit and open it there to carry on from this
+      draft.</p>
+
+    <div class="sectionhead"><span class="kicker">the clips — {len(clips)}</span></div>
+    <div class="mo-grid">{cards}</div>
+    <div class="presscta">
+      <a class="btn primary" href="{reel_href}">▶ Play these clips as a reel</a>
+      <a class="btn" href="{kit_href}" download>⬇ kit.json — open at the desk</a>
+      <a class="btn" href="/app/m/{pid}">Read the whole meeting →</a>
+    </div>
+
+    <div class="sectionhead"><span class="kicker">draft headlines</span></div>
+    <ul class="kittitles">{title_opts}</ul>
+    <div class="sectionhead"><span class="kicker">draft description</span></div>
+    <p class="kitdesc">{desc}</p>
+    <p class="hint">{origin}. Every line is a working draft — a producer edits it
+      in Publisher before anything goes out.</p>
+
+    <p class="disclose">The tape is embedded from YouTube, never rehosted.
+      Rendering the clips as video needs the desk — this page composes, it does
+      not cut. Community Publisher is
+      <a href="{COMMUNITYAI}">a Community AI Project</a> tool.</p>
+  </section>
+"""
+    return shell(f"{meta.get('title') or 'Publish kit'} — the kits · publicrecord.studio",
+                 f"The publish kit for {meta.get('title') or 'this meeting'}: "
+                 "clips and draft copy, assembled from the transcript.",
+                 f"{base}/app/k/{slug}", body, "", manifest,
+                 version=manifest["version"])
+
+
 def _search_note() -> str:
     """What the search field promises, which differs by pressing.
 
@@ -1233,11 +1375,17 @@ CREDIT = ("designed + developed by Stephen Walter with Brookline Interactive "
           "Group &amp; Neighborhood AI · CC BY-SA 4.0")
 
 
-def _tool_row(t):
+def _tool_row(t, lives_here=None):
+    """A tool's one-line entry. `lives_here` defaults to the registry's static
+    link, but a caller can pass one the registry can't know at import time — the
+    Publisher row's cross-link into /app/k, say, which is honest only in an
+    edition that actually pressed kits (specs/20 §7.9: the door stays honest
+    until then)."""
+    lh = lives_here if lives_here is not None else t.get("lives_here")
     lives = ""
-    if t.get("lives_here"):
-        lives = (f' <a class="liveshere" href="{esc(t["lives_here"]["href"])}">'
-                 f'its work already lives here → {esc(t["lives_here"]["label"])}</a>')
+    if lh:
+        lives = (f' <a class="liveshere" href="{esc(lh["href"])}">'
+                 f'its work already lives here → {esc(lh["label"])}</a>')
     return (f'<div class="toolrow" id="{esc(t["id"])}">'
             f'<div class="toolname">{esc(t.get("long", t["name"]))}'
             f'<span class="tverb">{esc(t["verb"])}</span></div>'
@@ -1245,12 +1393,21 @@ def _tool_row(t):
             f'</div>')
 
 
-def page_press(manifest, base):
+def page_press(manifest, base, has_kits=False):
     """The press behind the paper — one quiet page where the thirteen doors
     used to shout (specs/20 §5). The civicmedia story in three sentences, the
     tool list as one-line entries (name, verb, the true reason each needs the
-    desk), the DMG, and the cross-link to communityai.studio done once."""
-    suite = "".join(_tool_row(t) for t in tools.community()
+    desk), the DMG, and the cross-link to communityai.studio done once.
+
+    `has_kits` flips Publisher's line from "nothing yet" to a cross-link into
+    /app/k, but only when this edition actually pressed kits — the door stays
+    honest until then (specs/20 §6, §7.9)."""
+    def row(t):
+        if t["id"] == "publisher" and has_kits:
+            return _tool_row(t, {"label": "a publish kit for every meeting",
+                                 "href": "/app/k"})
+        return _tool_row(t)
+    suite = "".join(row(t) for t in tools.community()
                     if t["surface"] != "web")
     bench = "".join(_tool_row(t) for t in tools.workbench())
     body = f"""
@@ -1465,7 +1622,8 @@ self.addEventListener('fetch', e => {{
 
 
 def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
-               analytics=None, graph=None, towns=None, tombstones=None):
+               analytics=None, graph=None, towns=None, tombstones=None,
+               kits=None):
     v = manifest["version"]
     # before a single stub renders: the chrome needs to know what it may offer
     set_edition(towns)
@@ -1487,14 +1645,26 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
     (out / "graph" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "graph" / "index.html").write_text(
         page_graph(graph or {}, manifest, base), encoding="utf-8")
-    # the press page — the one place the thirteen doors now lead
+    # the press page — the one place the thirteen doors now lead. Publisher's
+    # line points at the kits only when this edition pressed some.
+    kits = kits or []
     (out / "press" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "press" / "index.html").write_text(
-        page_press(manifest, base), encoding="utf-8")
+        page_press(manifest, base, has_kits=bool(kits)), encoding="utf-8")
     # the reel viewer — one static stub; the reel itself lives in the link
     (out / "r" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "r" / "index.html").write_text(
         page_reel(manifest, base), encoding="utf-8")
+    # the kits — Publisher's reading half (specs/20 §6, §7.9 P2). An index, and
+    # a read-only page per meeting whose kit the bake pressed. The downloadable
+    # kit.json is the plane the bake already wrote at /app/kits/<slug>.json.
+    (out / "k" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "k" / "index.html").write_text(
+        page_kits_index(kits, manifest, base), encoding="utf-8")
+    for kit in kits:
+        d = out / "k" / kit["slug"]
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "index.html").write_text(page_kit(kit, manifest, base), encoding="utf-8")
     for m in meetings:
         d = out / "m" / m["pid"]
         d.mkdir(parents=True, exist_ok=True)

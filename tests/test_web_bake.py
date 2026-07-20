@@ -409,6 +409,42 @@ class TestBakeEdition(unittest.TestCase):
         self.assertIn("Get the desktop app", press)
         self.assertIn("communityai.studio", press)   # the cross-link, done once
 
+    def test_kits_plane_pressed_and_indexed(self):
+        """Publisher's reading half (specs/20 §7.9 P2): a kit per meeting with a
+        video and moments, as a real Publisher kit and an index that lists it."""
+        kit = self._read("kits/vid1.json")
+        self.assertEqual(kit["slug"], "vid1")
+        self.assertEqual(kit["version"], 1)
+        self.assertTrue(kit["clips"])
+        self.assertIn("extractive", kit["copy"]["origin"])
+        self.assertEqual(kit["files"], [])            # nothing rendered — desk work
+        # the clip carries the reel model's identity (kind, t)
+        self.assertTrue(all("kind" in c and "t" in c for c in kit["clips"]))
+        idx = self._read("kits/index.json")
+        slugs = {k["slug"] for k in idx["kits"]}
+        self.assertEqual(slugs, {"vid1", "vid2"})
+        self.assertTrue(all(k["n_clips"] >= 1 for k in idx["kits"]))
+
+    def test_kit_page_reads_with_js_off_and_stays_at_the_desk(self):
+        html = (self.out / "k" / "vid1" / "index.html").read_text()
+        self.assertIn("publish kit", html)
+        self.assertIn("mo-quote", html)                       # the clips render
+        self.assertIn("/app/kits/vid1.json", html)            # the download
+        self.assertIn("/app/r?v=1&amp;m=vid1&amp;c=", html)   # play-as-reel handoff
+        # the covenant sentence: rendering stays at the desk, and it says so
+        self.assertIn("Rendering the clips as video needs the desk", html)
+        self.assertIn("Content-Security-Policy", html)        # a real page
+        # the index lists both meetings' kits
+        kidx = (self.out / "k" / "index.html").read_text()
+        self.assertEqual(kidx.count('class="mcard"'), 2)
+
+    def test_press_publisher_row_points_at_the_kits(self):
+        """The door stays honest until kits press (specs/20 §6): this edition has
+        kits, so Publisher's line now cross-links into /app/k."""
+        press = (self.out / "press" / "index.html").read_text()
+        self.assertIn("/app/k", press)
+        self.assertIn("a publish kit for every meeting", press)
+
     def test_all_thirteen_door_urls_still_answer_as_stubs(self):
         """A citation never dies (specs/20 §5): every /app/t/<tool>/ URL the old
         doors answered is a redirect stub now — 200, CSP, pointed at the press."""
@@ -1061,6 +1097,37 @@ class TestIdempotence(unittest.TestCase):
                     rel = p.relative_to(root / "a")
                     self.assertEqual(p.read_bytes(), (root / "b" / rel).read_bytes(),
                                      f"{rel} differs between two bakes")
+
+    def test_byte_identical_across_hash_seeds(self):
+        """The rsync deploy re-uploads on any diff, and a real press runs in a
+        fresh container process — so "press today == press tomorrow" spans
+        Python hash seeds. The in-process test above shares one seed and cannot
+        see set/dict-iteration order leaking into edition bytes; this presses
+        the SAME corpus in two subprocesses with different PYTHONHASHSEED and
+        byte-compares, which is the determinism the deploy actually needs."""
+        import os
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db = root / "c.db"
+            TestBakeEdition._seed(db)
+
+            def press(dst, seed):
+                r = subprocess.run(
+                    [sys.executable, "-m", "web.bake", "--corpus", str(db),
+                     "--out", str(root / dst), "--base", "https://x.org"],
+                    cwd=str(REPO), env={**os.environ, "PYTHONHASHSEED": seed},
+                    capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stderr)
+
+            press("a", "0")
+            press("b", "1")
+            for p in sorted((root / "a").rglob("*")):
+                if p.is_file():
+                    rel = p.relative_to(root / "a")
+                    self.assertEqual(
+                        p.read_bytes(), (root / "b" / rel).read_bytes(),
+                        f"{rel} differs across hash seeds — nondeterministic press")
 
 
 class TestTombstones(unittest.TestCase):

@@ -202,6 +202,11 @@ def press(corpus, out_dir: str, version: str = "",
 
     print("pressing the edition…")
     meetings = b.bake_meetings()
+    # Publisher's reading half — an extractive kit per meeting with a video and
+    # moments (specs/20 §7.9 P2). A stage in web/bake.py is a stage here too, or
+    # the hosted edition ships one plane fewer than the desk's (this module's
+    # docstring); `tests/test_press_parity` holds the two orchestrations equal.
+    kits = b.bake_kits(meetings)
     by_id = {m["id"]: m for m in meetings}
     issues = b.bake_issues(by_id)
     # tombstones for issues a steward forgot — read from the audit ledger, which
@@ -223,7 +228,7 @@ def press(corpus, out_dir: str, version: str = "",
     emit.emit_assets(out, version, manifest)
     emit.emit_stubs(out, meetings, issues, stats, manifest, site_base,
                     officials=officials, analytics=analytics, graph=graph,
-                    towns=towns, tombstones=tombstones)
+                    towns=towns, tombstones=tombstones, kits=kits)
 
     pressing = _write_pressing(out, manifest, fingerprint)
 

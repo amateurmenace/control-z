@@ -571,6 +571,44 @@ class Bake:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dst)
 
+    # -- kits (Publisher's reading half) ---------------------------------
+    def bake_kits(self, meetings):
+        """The kit plane (specs/20 §6, §7.9 P2) — Publisher's reading half,
+        pressed. For each live meeting with a video and at least one moment, an
+        extractive publish kit the desk Publisher opens: clips from the moments
+        plane, draft copy assembled from the transcript (no model), nothing
+        rendered. Pure over the pressed meeting → byte-idempotent, and
+        covenant-clean: reading and composing live here; the render stays at the
+        desk, and the page says so.
+
+        Writes `kits/<pid>.json` (the real Publisher kit, downloadable) and
+        `kits/index.json` (the listing the `/app/k` reader pages). Returns the
+        full kits so `emit_stubs` renders each `/app/k/<pid>` from the same
+        object it wrote to disk — no re-derivation, no drift."""
+        from web.kit import kit_from_meeting
+        kits = []
+        for m in meetings:
+            kit = kit_from_meeting(m)
+            if not kit:
+                continue
+            slug = m["pid"]
+            _json(self.out / "kits" / f"{slug}.json", kit)
+            self.note(f"kits/{slug}.json", _gz_of(kit))
+            kits.append(kit)
+        kits.sort(key=lambda k: (k["meta"].get("date", ""), k["slug"]),
+                  reverse=True)
+        index = {"kits": [{"slug": k["slug"],
+                           "title": k["meta"].get("title", ""),
+                           "date": k["meta"].get("date", ""),
+                           "body": k["meta"].get("body", ""),
+                           "town": k["meta"].get("town", ""),
+                           "thumb": k["meta"].get("thumb", ""),
+                           "duration": k["meta"].get("duration", 0),
+                           "n_clips": len(k["clips"])} for k in kits]}
+        _json(self.out / "kits" / "index.json", index)
+        self.note("kits/index.json", _gz_of(index))
+        return kits
+
     def _paper_by_meeting(self, issue_id):
         """The issue's linked documents grouped by meeting, page-cited — the
         written record interleaved onto the long view."""
@@ -1107,6 +1145,7 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str,
 
     print("pressing the edition…")
     meetings = b.bake_meetings()
+    kits = b.bake_kits(meetings)
     by_id = {m["id"]: m for m in meetings}
     issues = b.bake_issues(by_id)
     tombstones = b.bake_tombstones({i["slug"] for i in issues})
@@ -1124,7 +1163,7 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str,
     emit.emit_assets(out, version, manifest)
     emit.emit_stubs(out, meetings, issues, stats, manifest, site_base,
                     officials=officials, analytics=analytics, graph=graph,
-                    towns=towns, tombstones=tombstones)
+                    towns=towns, tombstones=tombstones, kits=kits)
 
     print(f"  {len(towns['towns'])} town(s) · {len(towns['bodies'])} bodies · "
           f"{len(meetings)} meetings · {len(issues)} issues · "
