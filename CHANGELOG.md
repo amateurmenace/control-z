@@ -2,6 +2,36 @@
 
 ## unreleased
 
+### specs/20 P2 finished — cross-meeting reels + per-issue RSS; dark mode declined — 2026-07-20
+
+The last of P2 (§7.9), after the kit plane.
+
+- **P2-B — reels span meetings.** A reel was one meeting's moments strung
+  together; now it can hold the turns of an argument as they cross meetings and
+  years, still client-only and still living entirely in its link. One meeting is
+  the exact **v1** link every existing share and kit page already carries; two or
+  more becomes **v2** (`?v=2&c=<pid>:<start>-<end>,…`, each clip prefixed with its
+  meeting). The composer is now one global tray you build across meetings (tick
+  on one, navigate, tick on another — it carries and labels each clip's meeting);
+  the `/app/r` viewer fetches every meeting the reel touches, enriches each clip
+  from its own moments, and plays clip to clip, loading the next meeting's tape
+  with `loadVideoById` when the reel crosses. The cite sheet groups by meeting;
+  reel.json stays single-meeting (the desk render is — cross-meeting rendering is
+  a desk step still to come, and the page says so). v1↔v2 round-trip, the
+  (meeting, kind, time) clip identity, and the tape-switch are pinned by tests
+  run in node. Verified live: a reel of two Brookline meetings, authored in the
+  tray (v1→v2 as it crossed) and played back "4 moments across 2 meetings."
+
+- **P2-C — per-issue RSS in the chrome.** The long-view feed per issue has
+  shipped since R1; now each issue page advertises its own feed in the head
+  (`<link rel="alternate">`, before the firehose), and every feed item carries a
+  `<pubDate>` (a corpus date → RFC-822 midnight UTC, deterministic, no
+  wall-clock) so a reader's client sorts by date.
+
+- **Dark mode — declined for the reader (open Q3).** publicrecord is "ink on
+  white," and that is the brand pillar the paper keeps; the dark/IDE look stays
+  civicmedia / Control-Z's. Resolved as "never for the reader" — revisitable.
+
 ### specs/20 P2 — Publisher's reading half: the record presses a kit per meeting — 2026-07-20
 
 The newspaper (P0) and the reel composer (P1) already moved the *reading* halves

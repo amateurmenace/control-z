@@ -1,10 +1,11 @@
 # 20 — The newspaper: the record gets its own face
 
-**Status:** v1.3 · **Stage:** **P0 + P1 shipped; P2 begun — publicrecord.studio
-serves the newspaper (P0, 2026-07-19), the reel composer + `/app/r` viewer (P1,
-2026-07-20), and now the kit plane: `/app/k`, Publisher's reading half, a
-read-only publish kit per meeting (P2-A, 2026-07-20)**. Remaining P2:
-cross-meeting reels (B), per-issue RSS (C), dark mode (open Q3 — Stephen's call) ·
+**Status:** v1.4 · **Stage:** **P0 + P1 + P2 shipped — publicrecord.studio serves
+the newspaper (P0, 2026-07-19), the reel composer + `/app/r` viewer (P1,
+2026-07-20), the kit plane `/app/k` (P2-A, 2026-07-20), and now cross-meeting
+reels + per-issue-RSS discovery (P2-B/C, 2026-07-20)**. Dark mode was declined
+for the reader (open Q3 → "never for the reader," revisitable). The spec is
+complete; further work is a new spec ·
 **Owner:** Stephen Walter (Weird Machine) · **Related:**
 `.claude/rules/branding.md` and `brand/` (the brand law and its vendored
 assets), specs/16 (the reader — restyled here, and partly superseded on this
@@ -309,7 +310,18 @@ meeting's moments slot in without a redesign.
      (`czcore/kit.py`), so desk and record kits can't drift. **Met**: auto-derive
      + quiet, per Stephen's call; covenant-clean; byte-idempotent (incl. a
      cross-process guard); five-lens adversarial review folded in.
-   - 9b–9d — cross-meeting reels, per-issue RSS, dark mode: not started.
+   - **9b — cross-meeting reels ✓ shipped 2026-07-20.** A reel spans meetings:
+     v2 share link (`?v=2&c=<pid>:<start>-<end>,…`, v1 stays byte-identical for one
+     meeting), a global composer tray built across meetings, and a `/app/r` viewer
+     that fetches each meeting's plane and plays clip to clip — `loadVideoById` at
+     a meeting boundary. Cite sheet groups by meeting; reel.json stays
+     single-meeting (cross-meeting rendering is a desk step still to come, stated).
+     **Met**: authored + played live across two real Brookline meetings.
+   - **9c — per-issue RSS ✓ shipped 2026-07-20.** The per-issue feed (since R1)
+     now has head-level `<link rel="alternate">` discovery on each issue page, and
+     items carry a deterministic `<pubDate>`.
+   - **9d — dark mode: declined for the reader.** Q3 resolved (below): the paper
+     stays ink-on-white; revisitable.
 
 ## 8. Architecture notes
 
@@ -352,6 +364,8 @@ plane, door-stub survival, and the fonts budget line.
 2. **(Stephen)** Do the `/app/t/*` stubs eventually drop entirely once
    civicmedia.studio hosts the tool pages, or live forever? (Default: live
    forever; stubs are cheap and citations are sacred.)
-3. **(Stephen)** Dark mode: after the paper ships, or never for the reader?
+3. **(Stephen) — RESOLVED 2026-07-20: never for the reader (revisitable).**
+   publicrecord is "ink on white," the brand pillar the paper keeps; the
+   dark/IDE look stays civicmedia / Control-Z's. Not built.
 4. **(Eng)** Whether `analysis_json` as pressed carries enough for Moments
    or the bake grows the `moments` plane — measure on the real corpus first.

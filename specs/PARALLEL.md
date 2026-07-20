@@ -157,7 +157,34 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-20 (latest) — **specs/20 P2-A: the kit plane — Publisher's reading
+- 2026-07-20 (latest) — **specs/20 P2-B/C: cross-meeting reels + per-issue RSS —
+  P2 (and the spec) finished.** A reel can now span meetings and years, still
+  client-only and living entirely in its link; per-issue feeds gained head-level
+  discovery + dated items. Dark mode declined for the reader (Q3 → "never,"
+  revisitable). Covenant-clean, v1 links byte-identical, **849 green.**
+  - **`web/static/app.js` CHANGED** — the reel model spans meetings: `REEL_VS`
+    (v1+v2), `decodeReel` returns `clips:[{pid,start,end}]` (v1 clip inherits
+    `m=`, v2 clip is `<pid>:<start>-<end>`), `reelShareURL` picks v1/v2 by span; a
+    single global `cz-reel` tray (was per-meeting) with each clip tagged by
+    meeting + a one-time migration; the viewer fetches every meeting the reel
+    touches and switches tape with `loadVideoById` at a boundary. reel.json stays
+    single-meeting (cross-meeting render is a future desk step). **Any lane
+    touching the reader's reel: the share link is now v1-or-v2 and the composer
+    key is global (`cz-reel`), not `cz-reel-<pid>`.**
+  - **`web/static/app.web.css` CHANGED** — `.rt-from`/`.rc-from`/`.rt-other`/
+    `.rn-from` (the meeting labels; tokens only).
+  - **`web/emit.py`, `web/bake.py` CHANGED (P2-C)** — `_feed_link` + `head`/`shell`
+    grow an optional `feed=` (per-issue `<link rel=alternate>` discovery, before
+    the firehose); `page_reel` lede reworded (one meeting or several); `_rfc822` +
+    `<pubDate>` on feed items (deterministic, no wall-clock). No existing plane
+    changed; the per-issue feeds already existed.
+  - **`tests/test_web_bake.py` CHANGED** — TestReel gains v1↔v2 round-trip, the
+    (meeting,kind,time) identity, and the tape-switch (loadVideoById only across
+    meetings); the P1 seek-engine + reel.json + cite proofs hold unchanged.
+  - **Deploying** — a code-only reader change (no new data plane), so image `r26`
+    + version bump `2.1.4` (SW cache) + press + Pages rsync/gunzip.
+
+- 2026-07-20 — **specs/20 P2-A: the kit plane — Publisher's reading
   half moves in.** `/app/k` pages a read-only publish kit for every meeting with
   a video and moments: the clips worth cutting (from the `moments` plane) + draft
   copy assembled from the transcript, no model. The `kit.json` is a real
