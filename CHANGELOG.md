@@ -2,6 +2,53 @@
 
 ## unreleased
 
+### specs/21 P0 — the studio: be the editor of your own paper (the footprint shell) — 2026-07-20
+
+The record shipped as a reader; specs/21 lets that reader become an editor. This
+is the shell — three modes the reader controls, and the make-loop that exists
+surfaced inside them. Built entirely by `app.js`, so the pressed pages stay
+byte-for-byte the specs/20 paper (a guard test proves no studio class is ever
+baked).
+
+- **Three modes, one footprint** — a control kept in `localStorage`
+  (`cz-studio-mode`, default **preview**), never a server:
+  - **preview** — a compact, non-blocking pill in the corner: an invitation to
+    edit, the reel count, and a way to dismiss to paper. Quiet (neutrals + deep
+    green); the resident's page stays fully clickable, on the phone and the
+    desktop both.
+  - **studio** — the full left sidebar, and the one place publicrecord's volume
+    goes *up* (the ratified palette lift, §6.1). The paper shifts to become the
+    canvas beside it; a collapse handle rails the sidebar (`cz-studio-rail`).
+  - **paper** — the studio recedes to a single tab; just the quiet specs/20
+    reader, never louder, because it *is* specs/20.
+- **The make-loop, surfaced not rebuilt** — the studio reads the same global
+  `cz-reel` tray the meeting composer fills and shows it live (a count on the
+  preview pill, a play/share/clear panel in studio), updating as you tick
+  moments across meetings, in this tab and across tabs.
+- **The palette amendment (§6.1), bounded and AA** — studio mode borrows
+  civicmedia's purple (`#a855f7`, borders/surfaces) with a darker violet
+  (`#7c3aed`) for text and text-on-purple so every studio control clears WCAG AA
+  4.5:1; bright green (`#22c55e`) as a non-text reel accent. All declared under
+  `html.cz-m-studio` only — they cannot reach the paper, the preview, or the
+  shared masthead. **Zero fuchsia.** The pressed-CSS guard admits the purples
+  *only* in a studio-scoped rule.
+- **Degrades to paper** — JavaScript off, and the reader gets the paper (the
+  studio is script-built). Narrow mobile never shifts the reading — the studio
+  becomes an overlay drawer, preview stays the same small pill. Flat vector (no
+  drop shadows), reduced-motion safe, keyboard-focus managed across mode
+  switches, tab order matches the visual order.
+- **Covenant-clean** — no account, no cookie, no server on the studio path; the
+  mode and the reel live in `localStorage` and the link. Pinned by node twins
+  (`readMode` validation, the make-path-touches-no-server proof) and a
+  paper-is-byte-clean guard.
+
+Resolved with Stephen (2026-07-20): the three-mode shape, the bounded studio
+palette lift, the naming ("your paper" / "the editor" / "edit"), and — for P1 —
+a content-addressed shared-paper store as the default share, with the link + an
+exportable `paper.json` as the covenant substrate. See `specs/21-web-studio.md`
+§6. Two adversarial-review passes (5-lens + a focused re-review of the fixes),
+every confirmed finding folded in. **855 green.**
+
 ### specs/20 P2 finished — cross-meeting reels + per-issue RSS; dark mode declined — 2026-07-20
 
 The last of P2 (§7.9), after the kit plane.

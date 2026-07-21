@@ -519,25 +519,65 @@ class TestBakeEdition(unittest.TestCase):
 
     # -- the coat: publicrecord's own face, drawn from brand/ (specs/20 §20.1) --
 
-    def test_pressed_css_bans_the_desk_and_pop_palette(self):
+    def test_pressed_css_bans_the_desk_and_scopes_the_studio_pop(self):
         """publicrecord is the quietest property: neutrals + deep green, and no
-        cream, oxblood, amber, fuchsia or purple may survive in the pressed
+        cream, oxblood, amber, or the lens hues may survive in the pressed
         stylesheet — not even as an unused variable (specs/20 §4, the law).
-        Comments are stripped first so the word 'oxblood' in a note does not
-        count; only real values do."""
+
+        The studio-mode amendment (specs/21 §6.1) is the one bounded exception:
+        the two purples it uses — #a855f7 (surfaces/borders) and #7c3aed (text at
+        AA) — may appear, but ONLY inside a rule scoped to html.cz-m-studio, so
+        they light the editor's own chrome and can never reach the paper, the
+        preview, or the shared masthead. Fuchsia is still forbidden everywhere —
+        the amendment admitted purple, it did not repeal the fuchsia line.
+        Comments are stripped first so a note does not count."""
         css = (self.out / "app.css").read_text()
         css = re.sub(r"/\*.*?\*/", "", css, flags=re.S).lower()
         FORBIDDEN = [
             "#f3f0e7", "#8e4a55", "#a97a16", "#a97e22",   # cream, oxblood, amber
-            "#d946ef", "#a855f7",                          # fuchsia, purple
+            "#d946ef",                                     # fuchsia — still nowhere
             "#7e5b8e", "#c77ba6", "#b0542d", "#3fa9d0",    # the lens hues
             "--cream", "--memory", "--amber", "--forest", "--ide-",
         ]
         for bad in FORBIDDEN:
             self.assertNotIn(bad, css, f"forbidden token {bad!r} in the pressed CSS")
+        # the studio purples are admitted, but every occurrence must be
+        # studio-mode-scoped: the governing selector (the text opening the rule it
+        # sits in) names the mode.
+        for purple in ("#a855f7", "#7c3aed"):
+            at = -1
+            while (at := css.find(purple, at + 1)) != -1:
+                open_brace = css.rfind("{", 0, at)
+                selector = css[css.rfind("}", 0, open_brace) + 1:open_brace]
+                self.assertIn("cz-m-studio", selector,
+                              f"purple {purple!r} appears outside a studio-mode "
+                              f"rule (selector {selector.strip()!r}) — it must "
+                              f"never reach the paper (specs/21 §6.1)")
+        # the shared :root token block stays pure — no studio accent leaks upward
+        root = css[css.index(":root{"):css.index("}", css.index(":root{"))]
+        for pop in ("#a855f7", "#7c3aed", "#d946ef", "fuchsia", "purple"):
+            self.assertNotIn(pop, root, f"{pop!r} leaked into the shared :root")
         # and the record's own accents ARE there
         for good in ("#052e16", "#059669", "#f8fafc"):
             self.assertIn(good, css, f"{good} (brand) missing from the pressed CSS")
+
+    def test_the_studio_is_script_built_never_baked(self):
+        """specs/21 P0: the three-mode studio is added by app.js at runtime, so
+        the pressed pages stay byte-for-byte the specs/20 paper. No studio class
+        and no mode class may appear in any baked stub — a reader with app.js
+        removed gets exactly the reader, which is what 'paper mode never gets
+        louder' and 'JS-off degrades to paper' require. The studio lives only in
+        the shipped script and stylesheet."""
+        MARKERS = ("cz-studio", "cz-m-", "cz-mode", "cz-panel", "cz-tab",
+                   "cz-pill", "cz-enter")
+        for stub in self.out.rglob("index.html"):
+            html = stub.read_text()
+            for m in MARKERS:
+                self.assertNotIn(m, html,
+                    f"{m!r} was baked into {stub.relative_to(self.out)} — the "
+                    f"studio must be built by app.js, not pressed into the paper")
+        self.assertIn("cz-m-studio", (self.out / "app.js").read_text())
+        self.assertIn("cz-m-studio", (self.out / "app.css").read_text())
 
     def test_pressed_css_draws_its_tokens_from_brand(self):
         """The drift-guard, repointed at brand/ (specs/20 §8): the pressed
@@ -1739,3 +1779,75 @@ class TestReel(unittest.TestCase):
         r = self.node(body)
         self.assertEqual(r.returncode, 0,
                          f"clip identity is wrong:\n{r.stdout}{r.stderr}")
+
+
+class TestStudioFootprint(unittest.TestCase):
+    """specs/21 P0: the studio's mode state is the reader's own — localStorage and
+    nothing else, defaulting to preview, validated on the way in, and NEVER a
+    server call. Lifted from app.js and executed in node, the same treatment
+    resolve() and decodeReel() get, and for the same reason."""
+
+    JS = (REPO / "web" / "static" / "app.js").read_text()
+
+    def node(self, body):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not available")
+        return subprocess.run([node, "-e", body], capture_output=True, text=True)
+
+    def lift(self, pattern):
+        m = re.search(pattern, self.JS, re.S)
+        self.assertTrue(m, f"{pattern!r} not found in the reader — did it move?")
+        return m.group(0)
+
+    def test_read_mode_defaults_to_preview_and_validates(self):
+        """Absent, empty, or unknown → preview (the quiet default the resident
+        gets). Only an exact one of the three modes is honoured — no coercion, so
+        a corrupted value can never silently open the loud studio."""
+        cases = [
+            [None, "preview"], ["preview", "preview"], ["studio", "studio"],
+            ["paper", "paper"], ["", "preview"], ["cockpit", "preview"],
+            ["STUDIO", "preview"], [" studio", "preview"],
+        ]
+        body = "\n".join([
+            "let STORE = null;",
+            "const localStorage = { getItem: () => STORE };",
+            self.lift(r'const MODE_KEY = .+?;'),
+            self.lift(r"const MODES = .+?;"),
+            self.lift(r'const readMode = .+?catch \{ return "preview"; \} \};'),
+            "const CASES = " + json.dumps(cases) + ";",
+            "let bad = 0;",
+            "for (const [stored, want] of CASES) {",
+            "  STORE = stored;",
+            "  const got = readMode();",
+            "  if (got !== want) { console.log('FAIL', JSON.stringify(stored), '->', got, 'want', want); bad++; }",
+            "}",
+            "process.exit(bad ? 1 : 0);",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"readMode is wrong:\n{r.stdout}{r.stderr}")
+
+    def test_the_studio_path_touches_no_server(self):
+        """The make path stays client-only: the studio's own functions read and
+        write localStorage and compose pure links, and never reach a network —
+        the covenant, and a test that proves it (specs/21 §5)."""
+        block = self.JS[self.JS.index("THE STUDIO — the three-mode footprint"):
+                        self.JS.index("SCOPE: the town")]
+        for forbidden in ("fetch(", "XMLHttpRequest", "sendBeacon", "/api/",
+                          "askStudio", "document.cookie", "new Image("):
+            self.assertNotIn(forbidden, block,
+                             f"the studio reached for {forbidden!r} — the make "
+                             f"path must never touch a server (specs/21 §5)")
+        # the mode is stored in localStorage, the same private preference the town
+        # scope keeps — no cookie, no account, no sync
+        self.assertIn("localStorage.setItem(MODE_KEY", block)
+
+    def test_the_studio_markers_are_present(self):
+        """A cheap drift guard: the pieces the stylesheet and the P0 contract lean
+        on are present under their expected names."""
+        for token in ("function initStudio(", "function markMode(",
+                      'classList.toggle("cz-m-"', 'const MODE_KEY = "cz-studio-mode"',
+                      "function refreshReelSummary(", "function setMode("):
+            self.assertIn(token, self.JS, f"{token!r} drifted in app.js")
