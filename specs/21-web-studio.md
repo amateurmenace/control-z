@@ -1,12 +1,13 @@
 # 21 — Be the editor of your own paper: the web studio
 
-**Status:** v0.2 · **Stage:** **spec — key decisions resolved with Stephen; ready
-to firm §7 and build P0** · **Owner:** Stephen Walter (Weird Machine) ·
+**Status:** v0.3 · **Stage:** **spec — all §6 decisions resolved with Stephen
+(2026-07-20); §7 firm; building P0** · **Owner:** Stephen Walter (Weird Machine) ·
 **Related:** specs/20 (the newspaper — the reader this builds on and keeps as a
 *mode*), `.claude/rules/branding.md` (the brand law + the audience split; the
-studio-mode palette is a live amendment, §6), specs/17 §6.2 (the covenant: if the
-servers vanish, the record still reads *and composes*), the P1/P2 make-loop
-already shipped (reel composer, cross-meeting reels, the kit plane).
+studio-mode palette is now a *ratified* amendment, §6.1), specs/17 §6.2 (the
+covenant: if the servers vanish, the record still reads *and composes*), the
+P1/P2 make-loop already shipped (reel composer, cross-meeting reels, the kit
+plane).
 
 > The newspaper (specs/20) gives you the record's front page. **This gives you
 > yours.** The record is raw material; the reader becomes the editor — curating a
@@ -80,35 +81,74 @@ what touches media/local compute (rendering video, the finishing tools), gated
 honestly with a real download. specs/17 §6.2 still holds: if the servers vanish,
 the record still reads *and composes*.
 
-## 6. Decisions still open — settle with Stephen before building the surface
+## 6. Decisions — resolved with Stephen (2026-07-20)
 
-1. **The studio-mode palette (a branding amendment).** "More colorful" studio
-   mode wants energy beyond the record's neutrals + deep green. Does it borrow
-   civicmedia/Control-Z's pop (purple / bright green)? publicrecord's law is
-   **zero fuchsia** — loosening it, even only in studio mode, is a real amendment.
-   Recommended framing: **paper mode stays strictly quiet (untouched); the studio
-   mode earns a bounded, deliberate palette lift** — but how far, and which
-   accents, is Stephen's sign-off.
-2. **How a shared curated paper travels without accounts.** Options: URL-encode a
-   compact edition (covenant-pure, size-limited); an exportable **paper file**
-   (like `reel.json`, the desk could open it); or a content-addressed, read-only
-   shared-paper store (like the edition bucket — no accounts, no tracking, but a
-   server holds user content — a covenant nuance). Likely a mix; decide the
-   default.
-3. **Naming.** "your edition," "your paper," the verb for curating — brand's call.
+1. **The studio-mode palette — RATIFIED amendment.** Studio mode borrows
+   civicmedia/Control-Z's pop: **purple `#a855f7` (`--pop-purple`) + bright green
+   `#22c55e` (`--green-bright`)** as bounded accents on the *studio chrome only*
+   (the studio frame, its controls, active/live states). Deep green stays the
+   primary. The bounds are load-bearing and testable:
+   - **No fuchsia** ever — the `#d946ef` line holds; the amendment adds two hues,
+     not a repeal.
+   - **Paper mode is untouched** — the studio accents never appear in paper mode,
+     nor in the masthead/folio/section-nav that every mode shares.
+   - **A shared/baked paper carries none of it** — a curated paper renders in the
+     quiet paper palette wherever it is read, so the volume is the *editor's*
+     choice in *their* studio, never imposed on a reader.
+   This is the brand resolution the audience split predicts: in studio mode
+   publicrecord becomes a *tool* (the making half), and the tool-brand's accents
+   are the honest face for it. `.claude/rules/branding.md` §"Volume rules" is
+   amended accordingly; the amendment is scoped to studio mode by construction.
+2. **How a shared curated paper travels — a content-addressed store, with the
+   link + file as the covenant substrate.** The default share is a
+   **content-addressed, read-only shared-paper store**: a paper is PUT by the
+   hash of its own bytes, so the URL *is* the content address — idempotent (same
+   paper → same URL), no accounts, no reader identity, no tracking, size-capped,
+   read-only on GET, hosted like the edition bucket (same project, same bill).
+   Stephen accepted the covenant nuance (a server now holds user-authored
+   content) knowingly. **The covenant is kept whole by construction:** the store
+   is *additive*, never load-bearing. Every paper also lives in `localStorage`,
+   in a URL-encoded compact form (for papers small enough), and in an exportable
+   **`paper.json`** file (which the desk can open, like `reel.json`). So
+   specs/17 §6.2 still holds exactly: if the servers vanish, the record still
+   reads *and composes* — only the short-URL convenience is lost, and the file +
+   link keep every paper alive and shareable. The write path is a genuine
+   infra + `$100`-budget change; it lands in **P1** behind a checkpoint with
+   Stephen, and P0 never touches it.
+3. **Naming — "your paper" / "the editor" / "edit."** The artifact a user makes
+   is **your paper**; the user is **the editor**; the verb is **edit**. This
+   pairs with paper-mode and the spec's own title, and it deliberately avoids
+   "edition," which already means the pressed record (`edition_date`, "edition
+   v2.1.5") and would collide. The studio is the *room*; the paper is the *thing*
+   made in it.
 
-## 7. Phased sketch (firm this up first)
+## 7. Phasing — firm (2026-07-20)
 
-- **P0 — the footprint shell.** Preview / studio / paper modes + the sidebar
-  (default-on, hide/expand). Surface the existing make loop (reels) inside the
-  studio. **Paper mode = the specs/20 reader, untouched.** JS-off + mobile degrade
-  honestly (paper mode is the fallback).
-- **P1 — the curated paper (document model).** Assemble a page from the blocks
-  that already exist (stories + reels); arrange, title, share via link + export.
-  "Edit your own front page."
-- **P2 — data viz + analyses.** Chart blocks over the record's planes; note/analysis
-  blocks; a curated paper carries charts + text, not just stories + reels.
-- **P3 — deepen.** Templates, more block types, example / featured editions as a
+One deploy per phase; the covenant (§5) and the bounds of §6 hold on every one.
+
+- **P0 — the footprint shell.** The **preview / studio / paper** modes + the
+  **sidebar** (default-on, hide/expand), as pure client state on top of the
+  existing paper. The mode is a class on the shell and a `localStorage`
+  preference; **paper mode is the specs/20 reader byte-for-byte untouched**
+  (the `main.paper` markup does not move, and no studio hue reaches it). Studio
+  mode wears the ratified accents (§6.1). The one make-loop that exists — the
+  reel composer and the `/app/r` viewer — is *surfaced* inside the studio, not
+  rebuilt. **JS-off and narrow mobile degrade to paper** (the shell renders as
+  today; the studio chrome is script-built and reduced-motion-aware). No new
+  plane, no new page, no server touched.
+- **P1 — your paper (the document model) + the share store.** A **curated paper**
+  as a client-side document of blocks (stories + reels to start); arrange, title,
+  **edit**, and share. Share travels three ways (§6.2): `localStorage`, a
+  URL-encoded compact form, and an exportable **`paper.json`**; the
+  content-addressed **shared-paper store** is added as the default short-URL
+  share **behind a checkpoint with Stephen** (it is the one infra/budget step).
+  Encode/decode is pinned by node twins, like the reel machinery.
+- **P2 — data viz + analyses.** Chart blocks computed **client-side over the
+  planes** (`analytics.json`, `graph.json`, votes/framing in `meetings/*.json`) —
+  inline SVG within the strict CSP, each with a table twin (the a11y rule the
+  baked charts already keep); note/analysis blocks. A curated paper carries
+  charts + text, not just stories + reels.
+- **P3 — deepen.** Templates, more block types, example / featured papers as a
   front door, polish.
 
 ## 8. Non-goals
