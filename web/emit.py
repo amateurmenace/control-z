@@ -890,6 +890,51 @@ def page_reel(manifest, base):
                  version=manifest["version"])
 
 
+def page_paper(manifest, base):
+    """Your paper — /app/p (specs/21 §7, P1). A curated paper lives entirely
+    outside the server: in its link (?v=1&t=<title>&b=<blocks>), in the
+    browser's own draft, or — when the editor asked for a short link — at a
+    content-addressed id (?p=<id>) the store serves back read-only. This page
+    is the same static stub for every paper; app.js decodes whichever of those
+    arrived, fetches the record's own planes for the stories and clips it
+    references, and renders the paper in the quiet reading palette. The studio
+    hue never reaches a rendered paper — the volume was the editor's, in their
+    studio, and it stays there.
+
+    JS-off, a paper cannot decode (it lives in the query string or the
+    browser, which a static page cannot read) — so the honest fallback says
+    exactly that and sends the reader to the record itself, where every story
+    and moment reads in place."""
+    body = f"""
+  <section class="paper-page" id="paperpage">
+    <a class="back" href="/app/">← the record</a>
+    <h1>A paper, edited from the record</h1>
+    <p class="presslede">Everyone gets the record; an editor makes it theirs.
+      A <b>paper</b> is a front page somebody curated — the stories, reels and
+      moments of the public record they judged worth your attention, arranged
+      and titled. Every block points back into the record itself, so nothing
+      here is asserted that the record cannot show you.</p>
+    <div class="paperbody" id="paperbody">
+      <p class="hint">Reading a paper needs JavaScript — the paper lives in
+        the link that brought you here (or in your own browser), not on any
+        page a server could print. With JavaScript off, open <a
+        href="/app/">the record</a> or <a href="/app/s">search it</a> — every
+        story a paper could cite reads there in full.</p>
+    </div>
+    <p class="disclose">A paper is its editor's selection, not the record's
+      judgement — the full record is one link up. Papers travel as links and
+      files; a short link is served from a content-addressed store that knows
+      nothing about who reads it.</p>
+  </section>
+"""
+    return shell("Your paper — publicrecord.studio",
+                 "A curated front page of the public record — stories, reels "
+                 "and moments an editor arranged; every block points back "
+                 "into the record.",
+                 f"{base}/app/p", body, "", manifest,
+                 version=manifest["version"])
+
+
 def _kit_card(k):
     """A kit in the index — a meeting's still + deck, linking to its kit."""
     meta = k.get("meta") or {}
@@ -1678,6 +1723,11 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
     (out / "r" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "r" / "index.html").write_text(
         page_reel(manifest, base), encoding="utf-8")
+    # your paper — one static stub; a curated paper lives in its link, the
+    # browser's draft, or a content-addressed id (specs/21 P1)
+    (out / "p" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "p" / "index.html").write_text(
+        page_paper(manifest, base), encoding="utf-8")
     # the kits — Publisher's reading half (specs/20 §6, §7.9 P2). An index, and
     # a read-only page per meeting whose kit the bake pressed. The downloadable
     # kit.json is the plane the bake already wrote at /app/kits/<slug>.json.

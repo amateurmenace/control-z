@@ -2,6 +2,52 @@
 
 ## unreleased
 
+### specs/21 P1 — your paper: the curated document + the share store — 2026-07-21
+
+The studio's making surface arrives. A reader curates their **own paper** — a
+document of blocks: stories (a meeting, an issue) and reels — titles it,
+arranges it, and shares it. The paper lives the way a reel lives: in this
+browser (the draft), in its link (the whole paper, URL-encoded), and in a
+`paper.json` file; a **content-addressed share store** adds an optional short
+link. Edition **v2.1.7**, image **r29**.
+
+- **The document model** (`publicrecord.paper/1`) — client-side, one
+  localStorage draft (`cz-paper`). Blocks are refs into the record; the draft
+  carries ride-along display meta, but every traveling form strips to refs, so
+  a paper can never assert a title the record's planes would not.
+- **The panel becomes the editor** — the studio sidebar's "your paper" section
+  grows a title field, the block list with ↑ ↓ ✕ arrange controls, context
+  adds ("＋ this meeting" / "＋ this issue" on their pages, "＋ your reel" when
+  the tray holds clips — a snapshot, so the tray keeps rolling), and the share
+  row (open / copy link / paper.json / short link / clear). Ticking a moment
+  updates the reel count *and* the paper panel live.
+- **`/app/p` — one static stub for every paper** (the `/app/r` pattern; an
+  `emit_stubs` change shared by bake and press). The renderer decodes
+  whichever arrived — `?p=<id>` (the store) → the link form (`?v=1&t=…&b=…`) →
+  the browser's draft — enriches every block from the record's own planes, and
+  renders in the **paper palette**: whatever mode the editor liked, a rendered
+  paper carries zero studio hue (computed-style-verified). Stories whose
+  meeting or issue left the pressing say so in place; reel blocks cite like
+  `/app/r` and play there. JS-off, the stub says honestly what it needs.
+- **Every decoder keeps decodeReel's law** — malformed input degrades to fewer
+  blocks, never a throw; a query that decodes to *nothing* says "this link
+  doesn't carry a readable paper" rather than mislabeling the reader's own
+  draft. Node twins pin the round-trip, the caps, the hostile-input table.
+- **The share store (§6.2, Stephen-approved)** — `POST /api/papers` on
+  record-api validates strictly (the only free text is the title, 200 chars,
+  control-char-free; everything else exact-shaped refs), canonicalizes
+  server-side (times snapped to the tenth-second grid, whole seconds
+  collapsed), and writes once to a private bucket at the SHA-256 of the
+  paper's own bytes — idempotent, read-only on GET, immutable-cacheable, no
+  identity anywhere. No list endpoint, no delete API (takedown is a steward's
+  hand, OPERATING §6). Unset bucket → honest 503; the client fails soft to
+  the full link. The store is additive, never load-bearing: servers vanish,
+  every paper still reads and travels.
+- Tests: 16 store-contract tests (canonical form, refusals, idempotence,
+  endpoints), 7 paper node-twin tests, the pressed-stub test; the reader's
+  API-door guard now names the sanctioned set (search + the store's two
+  touches, each timed and caught).
+
 ### specs/21 P0 — the studio: be the editor of your own paper (the footprint shell) — 2026-07-20
 
 The record shipped as a reader; specs/21 lets that reader become an editor. This

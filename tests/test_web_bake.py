@@ -579,6 +579,23 @@ class TestBakeEdition(unittest.TestCase):
         self.assertIn("cz-m-studio", (self.out / "app.js").read_text())
         self.assertIn("cz-m-studio", (self.out / "app.css").read_text())
 
+    def test_your_paper_stub_is_pressed(self):
+        """specs/21 P1: /app/p is one static stub for every paper (the /app/r
+        pattern) — the paper itself arrives in the link, the browser's draft,
+        or a store id, so the stub must say honestly what JS-off cannot do and
+        point at the record instead. And it stays paper-quiet: no studio class
+        is baked (the guard above already sweeps it), and the rendered-paper
+        rule — no studio hue — is CSS-scoped, so this page carries none."""
+        stub = (self.out / "p" / "index.html").read_text()
+        self.assertIn("A paper, edited from the record", stub)
+        self.assertIn("needs JavaScript", stub)
+        self.assertIn('href="/app/"', stub)          # the honest fallback
+        self.assertIn('id="paperbody"', stub)        # the renderer's mount
+        # the paper's own classes ship in the stylesheet the stub loads
+        css = (self.out / "app.css").read_text()
+        for cls in (".phead", ".ptitle", ".pb-gone", ".cz-ptitle", ".cz-prow"):
+            self.assertIn(cls, css, f"{cls} missing from the pressed CSS")
+
     def test_pressed_css_draws_its_tokens_from_brand(self):
         """The drift-guard, repointed at brand/ (specs/20 §8): the pressed
         :root carries the brand's own values, byte-faithful — the accent is
@@ -771,7 +788,10 @@ class TestBakeEdition(unittest.TestCase):
         meeting's own plane under /app/, and none of the reel code reaches the
         Studio helper."""
         js = (REPO / "web" / "static" / "app.js").read_text()
-        block = js[js.index("THE REEL — compose here"):js.index("SEARCH ==")]
+        # the reel path ends where the paper's own section (with its own
+        # covenant test, TestPaper) begins
+        block = js[js.index("THE REEL — compose here"):
+                   js.index("YOUR PAPER — the curated document")]
         for forbidden in ("askStudio", "API +", "/api/", "http://", "run.app"):
             self.assertNotIn(forbidden, block,
                              f"the reel path reached for {forbidden!r}")
@@ -1006,13 +1026,28 @@ class TestBakeEdition(unittest.TestCase):
         self.assertNotIn("run.app", js)
         self.assertNotIn("https://record-api", js)
 
-        # Exactly one outbound path, and it is guarded. Any other `/api/`
-        # would be a second door nobody wrote a fallback for.
+        # Exactly the sanctioned outbound paths, every one guarded. The search
+        # door is askStudio; specs/21 §6.2 added the paper store's two touches
+        # — a POST behind the explicit "short link" button and a GET for `?p=`
+        # addresses — both additive and both fail-soft (losing the store loses
+        # short links, never a paper). Any other `/api/` would be a door
+        # nobody wrote a fallback for.
         self.assertEqual(js.count("API + path"), 1)
-        self.assertEqual(js.count("/api/"), 1, "a second API call appeared")
+        self.assertEqual(js.count("/api/papers"), 2,
+                         "the paper store's two touches drifted")
+        self.assertEqual(js.count("/api/"), 3, "an unsanctioned API call appeared")
         ask = re.search(r"  async function askStudio\(path\) \{.+?\n  \}",
                         js, re.S).group(0)
         self.assertIn("if (!API || API_DOWN) return null;", ask)
+        # both store touches are timed, caught, and no-API-safe — executing
+        # their fallbacks is TestPaper's and the browser's job; the shape is
+        # pinned here beside the door count
+        for fn in ("paperShortLink", "fetchStoredPaper"):
+            src = re.search(rf"  async function {fn}\(.*?\n  \}}", js, re.S)
+            self.assertTrue(src, f"{fn} moved")
+            for guard in ("API_TIMEOUT_MS", "catch", "if (!API)"):
+                self.assertIn(guard, src.group(0),
+                              f"{fn} lost its {guard!r} guard")
 
         # Every edition plane the reader reads is a path under /app/.
         for plane in re.findall(r"getJSON\(`([^`]+)`", js):
@@ -1779,6 +1814,226 @@ class TestReel(unittest.TestCase):
         r = self.node(body)
         self.assertEqual(r.returncode, 0,
                          f"clip identity is wrong:\n{r.stdout}{r.stderr}")
+
+
+class TestPaper(unittest.TestCase):
+    """specs/21 P1: the curated paper's client machinery, executed in node.
+    A paper's link and its paper.json are covenants with whoever receives
+    them — the codec must round-trip exactly, and a link that lost a
+    character in an email must degrade to fewer blocks, never a throw
+    (decodeReel's law, inherited by every decoder)."""
+
+    JS = (REPO / "web" / "static" / "app.js").read_text()
+    PRELUDE = "\n".join([
+        'const BASE = "/app";',
+        'const location = { origin: "https://publicrecord.studio" };',
+    ])
+
+    def node(self, body):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not available")
+        return subprocess.run([node, "-e", body], capture_output=True, text=True)
+
+    def lift(self, pattern):
+        m = re.search(pattern, self.JS, re.S)
+        self.assertTrue(m, f"{pattern!r} not found in the reader — did it move?")
+        return m.group(0)
+
+    def helpers(self):
+        return "\n".join([
+            self.lift(r"const hms = t => \{.+?\};"),
+            self.lift(r"const REEL_V = .+?;"),
+            self.lift(r"const REEL_VS = .+?;"),
+            self.lift(r"const r1 = .+?;"),
+            self.lift(r"const clipLen = .+?;"),
+            self.lift(r"const reelRuntime = .+?;"),
+            self.lift(r"const encodeClips = .+?;"),
+            self.lift(r"const encodeClipsX = .+?;"),
+            self.lift(r"function shareURL\(pid, clips\) \{.+?\n  \}"),
+            self.lift(r"function reelShareURL\(clips\) \{.+?\n  \}"),
+            self.lift(r"const reelPids = .+?;"),
+            self.lift(r"const PAPER_V = .+?;"),
+            self.lift(r"const PAPER_VS = .+?;"),
+            self.lift(r"const PAPER_TITLE_MAX = .+?;"),
+            self.lift(r"const PAPER_MAX_BLOCKS = .+?;"),
+            self.lift(r"const PAPER_MAX_CLIPS = .+?;"),
+            self.lift(r"const PAPER_REF = .+?;"),
+            self.lift(r"function normalizePaper\(p\) \{.+?\n  \}"),
+            self.lift(r"function normalizeBlock\(b\) \{.+?\n  \}"),
+            self.lift(r"function portablePaper\(p\) \{.+?\n  \}"),
+            self.lift(r"function encodePaperQS\(p\) \{.+?\n  \}"),
+            self.lift(r"function paperShareURL\(p\) \{.+?\n  \}"),
+            self.lift(r"function decodePaper\(search\) \{.+?\n  \}"),
+            self.lift(r"function paperJSON\(p\) \{.+?\n  \}"),
+        ])
+
+    DRAFT = ('{ title: "Overrides, watched", blocks: ['
+             '{kind:"story",story:"meeting",pid:"vid1",title:"Select Board",'
+             'date:"2026-03-10",town:"Testville"},'
+             '{kind:"story",story:"issue",slug:"budget-override",'
+             'name:"budget override",n_meetings:2},'
+             '{kind:"reel",clips:[{pid:"vid1",start:900.2,end:907.3,'
+             'kind:"vote",quote:"the override passes"},'
+             '{pid:"vid2",start:12,end:24}]}]}')
+
+    def test_the_link_round_trips_the_whole_paper(self):
+        """portable(decode(encode(p))) === portable(p): the link carries the
+        paper exactly — title and all three block kinds — and carries no
+        ride-along meta (a paper may not assert what the record's planes
+        would not)."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            f"const draft = {self.DRAFT};",
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const url = paperShareURL(draft);",
+            "if (url.indexOf('https://publicrecord.studio/app/p?') !== 0) fail('url '+url);",
+            "if (url.includes('+') || url.includes(' ')) fail('unsafe chars in '+url);",
+            "if (url.includes('Select')) fail('ride-along meta leaked into the link');",
+            "const back = decodePaper(url.slice(url.indexOf('?')));",
+            "if (back.v !== '1') fail('v='+back.v);",
+            "if (back.id !== '') fail('id='+back.id);",
+            "if (back.title !== 'Overrides, watched') fail('title='+back.title);",
+            "const a = JSON.stringify(portablePaper(draft));",
+            "const b = JSON.stringify(portablePaper({title: back.title, blocks: back.blocks}));",
+            "if (a !== b) fail('round-trip drifted:\\n'+a+'\\n'+b);",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"paper round-trip failed:\n{r.stdout}{r.stderr}")
+
+    def test_a_mangled_link_degrades_and_never_throws(self):
+        """Hostile queries → fewer blocks, never an exception. The exact table
+        a forwarding email client would write."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const CASES = [",
+            "  ['?v=1&b=,,,,', 0],",
+            "  ['?v=1&b=m.', 0],",
+            "  ['?v=1&b=x.abc', 0],",
+            "  ['?v=1&b=m.has%20space', 0],",
+            "  ['?v=1&b=m.%E0%A4%A', 0],",          # bad URI escape → dropped
+            "  ['?v=1&b=r.', 0],",
+            "  ['?v=1&b=r.vid1:5-3', 0],",           # end <= start
+            "  ['?v=1&b=r.vid1:9-x', 0],",
+            "  ['?v=1&b=r.vid1:-2-4', 0],",          # negative start
+            "  ['?v=1&b=m.vid1,garbage,i.slug-ok,r.vid1:1-2~junk', 3],",
+            "  ['', 0],",
+            "  [null, 0],",
+            "];",
+            "for (const [q, want] of CASES) {",
+            "  let got;",
+            "  try { got = decodePaper(q).blocks.length; }",
+            "  catch (e) { fail('THREW on '+JSON.stringify(q)+': '+e); }",
+            "  if (got !== want) fail(JSON.stringify(q)+' -> '+got+' blocks, want '+want);",
+            "}",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"decodePaper is fragile:\n{r.stdout}{r.stderr}")
+
+    def test_normalize_is_total_and_caps_hold(self):
+        """Whatever localStorage or a stored paper hands over leaves as a
+        valid paper: junk drops, the title truncates at its cap, block and
+        clip counts clamp."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "for (const junk of [null, 7, 'hi', [], {title: 9},",
+            "     {blocks: 'no'}, {title: null, blocks: [null, 3, {}, {kind:'x'}]}]) {",
+            "  const p = normalizePaper(junk);",
+            "  if (p.title !== '' || p.blocks.length !== 0)",
+            "    fail('junk survived: '+JSON.stringify(junk)+' -> '+JSON.stringify(p));",
+            "}",
+            "const long = normalizePaper({title: 'x'.repeat(999), blocks: []});",
+            "if (long.title.length !== PAPER_TITLE_MAX) fail('title cap '+long.title.length);",
+            "const many = normalizePaper({blocks: Array.from({length: 99},",
+            "  (_, i) => ({kind:'story',story:'meeting',pid:'m'+i}))});",
+            "if (many.blocks.length !== PAPER_MAX_BLOCKS) fail('block cap '+many.blocks.length);",
+            "const fat = normalizeBlock({kind:'reel', clips: Array.from({length: 999},",
+            "  (_, i) => ({pid:'vid1', start:i, end:i+1}))});",
+            "if (fat.clips.length !== PAPER_MAX_CLIPS) fail('clip cap '+fat.clips.length);",
+            "const meta = normalizeBlock({kind:'story',story:'meeting',pid:'vid1',",
+            "  title:'kept', evil:'<script>'});",
+            "if (meta.title !== 'kept') fail('ride-along meta lost');",
+            "if ('evil' in meta) fail('unknown keys must not survive normalize');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"normalizePaper is leaky:\n{r.stdout}{r.stderr}")
+
+    def test_a_store_address_decodes_as_an_id_and_nothing_else(self):
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const good = decodePaper('?p=0123456789abcdef');",
+            "if (good.id !== '0123456789abcdef') fail('id lost: '+good.id);",
+            "if (good.blocks.length) fail('an id link carries no blocks');",
+            "for (const bad of ['?p=xyz', '?p=0123456789ABCDEF', '?p=0123',",
+            "     '?p=0123456789abcdef0']) {",
+            "  if (decodePaper(bad).id !== '') fail('accepted '+bad);",
+            "}",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"store-id decode wrong:\n{r.stdout}{r.stderr}")
+
+    def test_paper_json_is_the_receipt_the_desk_can_trust(self):
+        """schema pinned, the share link included, every story with its record
+        URL, every reel with its play link (v1 for one meeting — byte-shaped
+        like every reel link already in the wild)."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            f"const draft = {self.DRAFT};",
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const j = paperJSON(draft);",
+            "if (j.schema !== 'publicrecord.paper/1') fail('schema '+j.schema);",
+            "if (j.share !== paperShareURL(draft)) fail('share drifted');",
+            "if (j.blocks.length !== 3) fail('blocks '+j.blocks.length);",
+            "if (j.blocks[0].url !== 'https://publicrecord.studio/app/m/vid1') fail('story url '+j.blocks[0].url);",
+            "if (j.blocks[1].url !== 'https://publicrecord.studio/app/i/budget-override') fail('issue url');",
+            "const play = j.blocks[2].play;",
+            "if (!play.includes('/app/r?v=2&c=vid1')) fail('cross-meeting reel must be v2: '+play);",
+            "const one = paperJSON({title:'', blocks:[{kind:'reel',",
+            "  clips:[{pid:'vid1',start:1,end:2},{pid:'vid1',start:5,end:9}]}]});",
+            "if (!one.blocks[0].play.includes('/app/r?v=1&m=vid1')) fail('one-meeting reel must stay v1: '+one.blocks[0].play);",
+            "if (one.blocks[0].runtime !== 5) fail('runtime '+one.blocks[0].runtime);",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"paperJSON malformed:\n{r.stdout}{r.stderr}")
+
+    def test_the_paper_make_path_touches_no_api(self):
+        """The covenant, extended to P1 (specs/21 §5): composing, arranging,
+        encoding and exporting a paper read localStorage, strings and the
+        record's own static planes — never the API. The store appears only
+        past the PART 2 marker, behind the explicit share actions."""
+        block = self.JS[self.JS.index("YOUR PAPER — the curated document"):
+                        self.JS.index("PART 2: SHARING")]
+        for forbidden in ("fetch(", "XMLHttpRequest", "sendBeacon", "/api/",
+                          "askStudio", "API_TIMEOUT", "document.cookie",
+                          "new Image("):
+            self.assertNotIn(forbidden, block,
+                             f"the paper's make path reached for {forbidden!r} "
+                             f"— composing must not touch a server (specs/21 §5)")
+        # and the draft is localStorage, the same private preference the mode is
+        self.assertIn("localStorage.setItem(PAPER_KEY", block)
+
+    def test_the_paper_markers_are_present(self):
+        """The drift guard, extended: the pieces the stylesheet, the stub and
+        the studio panel lean on keep their names."""
+        for token in ("function paper(", 'const PAPER_KEY = "cz-paper"',
+                      "function refreshPaperSummary(",
+                      "function paperShortLink(", "function decodePaper(",
+                      'test(path)) paper()'):
+            self.assertIn(token, self.JS, f"{token!r} drifted in app.js")
 
 
 class TestStudioFootprint(unittest.TestCase):

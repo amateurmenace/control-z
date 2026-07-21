@@ -211,6 +211,32 @@ allow quietly.
 
 ---
 
+### The shared-paper store (specs/21 §6.2)
+
+One-time provisioning, done alongside the r29 deploy. A private bucket the
+API writes once and serves read-only; papers land at `p/<id>.json` where the
+id is the SHA-256 of the paper's own canonical bytes (record/papers.py — the
+canonical form and the abuse posture live there):
+
+```bash
+gcloud storage buckets create gs://publicrecord-papers \
+  --location=us-east1 --uniform-bucket-level-access \
+  --project=publicrecord-studio
+# the API's runtime service account needs object read/create on it
+gcloud storage buckets add-iam-policy-binding gs://publicrecord-papers \
+  --member="serviceAccount:$(gcloud run services describe record-api \
+    --region=us-east1 --format='value(spec.template.spec.serviceAccountName)')" \
+  --role=roles/storage.objectAdmin
+gcloud run services update record-api --region=us-east1 \
+  --update-env-vars RECORD_PAPERS_BUCKET=publicrecord-papers
+```
+
+Unset `RECORD_PAPERS_BUCKET` and the endpoints answer 503 with the covenant
+line — readers fall back to full links and `paper.json` files, losing only
+the shortness. The bucket is not the edition bucket on purpose: the edition
+is the record's own pressing; the papers are readers' documents, and the two
+must never sync, sweep, or bill as one thing.
+
 ## 6. When something is broken
 
 ### The API returns 503 and says the corpus is unreachable
@@ -250,6 +276,20 @@ whether titles are landing in `excluded` (a rule is too broad) or `unmatched`
 (no rule names that body). A poll that files zero and reports zero unmatched
 means the feed itself returned nothing; check the channel id.
 
+### A shared paper needs to come down
+
+There is deliberately no delete API — takedown is a steward's hand, not an
+endpoint someone can find. The only free text a stored paper can carry is
+its title (everything else is refs into the record), so this should be rare:
+
+```bash
+gcloud storage rm gs://publicrecord-papers/p/<id>.json
+```
+
+The short link then answers an honest 404 ("no paper at this address").
+Whoever held the paper still holds it — their draft, full link and
+paper.json are theirs, and the record itself never changed.
+
 ### The edition looks stale
 
 `GET /api/freshness` returns the corpus fingerprint. If it differs from the one
@@ -268,6 +308,7 @@ correctly shows an unchanged date.
 | Cloud Run `record-api` | $0–5 | min-instances 0; idle costs nothing |
 | Cloud Run jobs | ~$0 | seconds per run |
 | GCS + egress | $1–5 | |
+| GCS `publicrecord-papers` | ~$0 | shared papers are ~2 KB each; pennies at thousands |
 | Gemini embeddings | <$1 one-time, then pennies | see below |
 | Artifact Registry | <$1 | |
 | **Project budget alert** | **$100** | 50 / 90 / 100%, this project only |

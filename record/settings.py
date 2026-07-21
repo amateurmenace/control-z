@@ -98,6 +98,11 @@ class Settings:
     # of pages is worse than baking none.
     api_base: str = field(default_factory=lambda: _env("RECORD_API_BASE"))
     edition_bucket: str = field(default_factory=lambda: _env("RECORD_EDITION_BUCKET"))
+    # The shared-paper store (specs/21 §6.2) — a private, content-addressed
+    # bucket the API writes once and serves read-only. Empty means "this
+    # pressing has no short links", and the reader says so honestly; the long
+    # link and paper.json carry every paper regardless (the covenant substrate).
+    papers_bucket: str = field(default_factory=lambda: _env("RECORD_PAPERS_BUCKET"))
     edition_dir: str = field(default_factory=lambda: _env(
         "RECORD_EDITION_DIR", "/tmp/record-edition"))
 

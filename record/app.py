@@ -34,6 +34,7 @@ not.
 
 from __future__ import annotations
 
+import json as _pjson
 import time
 from pathlib import Path
 from typing import Optional
@@ -62,7 +63,7 @@ def get_corpus():
     return _CORPUS
 
 
-def create_app(corpus=None) -> FastAPI:
+def create_app(corpus=None, papers=None) -> FastAPI:
     app = FastAPI(title="publicrecord.studio",
                   description="The record, hosted. specs/17.",
                   docs_url=None, redoc_url=None)
@@ -72,6 +73,17 @@ def create_app(corpus=None) -> FastAPI:
         if _store["corpus"] is None:
             _store["corpus"] = get_corpus()
         return _store["corpus"]
+
+    # The shared-paper store (specs/21 §6.2), opened lazily like the corpus.
+    # `papers=` is the test seam; unset bucket means "no short links in this
+    # pressing", said honestly by the endpoints rather than half-working.
+    _papers = {"store": papers}
+
+    def paper_store():
+        if _papers["store"] is None and settings.papers_bucket:
+            from .papers import GcsPapers
+            _papers["store"] = GcsPapers(settings.papers_bucket)
+        return _papers["store"]
 
     # -- the reader is somewhere else, and browsers need telling ----------
     #
@@ -259,6 +271,76 @@ def create_app(corpus=None) -> FastAPI:
                  (body.get("note") or "").strip(), now, now))
         return {"meeting_id": "", "status": "submitted", "submission_id": sub_id,
                 "note": "a steward reviews; the record updates on the next pressing"}
+
+    # -- public: the shared-paper store (specs/21 §6.2) --------------------
+
+    @app.post("/api/papers")
+    async def paper_put(request: Request):
+        """Store a curated paper at the hash of its own canonical bytes.
+
+        Idempotent by construction: the same paper always answers the same
+        id, and a re-POST writes nothing. No identity is taken and none
+        exists to take — the store holds documents, not authors. Validation
+        is strict (record/papers.py): refs and two timestamps per clip, the
+        title the only free text. The store is additive, never load-bearing —
+        a 503 here costs a reader the SHORT link, and the long link and
+        paper.json still carry every paper (the covenant, specs/17 §6.2)."""
+        from . import papers as paperlib
+        ps = paper_store()
+        if ps is None:
+            return JSONResponse(
+                {"error": "this pressing has no share store — share the full "
+                          "link or the paper.json instead"}, status_code=503)
+        raw = await request.body()
+        if len(raw) > paperlib.MAX_BYTES:
+            return JSONResponse(
+                {"error": "this paper is too large to store — share it as a "
+                          "paper.json file instead"}, status_code=413)
+        try:
+            doc = _pjson.loads(raw)
+        except ValueError:
+            return JSONResponse({"error": "not JSON"}, status_code=422)
+        try:
+            canon = paperlib.canonical(doc)
+        except paperlib.PaperError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=422)
+        pid = paperlib.paper_id(canon)
+        try:
+            ps.put_new(pid, canon.encode("utf-8"))
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"the share store is unreachable ({exc.__class__.__name__})"
+                          " — the full link still carries your paper"},
+                status_code=503)
+        return {"id": pid, "path": f"/api/papers/{pid}"}
+
+    @app.get("/api/papers/{paper_id}")
+    def paper_get(paper_id: str):
+        """Serve a stored paper back, read-only. The address is the content:
+        immutable, so the cache header can say forever and mean it."""
+        from . import papers as paperlib
+        ps = paper_store()
+        if ps is None:
+            return JSONResponse(
+                {"error": "this pressing has no share store"}, status_code=503)
+        if not paperlib.ID_RX.match(paper_id or ""):
+            return JSONResponse(
+                {"error": "not a paper address — an id is sixteen hex "
+                          "characters"}, status_code=404)
+        try:
+            data = ps.get(paper_id)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"the share store is unreachable ({exc.__class__.__name__})"},
+                status_code=503)
+        if data is None:
+            return JSONResponse(
+                {"error": "no paper at this address — it may never have been "
+                          "shared, the id may have lost a character, or it "
+                          "was taken down"}, status_code=404)
+        return Response(content=data, media_type="application/json",
+                        headers={"Cache-Control":
+                                 "public, max-age=31536000, immutable"})
 
     @app.get("/api/towns")
     def towns():
