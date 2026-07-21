@@ -1,7 +1,8 @@
 # 21 — Be the editor of your own paper: the web studio
 
-**Status:** v0.3 · **Stage:** **spec — all §6 decisions resolved with Stephen
-(2026-07-20); §7 firm; building P0** · **Owner:** Stephen Walter (Weird Machine) ·
+**Status:** v0.3 · **Stage:** **P0 SHIPPED + LIVE (edition v2.1.6, image r28,
+2026-07-20) — the footprint shell (preview/studio/paper + the make-loop
+surfaced); P1 next** · **Owner:** Stephen Walter (Weird Machine) ·
 **Related:** specs/20 (the newspaper — the reader this builds on and keeps as a
 *mode*), `.claude/rules/branding.md` (the brand law + the audience split; the
 studio-mode palette is now a *ratified* amendment, §6.1), specs/17 §6.2 (the
@@ -126,9 +127,12 @@ the record still reads *and composes*.
 
 One deploy per phase; the covenant (§5) and the bounds of §6 hold on every one.
 
-- **P0 — the footprint shell.** The **preview / studio / paper** modes + the
-  **sidebar** (default-on, hide/expand), as pure client state on top of the
-  existing paper. The mode is a class on the shell and a `localStorage`
+- **P0 — the footprint shell. ✓ SHIPPED + LIVE (v2.1.6, 2026-07-20).** The
+  **preview / studio / paper** modes + the **sidebar** (default-on, hide/expand),
+  as pure client state on top of the existing paper. Preview is a compact,
+  non-blocking pill (not a card — it never covers the reading); the studio wears
+  the ratified AA-safe lift; the make-loop is surfaced from the `cz-reel` tray.
+  All in `web/static/app.js` + `app.web.css`; the pressed paper is byte-clean. The mode is a class on the shell and a `localStorage`
   preference; **paper mode is the specs/20 reader byte-for-byte untouched**
   (the `main.paper` markup does not move, and no studio hue reaches it). Studio
   mode wears the ratified accents (§6.1). The one make-loop that exists — the

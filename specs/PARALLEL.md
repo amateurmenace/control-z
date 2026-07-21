@@ -157,7 +157,41 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-20 (latest) — **specs/20 P2-B/C: cross-meeting reels + per-issue RSS —
+- 2026-07-20 (latest) — **specs/21 P0: the studio — be the editor of your own
+  paper (the footprint shell). SHIPPED + LIVE, edition v2.1.6, image r28.** The
+  reader can now become an editor: a three-mode footprint it controls — **preview**
+  (a compact, non-blocking corner pill inviting you in), **studio** (a full left
+  sidebar, the one place publicrecord's volume goes up), **paper** (the studio
+  recedes to a tab; the specs/20 reader, untouched). The mode is a class on
+  `<html>` kept in `localStorage` (`cz-studio-mode`, default preview); the existing
+  `cz-reel` make-loop is surfaced (a count on the pill, a play/share/clear panel in
+  studio), not rebuilt. Covenant-clean, byte-idempotent, JS-off/mobile → paper.
+  Two adversarial passes folded in. **855 green.**
+  - **`web/static/app.js` CHANGED** — a new "THE STUDIO" section (initStudio,
+    markMode/setMode/readMode, the pill/tab/panel, refreshReelSummary reading the
+    global `cz-reel`); `saveReel()` and `wireComposer()` now also call
+    refreshReelSummary; `toast()` moved to the `.cz-toast` class. **Any lane
+    touching the reader: the studio is script-built and appended as `<body>`'s
+    FIRST child; a new `<html>` mode class (`cz-m-preview|studio|paper`) + optional
+    `cz-rail` govern a body padding-left in studio mode. localStorage keys added:
+    `cz-studio-mode`, `cz-studio-rail`.**
+  - **`web/static/app.web.css` CHANGED** — a studio block at the end. The
+    **branding amendment (specs/21 §6.1) is now live**: two purples (`#a855f7`
+    surfaces/borders, `#7c3aed` text at AA) + `#22c55e` (non-text), all under
+    `html.cz-m-studio` ONLY; paper/preview/masthead stay quiet; zero fuchsia.
+  - **`tests/test_web_bake.py` CHANGED** — the pressed-CSS palette guard now
+    admits the two purples *only* in a studio-scoped rule (still bans fuchsia +
+    the desk palette everywhere); new `test_the_studio_is_script_built_never_baked`
+    (paper stays byte-clean); new `TestStudioFootprint` (readMode validation +
+    make-path-touches-no-server, run in node).
+  - **`web/emit.py` UNCHANGED** — P0 is client-only; the pressed HTML is identical
+    to v2.1.5 except the `?v=` bump. (No bake/press-stage change → parity holds.)
+  - **Deployed** — code-only reader change, so image `r28` + version bump `2.1.6`
+    (SW cache) + press + Pages rsync/gunzip. Live verified (headless Chrome desktop
+    + 390px). **Next: specs/21 P1 (the curated-paper document model + the
+    content-addressed share store, behind a checkpoint).**
+
+- 2026-07-20 — **specs/20 P2-B/C: cross-meeting reels + per-issue RSS —
   P2 (and the spec) finished.** A reel can now span meetings and years, still
   client-only and living entirely in its link; per-issue feeds gained head-level
   discovery + dated items. Dark mode declined for the reader (Q3 → "never,"
