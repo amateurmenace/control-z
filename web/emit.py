@@ -203,6 +203,7 @@ def scope_bar():
                 f'<span class="scopenow" id="scopenow" data-town="{esc(t["town"])}">'
                 f'{esc(t["town"])}</span>'
                 f'<span class="scopehint">the only town on this edition</span>'
+                f'<a class="scopeai" href="/app/ai">the AI constitution</a>'
                 f'</div>')
     links = "".join(
         f'<a class="scopetown" href="/app/?town={esc(t["town"])}" '
@@ -214,7 +215,9 @@ def scope_bar():
             f'<span class="scopenow" id="scopenow">the whole record</span>'
             f'<div class="scopetowns">{links}'
             f'<a class="scopetown" href="/app/" data-town="">the whole record</a>'
-            f'</div></div>')
+            f'</div>'
+            f'<a class="scopeai" href="/app/ai">the AI constitution</a>'
+            f'</div>')
 
 
 # The record's own surfaces, as a newspaper's section line. The thirteen desk
@@ -278,9 +281,14 @@ def footer(manifest):
     return f"""<footer class="foot">
   <span class="foot-mark">{_brand_mark()}</span>
   <a class="cov" href="/app/covenant">the covenant</a>
+  <a class="cov" href="/app/ai">the AI constitution</a>
   <a class="cov" href="/app/press">the press · get the desktop app</a>
   {again}
-  <a class="cov" href="{COMMUNITYAI}">a Community AI Project tool</a>
+  <span class="foot-credit">an open source project from
+    <a href="https://weirdmachine.org">weird machine</a> and
+    <a href="https://brooklineinteractive.org">brookline interactive group</a>.
+    this project uses AI in accordance with
+    <a href="/app/ai">our AI constitution</a>.</span>
   <span class="ed">edition {esc(ed)} · v{esc(manifest.get('version',''))}</span>
 </footer>"""
 
@@ -1178,6 +1186,8 @@ def page_covenant(manifest, base):
   <section class="covpage">
     <a class="back" href="/app/">← the record</a>
     <h1>The covenant, in public</h1>
+    <p class="covai"><a class="btn" href="/app/ai">How this site uses AI — the
+      AI constitution →</a></p>
     <ul class="covlist">
       <li><b>Static files only.</b> No backend, no compute, no accounts.</li>
       <li><b>No cookies, no analytics, no telemetry.</b> We will not know our
@@ -1461,6 +1471,232 @@ def _tool_row(t, lives_here=None):
             f'</div>')
 
 
+def page_ai(manifest, base):
+    """The AI constitution — /app/ai. The one page that says, in full, when a
+    model touches this record, whose model it is, where it runs, and what
+    stands when it is gone. It exists because the program's argument
+    (communityai.studio names AI; the products do not) owes the reader a
+    disclosure surface at the product — total transparency at the point of
+    use, in the record's own quiet register.
+
+    Every claim on this page is checkable — the origin labels in the data,
+    the fallbacks in the open source, the covenant beside it — because a
+    constitution nobody can audit is a press release. Interactivity is
+    native (details/summary receipts, anchors), so the page is complete with
+    JavaScript off, like everything else in the paper."""
+    diagram = """
+    <svg class="aidiagram" viewBox="0 0 720 240" role="img"
+         aria-label="Where models sit in the record's pipeline: the tape becomes
+         a transcript (speech-to-text on our hardware only when official
+         captions are missing); the transcript becomes the record (summaries
+         drafted by a labeled model, everything else by open rules); the record
+         reaches your reading (meaning search embeds your query; the keyword
+         index answers without it). The ledger below carries the same facts as
+         a table.">
+      <g fill="none" stroke="#052e16" stroke-width="2">
+        <rect x="8"   y="92" width="150" height="52" rx="4"/>
+        <rect x="214" y="92" width="150" height="52" rx="4"/>
+        <rect x="420" y="92" width="150" height="52" rx="4"/>
+        <path d="M158 118 h48 m-10 -6 10 6 -10 6"/>
+        <path d="M364 118 h48 m-10 -6 10 6 -10 6"/>
+        <path d="M570 118 h48 m-10 -6 10 6 -10 6"/>
+      </g>
+      <g font-family="'JetBrains Mono',monospace" font-size="14" fill="#0f172a"
+         text-anchor="middle">
+        <text x="83"  y="123">the tape</text>
+        <text x="289" y="123">the transcript</text>
+        <text x="495" y="123">the record</text>
+        <text x="668" y="123" fill="#052e16" font-weight="700">you</text>
+      </g>
+      <g font-family="'JetBrains Mono',monospace" font-size="11" fill="#475569">
+        <g stroke="#059669" stroke-dasharray="4 3" fill="none">
+          <path d="M186 60 v26"/><path d="M392 60 v26"/><path d="M598 60 v26"/>
+        </g>
+        <text x="186" y="40" text-anchor="middle">no captions? speech-to-text,</text>
+        <text x="186" y="54" text-anchor="middle">our hardware</text>
+        <text x="392" y="40" text-anchor="middle">summary drafted by a model —</text>
+        <text x="392" y="54" text-anchor="middle">labeled, fallback stands alone</text>
+        <text x="598" y="40" text-anchor="middle">meaning search embeds</text>
+        <text x="598" y="54" text-anchor="middle">your query, nothing about you</text>
+        <text x="360" y="200" text-anchor="middle">moments · reels · kits · papers · the front page — open rules, no model</text>
+        <text x="360" y="222" text-anchor="middle" fill="#052e16">every dashed line is optional; the record reads with all of them gone</text>
+      </g>
+    </svg>"""
+    body = f"""
+  <section class="aipage">
+    <a class="back" href="/app/">← the record</a>
+    <h1>The AI constitution</h1>
+    <p class="presslede">Making a tool once required permission — a degree, a
+      department, a budget line. AI collapses the distance between wishing a
+      tool existed and building it: anyone who understands a problem can now
+      build the thing that meets it. Toolmaking, the oldest civic craft,
+      becomes available to everyone. But that potential won't bend toward the
+      public good on its own — not while the companies building AI are the only
+      ones deciding what it's for. This page is what deciding for ourselves
+      looks like: every place a model touches this record, named; every promise,
+      checkable.</p>
+
+    <a class="aiband" href="{COMMUNITYAI}">
+      <span class="aiband-kicker">part of the Community AI Project</span>
+      <span class="aiband-line">A live experiment in taking hold of AI and
+        pointing it at civic life — open-source, locally-owned tools, deployed
+        in real neighborhoods, so communities shape their own future rather
+        than rent it. Read the whole argument at communityai.studio →</span>
+    </a>
+
+    <div class="sectionhead"><span class="kicker">the articles — what we
+      promise, and how to check us</span></div>
+    <ol class="ailist">
+      <li><b>The record is the source.</b> Models summarize, find, and label;
+        they never replace the transcript. Every AI-made line sits beside the
+        record it came from, and points back to it.
+        <details><summary>check it yourself</summary><p>Open any meeting: the
+          summary is one labeled paragraph above the complete transcript, and
+          every moment deep-links a timestamp on the tape.</p></details></li>
+      <li><b>Disclosure at the point of use.</b> Anything a model wrote is
+        labeled where you read it — “AI summary” on the page,
+        <code>ai:&lt;model&gt;</code> in the data. Nothing AI-made is passed
+        off as the record.
+        <details><summary>check it yourself</summary><p>Every meeting's own
+          plane (<code>meetings/&lt;id&gt;.json</code>) carries a
+          <code>summary_origin</code> field: <code>ai:&lt;model&gt;</code>
+          when a model drafted it, <code>extractive</code> when the sentences
+          came from the transcript itself.</p></details></li>
+      <li><b>Reading never requires AI.</b> Meaning search is an upgrade, not
+        a dependency: when the model is off, the static keyword index answers
+        and the page says so. Every page reads with every server gone.
+        <details><summary>check it yourself</summary><p>Search the record,
+          then search it again offline — the results say which index answered.
+          The <a href="/app/covenant">covenant</a> holds the larger promise:
+          static files only.</p></details></li>
+      <li><b>Readers are never fed to models.</b> The models see public record
+        text — transcripts, agendas, minutes — and, for search, the words of
+        your query alone. Never anything about you: no account, cookie, or
+        analytics exists here to share.
+        <details><summary>check it yourself</summary><p>The
+          <a href="/app/covenant">covenant</a> is enforced by a strict
+          Content-Security-Policy on every page — no third-party script or
+          beacon can load, and the search call carries no identity.</p></details></li>
+      <li><b>People gate the record.</b> Nothing enters on a model's say-so: a
+        steward approves every submitted meeting; corrections annotate, never
+        rewrite. AI drafts; people decide.
+        <details><summary>check it yourself</summary><p>Submit a meeting from
+          <a href="/app/add">the add page</a> — the reply says a steward
+          reviews it before the record updates.</p></details></li>
+      <li><b>Local first where it counts.</b> The desk tools run their models
+        on your machine — noise reduction, voice isolation, rotoscoping — and
+        nothing leaves the room. The hosted record uses a cloud model only
+        where static files structurally cannot (embedding a search query at
+        the moment you ask it), and names the model it uses.
+        <details><summary>check it yourself</summary><p>Install the desk from
+          <a href="/app/press">the press</a> — then unplug the network and cut
+          a film. It all still works.</p></details></li>
+      <li><b>Open to audit.</b> The code that pressed this page — prompts,
+        gates, fallbacks — is public under AGPL-3.0, a license whose purpose
+        is that a public thing stays public. A constitution nobody can audit
+        is a press release.
+        <details><summary>check it yourself</summary><p>The source is at
+          <a href="{SOURCE_REPO}">github.com/amateurmenace/control-z</a>;
+          which license covers which part is in
+          <a href="{LICENSING_DOC}">LICENSING.md</a>.</p></details></li>
+      <li><b>Built with AI, signed by people.</b> This software is itself
+        developed with AI assistance — the same collapse of distance we argue
+        for is how a tiny shop built a record this size. Every change lands in
+        a public commit a person reviewed and signed.
+        <details><summary>check it yourself</summary><p>The commit history is
+          public — the AI-assisted work is co-authored in the open, not
+          laundered.</p></details></li>
+    </ol>
+
+    <div class="sectionhead"><span class="kicker">where the models sit</span></div>
+    {diagram}
+
+    <div class="sectionhead"><span class="kicker">the ledger — when, whose,
+      where, and what stands without it</span></div>
+    <div class="aitable-wrap"><table class="aitable">
+      <thead><tr><th>where you meet it</th><th>what the model does</th>
+        <th>whose model</th><th>where it runs</th><th>without it</th></tr></thead>
+      <tbody>
+        <tr><td>meaning search</td>
+          <td>turns your query and the record's segments into vectors so
+            related passages match</td>
+          <td>Google <code>gemini-embedding-001</code></td>
+          <td>our server, at the moment you search; it sees the query text
+            and nothing about you</td>
+          <td>the static keyword index answers, labeled “lexical”</td></tr>
+        <tr><td>meeting summaries</td>
+          <td>drafts one paragraph from the transcript</td>
+          <td>Google Gemini (Flash) — labeled <code>ai:&lt;model&gt;</code>
+            in the data</td>
+          <td>our pipeline, at press time, over public transcript text</td>
+          <td>an extractive summary — sentences drawn from the transcript
+            itself, labeled <code>extractive</code></td></tr>
+        <tr><td>issue names &amp; labels</td>
+          <td>suggests a plain name for a thread that spans meetings</td>
+          <td>the same Gemini lane, labeled the same way</td>
+          <td>our pipeline, at press time</td>
+          <td>a keyword-derived name</td></tr>
+        <tr><td>transcripts</td>
+          <td>speech-to-text, only when a tape arrives with no official
+            captions</td>
+          <td>an open Whisper-family model</td>
+          <td>our own hardware — the audio is never sent to a third party</td>
+          <td>official captions are always preferred; a tape with neither
+            ships as a document, not a guess</td></tr>
+        <tr><td>moments · reels · kits · your paper · the front page</td>
+          <td colspan="2"><b>no model at all</b> — open keyword rules and
+            extraction, readable in the source</td>
+          <td>your browser, or press time</td>
+          <td>they are the fallback</td></tr>
+        <tr><td>the desk — <a href="https://civicmedia.studio">civicmedia.studio</a>
+            / <a href="https://control-z.org">Control-Z</a></td>
+          <td>noise reduction, voice isolation, rotoscoping, film emulation</td>
+          <td>open models, bundled with the app</td>
+          <td><b>your machine only</b> — offline works; no account, no cloud,
+            nothing leaves the room</td>
+          <td>they are the tool</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="sectionhead"><span class="kicker">use AI that stays local</span></div>
+    <p class="aip">The record is the reading half; the making half is a desk of
+      free, open-source tools whose models run entirely on your computer.
+      Community media stations, filmmakers, and neighbors finish real work with
+      them — denoise a meeting tape, isolate a voice, cut a reel into a film —
+      with the network cable out of the wall. That is what “locally-owned AI”
+      means here: not a slogan, a download.
+      <a href="/app/press">Get the desk from the press →</a></p>
+
+    <div class="sectionhead"><span class="kicker">understand it deeper</span></div>
+    <ul class="ailinks">
+      <li><a href="{COMMUNITYAI}">communityai.studio</a> — the program's whole
+        argument: why civic AI, why open source, why locally owned.</li>
+      <li><a href="/app/covenant">the covenant</a> — the promises this site
+        keeps about you, enforced in the browser.</li>
+      <li><a href="{SOURCE_REPO}">the source</a> — every prompt, gate, and
+        fallback named on this page, in the open.</li>
+      <li><a href="https://www.elementsofai.com/">Elements of AI</a> — a free,
+        plain-language university course; the best first step we know.</li>
+      <li><a href="https://www.youtube.com/watch?v=wjZofJX0v4M">But what is a
+        GPT?</a> — 3Blue1Brown's visual walk through how language models
+        actually work.</li>
+      <li><a href="https://www.eff.org/issues/artificial-intelligence">EFF on
+        AI</a> — the civil-liberties view: rights, risks, and policy.</li>
+    </ul>
+
+    <p class="hint">This edition was pressed {esc(manifest.get('edition_date',''))}
+      from a corpus fingerprinted {esc(manifest.get('corpus_hash',''))}. When our
+      use of AI changes, this page changes in the same commit.</p>
+  </section>
+"""
+    return shell("The AI constitution — publicrecord.studio",
+                 "When a model touches this record, whose model it is, where "
+                 "it runs, and what stands when it is gone — every promise "
+                 "checkable, part of the Community AI Project.",
+                 f"{base}/app/ai", body, "", manifest,
+                 version=manifest["version"])
+
+
 def page_press(manifest, base, has_kits=False):
     """The press behind the paper — one quiet page where the thirteen doors
     used to shout (specs/20 §5). The civicmedia story in three sentences, the
@@ -1659,7 +1895,8 @@ def _write_pwa(out: Path, manifest):
         # case is composing with the servers gone, and the draft's one
         # rendering page (/app/p) — and the reel viewer beside it — must not
         # be the piece that needs a live host
-        "/app/officials", "/app/p", "/app/r"], separators=(",", ":"))
+        "/app/officials", "/app/p", "/app/r", "/app/ai"],
+        separators=(",", ":"))
     sw = f"""'use strict';
 // the record's service worker — precache the shell, keep last-read meetings,
 // and let the page announce a fresher pressing. Cache name is the corpus
@@ -1732,6 +1969,11 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
     (out / "p" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "p" / "index.html").write_text(
         page_paper(manifest, base), encoding="utf-8")
+    # the AI constitution — when a model touches the record, whose it is,
+    # where it runs, and what stands without it; linked from every footer
+    (out / "ai" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "ai" / "index.html").write_text(
+        page_ai(manifest, base), encoding="utf-8")
     # the kits — Publisher's reading half (specs/20 §6, §7.9 P2). An index, and
     # a read-only page per meeting whose kit the bake pressed. The downloadable
     # kit.json is the plane the bake already wrote at /app/kits/<slug>.json.

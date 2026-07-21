@@ -2,6 +2,29 @@
 
 ## unreleased
 
+### The AI constitution + the footer recredit — 2026-07-21
+
+publicrecord grows its disclosure surface: **/app/ai — the AI constitution**.
+Eight articles (values as checkable promises, each with a "check it yourself"
+receipt), a pipeline diagram of where the models sit, and **the ledger** —
+when a model touches the record, whose model it is
+(`gemini-embedding-001` for meaning search; the labeled Gemini lane for
+summaries and issue names; a Whisper-family model on our own hardware only
+when a tape has no captions), where it runs, and what stands without it —
+including the rows where there is **no model at all** (moments, reels, kits,
+papers, the front page) and the desk's **local-only** models
+(civicmedia.studio / Control-Z: your machine, offline, nothing leaves the
+room). Prominently part of the Community AI Project (the toolmaking argument,
+at the record's volume), with resources for going deeper. Native
+interactivity (details/summary, an aria-labeled diagram with the ledger as
+its table twin) — complete with JavaScript off, quiet palette throughout,
+precached for offline reading.
+
+The footer on every page is recredited: *an open source project from
+weird machine and brookline interactive group. this project uses AI in
+accordance with our AI constitution.* The covenant (about) page and the town
+scope (settings) block both carry the button.
+
 ### specs/21 P1 — your paper: the curated document + the share store — 2026-07-21
 
 The studio's making surface arrives. A reader curates their **own paper** — a

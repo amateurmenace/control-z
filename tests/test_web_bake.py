@@ -602,6 +602,34 @@ class TestBakeEdition(unittest.TestCase):
         for url in ('"/app/p"', '"/app/r"'):
             self.assertIn(url, sw, f"{url} missing from the SW shell")
 
+    def test_the_ai_constitution_is_pressed_and_the_footer_names_it(self):
+        """/app/ai says when a model touches the record, whose model it is,
+        where it runs, and what stands without it — every claim checkable —
+        and the footer on every page carries the recredit and the link; the
+        about (covenant) and settings (town scope) surfaces carry the button.
+        Interactivity is native (details/summary), so the page is complete
+        with JavaScript off."""
+        page = (self.out / "ai" / "index.html").read_text()
+        for claim in ("The AI constitution", "gemini-embedding-001",
+                      "Whisper-family", "no model at all",
+                      "part of the Community AI Project", "communityai.studio",
+                      "your machine only", "check it yourself",
+                      "civicmedia.studio", "control-z.org"):
+            self.assertIn(claim, page, f"{claim!r} missing from /app/ai")
+        self.assertIn("<details>", page)
+        self.assertIn("aria-label", page)      # the diagram speaks to AT
+        home = (self.out / "index.html").read_text()
+        for frag in ("weird machine", "brookline interactive group",
+                     "our AI constitution", 'href="/app/ai"',
+                     'class="scopeai"'):
+            self.assertIn(frag, home, f"{frag!r} missing from the front page")
+        self.assertNotIn("a Community AI Project tool", home,
+                         "the old footer credit survived the recredit")
+        cov = (self.out / "covenant" / "index.html").read_text()
+        self.assertIn('href="/app/ai"', cov, "the about surface lost its button")
+        self.assertIn('"/app/ai"', (self.out / "sw.js").read_text(),
+                      "the constitution should read offline too")
+
     def test_pressed_css_draws_its_tokens_from_brand(self):
         """The drift-guard, repointed at brand/ (specs/20 §8): the pressed
         :root carries the brand's own values, byte-faithful — the accent is
