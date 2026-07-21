@@ -1,8 +1,13 @@
 # 21 — Be the editor of your own paper: the web studio
 
-**Status:** v0.3 · **Stage:** **P0 SHIPPED + LIVE (edition v2.1.6, image r28,
-2026-07-20) — the footprint shell (preview/studio/paper + the make-loop
-surfaced); P1 next** · **Owner:** Stephen Walter (Weird Machine) ·
+**Status:** v0.3 · **Stage:** **P1 SHIPPED + LIVE (edition v2.1.7, image r29,
+2026-07-21) — your paper (the curated document: stories + reels + a title,
+arranged and shared three covenant ways) + the content-addressed share store
+(POST/GET `/api/papers`, private bucket `publicrecord-papers`, checkpointed
+with Stephen before the write path existed). The same pressing shipped the AI
+constitution (`/app/ai`) + the footer recredit, and repaired a long-standing
+SW offline bug (redirected stub responses). P0 shipped v2.1.6/r28 2026-07-20.
+**P2 (data viz + analyses) next.**** · **Owner:** Stephen Walter (Weird Machine) ·
 **Related:** specs/20 (the newspaper — the reader this builds on and keeps as a
 *mode*), `.claude/rules/branding.md` (the brand law + the audience split; the
 studio-mode palette is now a *ratified* amendment, §6.1), specs/17 §6.2 (the
@@ -140,13 +145,23 @@ One deploy per phase; the covenant (§5) and the bounds of §6 hold on every one
   rebuilt. **JS-off and narrow mobile degrade to paper** (the shell renders as
   today; the studio chrome is script-built and reduced-motion-aware). No new
   plane, no new page, no server touched.
-- **P1 — your paper (the document model) + the share store.** A **curated paper**
-  as a client-side document of blocks (stories + reels to start); arrange, title,
-  **edit**, and share. Share travels three ways (§6.2): `localStorage`, a
-  URL-encoded compact form, and an exportable **`paper.json`**; the
-  content-addressed **shared-paper store** is added as the default short-URL
-  share **behind a checkpoint with Stephen** (it is the one infra/budget step).
-  Encode/decode is pinned by node twins, like the reel machinery.
+- **P1 — your paper (the document model) + the share store. ✓ SHIPPED + LIVE
+  (v2.1.7 / r29, 2026-07-21).** The **curated paper** as a client-side document
+  (schema `publicrecord.paper/1`): story blocks (meetings, issues) + reel
+  blocks + a title; the studio panel is the editor (context adds, ↑ ↓ ✕
+  arrange, a title field, the share row); `/app/p` is the one static stub every
+  paper renders at (the `/app/r` pattern), enriching from the record's own
+  planes in the paper palette. Share travels the three covenant ways —
+  `cz-paper` draft, the URL-encoded whole-paper link, `paper.json` — plus the
+  **store** (checkpointed with Stephen 2026-07-21 before the write path
+  existed): `POST /api/papers` validates strictly (the title is the only free
+  text), canonicalizes server-side, writes once to the private
+  `publicrecord-papers` bucket at the SHA-256 of the paper's own bytes;
+  read-only GET, immutable, no identity, no list, no delete API (takedown =
+  a steward's hand, OPERATING §6). Node twins pin the codec; two adversarial
+  workflow passes (23 + 13 confirmed findings) folded before deploy — the
+  re-review also repaired a pre-P1 SW bug (bare-stub precache cached
+  redirected responses; offline stub navigation was broken on live).
 - **P2 — data viz + analyses.** Chart blocks computed **client-side over the
   planes** (`analytics.json`, `graph.json`, votes/framing in `meetings/*.json`) —
   inline SVG within the strict CSP, each with a table twin (the a11y rule the

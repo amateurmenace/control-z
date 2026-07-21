@@ -157,7 +157,35 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-20 (latest) — **specs/21 P0: the studio — be the editor of your own
+- 2026-07-21 (latest) — **specs/21 P1: your paper + the share store, AND the
+  AI constitution. SHIPPED + LIVE, edition v2.1.7, image r29.** The making
+  surface: a curated paper (schema `publicrecord.paper/1` — story blocks by
+  pid/slug, reel blocks reusing the clip encoding, a title) edited in the
+  studio panel (context adds, ↑ ↓ ✕, share row), rendered at the new `/app/p`
+  stub (the `/app/r` pattern; `page_paper` in the shared `emit_stubs`, so
+  press parity is free), traveling the three covenant ways (`cz-paper` draft /
+  whole-paper link `?v=1&t=…&b=…` / `paper.json`) plus the content-addressed
+  store **checkpointed with Stephen before the write path existed**:
+  `POST/GET /api/papers` on record-api, strict validation (title = the ONLY
+  free text; refs fullmatch `[\w-]{1,128}` — the bake mints pids to 80 and
+  slugs to 96), server-side canonical bytes (tenth-second grid, sorted keys)
+  hashed to a 16-hex address in the private `publicrecord-papers` bucket
+  (us-east1; SA objectAdmin; `RECORD_PAPERS_BUCKET` env; ~$0/mo; takedown =
+  steward removes the object — OPERATING §5/§6). Two adversarial workflow
+  passes folded 23 + 13 confirmed findings; the re-review repaired a
+  **pre-P1 live SW bug** (bare stub URLs precached redirected responses —
+  offline navigation to /app/s etc. was broken; the shell now precaches
+  slash-canonical forms, navigations slash-normalize, redirects never cache).
+  The same pressing ships Stephen's mid-flight request: **`/app/ai` — the AI
+  constitution** (eight checkable articles, the when/whose/where/without-it
+  ledger — `gemini-embedding-001` search, labeled Gemini summaries/names,
+  Whisper-family ASR on own hardware, no-model rows, the desk's local-only
+  models — the Community AI Project band, resources; native interactivity,
+  JS-off complete) and the **footer recredit** (weird machine + brookline
+  interactive group + the constitution link; covenant/about + town-scope/
+  settings buttons). Local `.claude/rules/branding.md` records the amendment.
+  885 tests. **Next: P2 data viz + analyses (v2.1.8/r30).**
+- 2026-07-20 — **specs/21 P0: the studio — be the editor of your own
   paper (the footprint shell). SHIPPED + LIVE, edition v2.1.6, image r28.** The
   reader can now become an editor: a three-mode footprint it controls — **preview**
   (a compact, non-blocking corner pill inviting you in), **studio** (a full left
