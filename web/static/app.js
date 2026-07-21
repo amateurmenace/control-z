@@ -225,6 +225,8 @@
         refreshPaperSummary();   // the reel add-button's count rides the tray
       }
       if (k === PAPER_KEY || k === null) {
+        retireShortOut();        // another tab changed the paper — the minted
+                                 // link names the old one and must not repaint
         refreshPaperSummary();
         schedulePaperRender();   // /app/p reading its own draft repaints too
       }
@@ -352,8 +354,8 @@
         ? `▶ a reel — ${b.clips.length} clip${b.clips.length > 1 ? "s" : ""} · ${hms(reelRuntime(b.clips))}`
         : b.story === "issue" ? `◈ ${b.name || b.slug}`
         : `§ ${b.title || b.pid}`;
-      return `<div class="cz-prow">
-        <span class="cz-plabel" title="${esc(label)}">${esc(label)}</span>
+      return `<div class="cz-prow" data-i="${i}">
+        <span class="cz-plabel" tabindex="-1" title="${esc(label)}">${esc(label)}</span>
         <span class="cz-pacts">
           <button type="button" class="cz-pact" data-cz="pup" data-i="${i}"
             title="move up" aria-label="move block ${i + 1} up"${i ? "" : " disabled"}>↑</button>
@@ -403,15 +405,33 @@
       d.title = ti.value.slice(0, PAPER_TITLE_MAX);
       const has = !!(d.blocks.length || d.title);
       if (!savePaper(d)) return;   // storage blocked — a toast per keystroke would be noise
+      retireShortOut();            // the painted link names the old title now
       schedulePaperRender();
       if (had !== has)
         refreshPaperSummary({ act: "title", caret: ti.selectionStart });
     };
+    // the storage-event and composer paths repaint with no focus arg — if the
+    // caret was in OUR title input, preserve it rather than dropping to <body>
+    if (!focus) {
+      const ae = document.activeElement;
+      if (ae && ae.classList && ae.classList.contains("cz-ptitle"))
+        focus = { act: "title", caret: ae.selectionStart };
+    }
     if (focus) {
       let t = focus.act === "title" ? ti
-        : $(`[data-cz="${focus.act}"][data-i="${focus.i}"]`, el);
-      if (t && t.disabled)
-        t = $(`[data-cz="pdel"][data-i="${focus.i}"]`, el);
+        : focus.act === "row"
+          ? $(`.cz-prow[data-i="${focus.i}"] .cz-plabel`, el)
+        : $(`[data-cz="${focus.act}"]`
+            + (focus.i != null ? `[data-i="${focus.i}"]` : ""), el);
+      // NEVER fall back to the destructive ✕: a repeated keypress walking a
+      // block to a pole must not find delete armed under it. The opposite
+      // arrow is always enabled when a move just succeeded; a single-block
+      // paper falls to the title.
+      if (t && t.disabled) {
+        const other = focus.act === "pup" ? "pdown" : "pup";
+        t = $(`[data-cz="${other}"][data-i="${focus.i}"]`, el);
+        if (t && t.disabled) t = ti;
+      }
       if (t) { t.focus();
         if (focus.act === "title" && typeof focus.caret === "number"
             && t.setSelectionRange) t.setSelectionRange(focus.caret, focus.caret);
@@ -1740,8 +1760,10 @@
     let focus;
     if (act === "pdel") {
       p.blocks.splice(i, 1);
+      // after a delete, focus the NEXT ROW'S LABEL, never its ✕ — held Enter
+      // on one delete must not cascade through the whole paper
       focus = p.blocks.length
-        ? { act: "pdel", i: Math.min(i, p.blocks.length - 1) }
+        ? { act: "row", i: Math.min(i, p.blocks.length - 1) }
         : { act: "title" };
     } else {
       const j = act === "pup" ? i - 1 : i + 1;
@@ -1808,6 +1830,7 @@
   }
   function clearPaper() {
     try { localStorage.removeItem(PAPER_KEY); } catch { /* private mode */ }
+    retireShortOut();   // removeItem bypasses savePaper — retire here too
     refreshPaperSummary(); schedulePaperRender();
     toast("draft cleared — the record is untouched");
   }
@@ -1857,6 +1880,15 @@
      read of a `?p=` address someone shared. Both fail soft to the covenant
      substrate — the long link and the file. */
   let PAPER_SHORT = "";   // the last short link minted, valid until the paper changes
+  /* retire the minted link EVERYWHERE the paper can change: the variable
+     (savePaper zeroes it too) AND the painted node — a sibling-node removal,
+     so the no-repaint-under-the-caret rule stands. Without both halves the
+     panel keeps showing a link that serves the OLD paper. */
+  function retireShortOut() {
+    PAPER_SHORT = "";
+    const so = STUDIO && $(".cz-pshort-out", STUDIO);
+    if (so) so.remove();
+  }
   async function paperShortLink() {
     const p = readPaper();
     if (!p.blocks.length && !p.title) {
@@ -1878,7 +1910,8 @@
       // click's user activation, and a clipboard some browsers then refuse
       // must not be the only place the link exists
       PAPER_SHORT = `${location.origin}${BASE}/p?p=${d.id}`;
-      refreshPaperSummary();
+      // the repaint must hand focus back to the button that was pressed
+      refreshPaperSummary({ act: "pshort" });
       copyText(PAPER_SHORT,
         "short link copied — it serves this paper exactly as it stands");
     } catch {
@@ -1913,23 +1946,25 @@
     clearTimeout(PAPER_RERENDER);
     PAPER_RERENDER = setTimeout(() => paper(), 350);
   }
-  /* fetch a set of planes a few at a time: a hostile link can name hundreds
-     of fake ids, and firing them all at once would hammer the host and stall
-     the paint. Real papers touch a handful; past the cap a block reads as
-     not-in-this-pressing rather than costing a fetch. */
+  /* fetch a set of planes a few at a time: the 8-worker pool is what protects
+     the host from a hostile link's burst; the cap is sized to the document
+     model's own envelope, so no sanctioned paper hits it. Returns what was
+     fetched AND what was attempted — a ref past the cap must read as "beyond
+     this page's budget", never as the lie "curated away". */
   async function fetchPlanes(ids, path, cap) {
-    const out = {};
+    const got = {}, tried = new Set();
     const list = [...ids].slice(0, cap);
     let i = 0;
     const worker = async () => {
       while (i < list.length) {
         const id = list[i++];
+        tried.add(id);
         const d = await getJSON(`${BASE}/${path}/${encodeURIComponent(id)}.json`);
-        if (d) out[id] = d;
+        if (d) got[id] = d;
       }
     };
     await Promise.all(Array.from({ length: Math.min(8, list.length) }, worker));
-    return out;
+    return { got, tried };
   }
   async function paper() {
     const el = $("#paperbody"); if (!el) return;
@@ -1974,18 +2009,22 @@
     }
     PAPER_DRAFT_PAGE = from === "draft";
     document.title = `${doc.title || "A paper"} — publicrecord.studio`;
-    // one fetch per meeting or issue the paper touches, however many blocks
+    // one fetch per meeting or issue the paper touches, however many blocks.
+    // Stories pool BEFORE reel clips, so a single-story block can never lose
+    // its fetch budget to a reel's fan-out.
     const mpids = new Set(), islugs = new Set();
     for (const b of doc.blocks) {
-      if (b.kind === "reel") b.clips.forEach(c => mpids.add(c.pid));
-      else if (b.story === "meeting") mpids.add(b.pid);
-      else islugs.add(b.slug);
+      if (b.kind === "story" && b.story === "meeting") mpids.add(b.pid);
+      else if (b.kind === "story") islugs.add(b.slug);
     }
-    const [mby, iby] = await Promise.all([
-      fetchPlanes(mpids, "meetings", 64),
-      fetchPlanes(islugs, "issues", 64),
+    for (const b of doc.blocks)
+      if (b.kind === "reel") b.clips.forEach(c => mpids.add(c.pid));
+    const [m, it] = await Promise.all([
+      fetchPlanes(mpids, "meetings", PAPER_MAX_BLOCKS + PAPER_MAX_CLIPS),
+      fetchPlanes(islugs, "issues", PAPER_MAX_BLOCKS),
     ]);
     if (gen !== PAPER_GEN) return;     // a newer render superseded this one
+    const mby = m.got, iby = it.got, tried = { m: m.tried, i: it.tried };
     const head = `<header class="phead">
         <h2 class="ptitle">${esc(doc.title || "Untitled paper")}</h2>
         <p class="pfrom">${from === "draft"
@@ -1994,7 +2033,7 @@
             ? "served from the share store — content-addressed and read-only; the editor holds the original"
             : "carried whole in the link you followed — no server held it"}</p>
       </header>`;
-    const blocks = doc.blocks.map(b => renderPaperBlock(b, mby, iby))
+    const blocks = doc.blocks.map(b => renderPaperBlock(b, mby, iby, tried))
       .filter(Boolean).join("");
     // a title-only paper is a sanctioned form — say what it is, not that its
     // (nonexistent) blocks were curated away
@@ -2007,10 +2046,13 @@
             added stories or reels yet. The <a href="${BASE}/">record
             itself</a> is one link up.</p>`));
   }
-  function renderPaperBlock(b, mby, iby) {
+  function renderPaperBlock(b, mby, iby, tried) {
+    tried = tried || { m: new Set(), i: new Set() };
     if (b.kind === "story" && b.story === "meeting") {
       const m = mby[b.pid];
-      if (!m) return paperGone(`a meeting (${b.pid})`);
+      if (!m) return tried.m.has(b.pid)
+        ? paperGone(`a meeting (${b.pid})`)
+        : paperBudget("a meeting");
       return `<a class="mcard pb-story" href="${BASE}/m/${esc(b.pid)}">`
         + (m.thumb ? `<img loading="lazy" src="${esc(m.thumb)}" alt="" width="96" height="54">` : "")
         + `<div class="mc-body"><span class="chip">${esc(m.body || "meeting")}</span>`
@@ -2020,7 +2062,9 @@
     }
     if (b.kind === "story" && b.story === "issue") {
       const it = iby[b.slug];
-      if (!it) return paperGone(`an issue (${b.slug})`);
+      if (!it) return tried.i.has(b.slug)
+        ? paperGone(`an issue (${b.slug})`)
+        : paperBudget("an issue");
       const span = [it.first_seen, it.last_seen].filter(Boolean);
       return `<a class="mcard pb-story" href="${BASE}/i/${esc(b.slug)}">`
         + `<div class="mc-body"><span class="chip">issue</span>`
@@ -2037,7 +2081,9 @@
                  kind: mo ? mo.kind : "moment", quote: mo ? mo.quote : "",
                  mtitle: m.title || "" };
       }).filter(Boolean);
-      if (!clips.length) return paperGone("a reel (its meetings)");
+      if (!clips.length)
+        return b.clips.some(c => !tried.m.has(c.pid))
+          ? paperBudget("a reel") : paperGone("a reel (its meetings)");
       const multi = reelPids(clips).length > 1;
       const rows = clips.map((c, i) =>
         `<a class="reelcite" href="${BASE}/m/${esc(c.pid)}#t${Math.floor(c.t)}">
@@ -2062,6 +2108,9 @@
   const paperGone = what => `<p class="pb-gone">This paper cites ${esc(what)} `
     + `that isn’t in this pressing of the record — it may have been curated `
     + `away, or pressed under a different id.</p>`;
+  const paperBudget = what => `<p class="pb-gone">This paper cites more of the `
+    + `record than one page fetches at once — ${esc(what)} here was left `
+    + `unfetched, not judged gone. The record itself holds it.</p>`;
   function paperMessage(el, html) {
     if (el) el.innerHTML = `<p class="hint">${html}</p>`;
   }

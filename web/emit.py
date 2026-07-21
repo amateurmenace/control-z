@@ -1887,15 +1887,18 @@ def _write_pwa(out: Path, manifest):
     # never sees a stale shell after an edition ships.
     cache = f"cz-record-{manifest.get('version','0')}-{manifest.get('corpus_hash','0')}"
     v = esc(manifest.get("version", "0"))
+    # Stub URLs precache in their TRAILING-SLASH canonical form: the host
+    # serves the bare form as a 301, addAll would store the redirected
+    # response, and a navigation served a redirected response is a browser
+    # error — the review that added /app/p caught this had silently broken
+    # the sibling stubs offline all along. The make surfaces (/app/p, /app/r)
+    # and the constitution join the shell: the covenant's own case is
+    # composing with the servers gone.
     shell_urls = _json.dumps([
         "/app/", f"/app/app.css?v={manifest.get('version','0')}",
         f"/app/app.js?v={manifest.get('version','0')}", "/app/favicon.svg",
-        "/app/manifest.json", "/app/stats.json", "/app/s", "/app/watching",
-        # the make surfaces belong to the offline shell: the covenant's own
-        # case is composing with the servers gone, and the draft's one
-        # rendering page (/app/p) — and the reel viewer beside it — must not
-        # be the piece that needs a live host
-        "/app/officials", "/app/p", "/app/r", "/app/ai"],
+        "/app/manifest.json", "/app/stats.json", "/app/s/", "/app/watching/",
+        "/app/officials/", "/app/p/", "/app/r/", "/app/ai/"],
         separators=(",", ":"))
     sw = f"""'use strict';
 // the record's service worker — precache the shell, keep last-read meetings,
@@ -1917,14 +1920,21 @@ self.addEventListener('fetch', e => {{
   const url = new URL(req.url);
   if (url.origin !== location.origin || url.pathname.indexOf('/app/') !== 0) return;
   // cache-first: the edition is immutable within a pressing; the shell and any
-  // meeting you've read stay available offline.
-  e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {{
-    if (res && res.ok && res.type === 'basic') {{
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(req, copy));
-    }}
-    return res;
-  }}).catch(() => hit)));
+  // meeting you've read stay available offline. A bare-path navigation
+  // (/app/s) falls to its canonical slash form before the network — the host
+  // would have 301'd it there anyway, and offline has no host. Redirected
+  // responses are never cached: serving one to a navigation is a browser
+  // error, not a page.
+  e.respondWith(caches.match(req)
+    .then(hit => hit || (req.mode === 'navigate' && url.pathname.slice(-1) !== '/'
+        ? caches.match(url.pathname + '/') : undefined))
+    .then(hit => hit || fetch(req).then(res => {{
+      if (res && res.ok && res.type === 'basic' && !res.redirected) {{
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy));
+      }}
+      return res;
+    }}).catch(() => hit)));
 }});
 """
     (out / "sw.js").write_text(sw, encoding="utf-8")

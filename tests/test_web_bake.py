@@ -597,10 +597,17 @@ class TestBakeEdition(unittest.TestCase):
             self.assertIn(cls, css, f"{cls} missing from the pressed CSS")
         # the make surfaces belong to the offline shell (specs/21 §5: the
         # covenant's own case is composing with the servers gone) — the SW
-        # precaches /app/p and /app/r beside the sibling stubs
+        # precaches /app/p and /app/r beside the sibling stubs, in the
+        # trailing-slash canonical form (the bare form 301s, and a cached
+        # redirect served to a navigation is a browser error, not a page)
         sw = (self.out / "sw.js").read_text()
-        for url in ('"/app/p"', '"/app/r"'):
+        for url in ('"/app/p/"', '"/app/r/"', '"/app/s/"'):
             self.assertIn(url, sw, f"{url} missing from the SW shell")
+        self.assertNotIn('"/app/s",', sw, "a bare stub URL crept back into the shell")
+        self.assertIn("!res.redirected", sw,
+                      "the SW must never cache a redirected response")
+        self.assertIn("url.pathname + '/'", sw,
+                      "bare-path navigations must fall to the slash form offline")
 
     def test_the_ai_constitution_is_pressed_and_the_footer_names_it(self):
         """/app/ai says when a model touches the record, whose model it is,
@@ -627,7 +634,7 @@ class TestBakeEdition(unittest.TestCase):
                          "the old footer credit survived the recredit")
         cov = (self.out / "covenant" / "index.html").read_text()
         self.assertIn('href="/app/ai"', cov, "the about surface lost its button")
-        self.assertIn('"/app/ai"', (self.out / "sw.js").read_text(),
+        self.assertIn('"/app/ai/"', (self.out / "sw.js").read_text(),
                       "the constitution should read offline too")
 
     def test_pressed_css_draws_its_tokens_from_brand(self):
