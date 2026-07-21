@@ -203,7 +203,7 @@ def scope_bar():
                 f'<span class="scopenow" id="scopenow" data-town="{esc(t["town"])}">'
                 f'{esc(t["town"])}</span>'
                 f'<span class="scopehint">the only town on this edition</span>'
-                f'<a class="scopeai" href="/app/ai">the AI constitution</a>'
+                f'<a class="scopeai" href="/app/ai">Our AI Constitution</a>'
                 f'</div>')
     links = "".join(
         f'<a class="scopetown" href="/app/?town={esc(t["town"])}" '
@@ -216,7 +216,7 @@ def scope_bar():
             f'<div class="scopetowns">{links}'
             f'<a class="scopetown" href="/app/" data-town="">the whole record</a>'
             f'</div>'
-            f'<a class="scopeai" href="/app/ai">the AI constitution</a>'
+            f'<a class="scopeai" href="/app/ai">Our AI Constitution</a>'
             f'</div>')
 
 
@@ -281,14 +281,14 @@ def footer(manifest):
     return f"""<footer class="foot">
   <span class="foot-mark">{_brand_mark()}</span>
   <a class="cov" href="/app/covenant">the covenant</a>
-  <a class="cov" href="/app/ai">the AI constitution</a>
+  <a class="cov" href="/app/ai">Our AI Constitution</a>
   <a class="cov" href="/app/press">the press · get the desktop app</a>
   {again}
   <span class="foot-credit">an open source project from
     <a href="https://weirdmachine.org">weird machine</a> and
     <a href="https://brooklineinteractive.org">brookline interactive group</a>.
     this project uses AI in accordance with
-    <a href="/app/ai">our AI constitution</a>.</span>
+    <a href="/app/ai">Our AI Constitution</a>.</span>
   <span class="ed">edition {esc(ed)} · v{esc(manifest.get('version',''))}</span>
 </footer>"""
 
@@ -1186,8 +1186,8 @@ def page_covenant(manifest, base):
   <section class="covpage">
     <a class="back" href="/app/">← the record</a>
     <h1>The covenant, in public</h1>
-    <p class="covai"><a class="btn" href="/app/ai">How this site uses AI — the
-      AI constitution →</a></p>
+    <p class="covai"><a class="btn" href="/app/ai">How this site uses AI — Our
+      AI Constitution →</a></p>
     <ul class="covlist">
       <li><b>Static files only.</b> No backend, no compute, no accounts.</li>
       <li><b>No cookies, no analytics, no telemetry.</b> We will not know our
@@ -1525,7 +1525,7 @@ def page_ai(manifest, base):
     body = f"""
   <section class="aipage">
     <a class="back" href="/app/">← the record</a>
-    <h1>The AI constitution</h1>
+    <h1>Our AI Constitution</h1>
     <p class="presslede">Making a tool once required permission — a degree, a
       department, a budget line. AI collapses the distance between wishing a
       tool existed and building it: anyone who understands a problem can now
@@ -1684,17 +1684,44 @@ def page_ai(manifest, base):
         AI</a> — the civil-liberties view: rights, risks, and policy.</li>
     </ul>
 
-    <p class="hint">This edition was pressed {esc(manifest.get('edition_date',''))}
+    <p class="hint">This page is made to be shared — the direct link is
+      <a href="{esc(base)}/constitution"><b>{esc(base.replace('https://', '').replace('http://', ''))}/constitution</b></a>.
+      This edition was pressed {esc(manifest.get('edition_date',''))}
       from a corpus fingerprinted {esc(manifest.get('corpus_hash',''))}. When our
       use of AI changes, this page changes in the same commit.</p>
   </section>
 """
-    return shell("The AI constitution — publicrecord.studio",
+    return shell("Our AI Constitution — publicrecord.studio",
                  "When a model touches this record, whose model it is, where "
                  "it runs, and what stands when it is gone — every promise "
                  "checkable, part of the Community AI Project.",
                  f"{base}/app/ai", body, "", manifest,
                  version=manifest["version"])
+
+
+def page_constitution_alias(manifest, base):
+    """The shareable spelling — /app/constitution redirects to /app/ai (the
+    page_door_stub pattern: meta-refresh, CSP-safe, a real link beneath).
+    Its root-level twin (publicrecord.studio/constitution) is a hand-file in
+    the Pages repo, outside the pressed app/ — OPERATING §5 lists it."""
+    return f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{csp()}">
+<meta http-equiv="refresh" content="0; url=/app/ai/">
+<title>Our AI Constitution — publicrecord.studio</title>
+<meta name="description" content="When a model touches this record, whose it
+  is, where it runs, and what stands without it — every promise checkable.">
+<link rel="canonical" href="{esc(base)}/app/ai">
+<link rel="stylesheet" href="/app/app.css?v={esc(manifest['version'])}">
+</head><body>
+<main class="main paper"><section class="aipage">
+  <h1>Our AI Constitution</h1>
+  <p class="presslede">It lives at <a href="/app/ai/">publicrecord.studio/app/ai</a>
+    — you are being redirected there.</p>
+</section></main>
+</body></html>"""
 
 
 def page_press(manifest, base, has_kits=False):
@@ -1979,11 +2006,16 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
     (out / "p" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "p" / "index.html").write_text(
         page_paper(manifest, base), encoding="utf-8")
-    # the AI constitution — when a model touches the record, whose it is,
-    # where it runs, and what stands without it; linked from every footer
+    # Our AI Constitution — when a model touches the record, whose it is,
+    # where it runs, and what stands without it; linked from every footer.
+    # /app/constitution is its shareable spelling (a slim redirect); the
+    # root-level /constitution twin is a hand-file in the Pages repo.
     (out / "ai" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "ai" / "index.html").write_text(
         page_ai(manifest, base), encoding="utf-8")
+    (out / "constitution" / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (out / "constitution" / "index.html").write_text(
+        page_constitution_alias(manifest, base), encoding="utf-8")
     # the kits — Publisher's reading half (specs/20 §6, §7.9 P2). An index, and
     # a read-only page per meeting whose kit the bake pressed. The downloadable
     # kit.json is the plane the bake already wrote at /app/kits/<slug>.json.

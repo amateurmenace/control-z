@@ -211,6 +211,16 @@ allow quietly.
 
 ---
 
+### Hand-files at the Pages-repo root
+
+The rsync manages only `app/`; three files live at the repo root by hand and
+survive every edition: `CNAME`, the root `index.html`, and
+`constitution/index.html` — the shareable spelling
+**publicrecord.studio/constitution**, a meta-refresh to `/app/ai/` (its
+pressed twin `/app/constitution` redirects the same way; `/app/ai` is
+canonical). If a fourth hand-file ever appears, list it here or the next
+cleanup will delete it confidently.
+
 ### The shared-paper store (specs/21 §6.2)
 
 One-time provisioning, done alongside the r29 deploy. A private bucket the

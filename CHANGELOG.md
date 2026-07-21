@@ -2,6 +2,15 @@
 
 ## unreleased
 
+### "Our AI Constitution" + the shareable link — 2026-07-21 (v2.1.8)
+
+The constitution takes its proper name — **Our AI Constitution** — in the
+page, the footer, and both buttons. And it gets a direct link made to be
+shared: **publicrecord.studio/constitution** (a root-level redirect in the
+Pages repo, listed in OPERATING §5) with a pressed twin at
+`/app/constitution`; `/app/ai` stays canonical, and the page now states its
+own shareable address.
+
 ### The AI constitution + the footer recredit — 2026-07-21
 
 publicrecord grows its disclosure surface: **/app/ai — the AI constitution**.

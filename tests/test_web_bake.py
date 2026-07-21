@@ -617,17 +617,22 @@ class TestBakeEdition(unittest.TestCase):
         Interactivity is native (details/summary), so the page is complete
         with JavaScript off."""
         page = (self.out / "ai" / "index.html").read_text()
-        for claim in ("The AI constitution", "gemini-embedding-001",
+        for claim in ("Our AI Constitution", "gemini-embedding-001",
                       "Whisper-family", "no model at all",
                       "part of the Community AI Project", "communityai.studio",
                       "your machine only", "check it yourself",
-                      "civicmedia.studio", "control-z.org"):
+                      "civicmedia.studio", "control-z.org", "/constitution"):
             self.assertIn(claim, page, f"{claim!r} missing from /app/ai")
+        # the shareable spelling redirects, canonical intact
+        alias = (self.out / "constitution" / "index.html").read_text()
+        self.assertIn('url=/app/ai/', alias)
+        self.assertIn('rel="canonical"', alias)
+        self.assertIn("Our AI Constitution", alias)
         self.assertIn("<details>", page)
         self.assertIn("aria-label", page)      # the diagram speaks to AT
         home = (self.out / "index.html").read_text()
         for frag in ("weird machine", "brookline interactive group",
-                     "our AI constitution", 'href="/app/ai"',
+                     "Our AI Constitution", 'href="/app/ai"',
                      'class="scopeai"'):
             self.assertIn(frag, home, f"{frag!r} missing from the front page")
         self.assertNotIn("a Community AI Project tool", home,
