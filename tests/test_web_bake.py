@@ -595,6 +595,12 @@ class TestBakeEdition(unittest.TestCase):
         css = (self.out / "app.css").read_text()
         for cls in (".phead", ".ptitle", ".pb-gone", ".cz-ptitle", ".cz-prow"):
             self.assertIn(cls, css, f"{cls} missing from the pressed CSS")
+        # the make surfaces belong to the offline shell (specs/21 §5: the
+        # covenant's own case is composing with the servers gone) — the SW
+        # precaches /app/p and /app/r beside the sibling stubs
+        sw = (self.out / "sw.js").read_text()
+        for url in ('"/app/p"', '"/app/r"'):
+            self.assertIn(url, sw, f"{url} missing from the SW shell")
 
     def test_pressed_css_draws_its_tokens_from_brand(self):
         """The drift-guard, repointed at brand/ (specs/20 §8): the pressed
@@ -1983,6 +1989,31 @@ class TestPaper(unittest.TestCase):
         r = self.node(body)
         self.assertEqual(r.returncode, 0,
                          f"store-id decode wrong:\n{r.stdout}{r.stderr}")
+
+    def test_real_length_refs_survive_the_link(self):
+        """The bake mints pids to 80 chars and issue slugs to 96 — the link
+        codec must carry what the record actually names (the 64-char cap a
+        review lens caught would have dropped real adds with a success
+        toast)."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const pid80 = 'p'.repeat(80), slug96 = 's'.repeat(96);",
+            "const draft = { title: '', blocks: [",
+            "  {kind:'story',story:'meeting',pid:pid80},",
+            "  {kind:'story',story:'issue',slug:slug96},",
+            "  {kind:'reel',clips:[{pid:pid80,start:1,end:2}]}]};",
+            "const port = portablePaper(draft);",
+            "if (port.blocks.length !== 3) fail('normalize dropped a real ref: '+JSON.stringify(port.blocks));",
+            "const url = paperShareURL(draft);",
+            "const back = decodePaper(url.slice(url.indexOf('?')));",
+            "if (JSON.stringify(portablePaper({title:'',blocks:back.blocks})) !== JSON.stringify(port))",
+            "  fail('long refs did not round-trip');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"long refs dropped:\n{r.stdout}{r.stderr}")
 
     def test_paper_json_is_the_receipt_the_desk_can_trust(self):
         """schema pinned, the share link included, every story with its record

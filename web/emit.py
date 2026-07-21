@@ -1655,7 +1655,11 @@ def _write_pwa(out: Path, manifest):
         "/app/", f"/app/app.css?v={manifest.get('version','0')}",
         f"/app/app.js?v={manifest.get('version','0')}", "/app/favicon.svg",
         "/app/manifest.json", "/app/stats.json", "/app/s", "/app/watching",
-        "/app/officials"], separators=(",", ":"))
+        # the make surfaces belong to the offline shell: the covenant's own
+        # case is composing with the servers gone, and the draft's one
+        # rendering page (/app/p) — and the reel viewer beside it — must not
+        # be the piece that needs a live host
+        "/app/officials", "/app/p", "/app/r"], separators=(",", ":"))
     sw = f"""'use strict';
 // the record's service worker — precache the shell, keep last-read meetings,
 // and let the page announce a fresher pressing. Cache name is the corpus

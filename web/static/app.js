@@ -342,7 +342,7 @@
      codec live in their own section below, and the single server touch a
      paper can ever have (the optional short link, §6.2) is behind its button
      there, never on this paint path. */
-  function refreshPaperSummary() {
+  function refreshPaperSummary(focus) {
     if (!STUDIO) return;
     const el = $(".cz-paperbody", STUDIO); if (!el) return;
     const p = readPaper();
@@ -375,6 +375,12 @@
         ${API ? `<button type="button" class="btn" data-cz="pshort">⚡ short link</button>` : ""}
         <button type="button" class="btn" data-cz="pclear">clear</button>
       </div>` : "";
+    // the last short link minted for THIS paper, shown as a real link — a
+    // clipboard is a privilege some browsers withhold, a link on screen is not
+    const shortOut = PAPER_SHORT && (n || p.title)
+      ? `<p class="cz-pshort-out">short link:
+           <a href="${esc(PAPER_SHORT)}">${esc(PAPER_SHORT.replace(location.origin, ""))}</a></p>`
+      : "";
     el.innerHTML =
         `<input class="cz-ptitle" type="text" maxlength="200"
            placeholder="name your paper" aria-label="your paper’s title"
@@ -384,16 +390,33 @@
            or issue you’re reading, or your reel — arrange the blocks, title
            it, share it as your own front page.</p>`)
       + (adds ? `<div class="cz-padds">${adds}</div>` : "")
-      + share;
+      + share + shortOut;
     // typing must not repaint the panel under the caret — the title saves on
     // every keystroke and repaints nothing here (the /app/p draft render
-    // catches up on its own debounce).
+    // catches up on its own debounce). The one exception: crossing the
+    // empty↔titled boundary changes which controls exist, so repaint once and
+    // put the caret back exactly where it was.
     const ti = $(".cz-ptitle", el);
     if (ti) ti.oninput = () => {
       const d = readPaper();
+      const had = !!(d.blocks.length || d.title);
       d.title = ti.value.slice(0, PAPER_TITLE_MAX);
-      savePaper(d); schedulePaperRender();
+      const has = !!(d.blocks.length || d.title);
+      if (!savePaper(d)) return;   // storage blocked — a toast per keystroke would be noise
+      schedulePaperRender();
+      if (had !== has)
+        refreshPaperSummary({ act: "title", caret: ti.selectionStart });
     };
+    if (focus) {
+      let t = focus.act === "title" ? ti
+        : $(`[data-cz="${focus.act}"][data-i="${focus.i}"]`, el);
+      if (t && t.disabled)
+        t = $(`[data-cz="pdel"][data-i="${focus.i}"]`, el);
+      if (t) { t.focus();
+        if (focus.act === "title" && typeof focus.caret === "number"
+            && t.setSelectionRange) t.setSelectionRange(focus.caret, focus.caret);
+      }
+    }
   }
   /* which story the open page could contribute — /app/m/<pid> or /app/i/<slug>.
      Pure string work on the path already parsed at the top of the file. */
@@ -1101,6 +1124,10 @@
     toast("reel.json downloaded — open it at the desk to render");
   }
   function copyText(txt, msg) {
+    // no clipboard at all (plain-http hosts, some embeds) must not throw —
+    // the callers' surfaces keep showing the link itself
+    if (!(navigator.clipboard && navigator.clipboard.writeText)) {
+      toast("couldn’t copy — this browser has no clipboard here"); return; }
     navigator.clipboard.writeText(txt).then(
       () => toast(msg),
       () => toast("couldn’t copy — your browser blocked the clipboard"));
@@ -1124,8 +1151,10 @@
     paintTicks();
     // loadReel() may have just migrated legacy per-meeting drafts into the global
     // reel; the studio summary was painted before this meeting hydrated, so bring
-    // it in line with what the tray now holds.
+    // it in line with what the tray now holds — the paper panel's "＋ your reel"
+    // count rides the same tray.
     refreshReelSummary();
+    refreshPaperSummary();
   }
   // a clip's storage key, independent of the meeting on screen (unlike clipId,
   // which reads CREEL): a clip already carries its own pid.
@@ -1559,7 +1588,10 @@
   const PAPER_TITLE_MAX = 200;
   const PAPER_MAX_BLOCKS = 64;
   const PAPER_MAX_CLIPS = 100;         // per reel block — matches the store's cap
-  const PAPER_REF = /^[\w-]{1,64}$/;   // a pid or an issue slug, and nothing else
+  // a pid or an issue slug, and nothing else. The bake mints pids to 80 chars
+  // and issue slugs to 96 (web/bake.py pid()/islug()) — the cap leaves
+  // headroom and matches the store's exactly.
+  const PAPER_REF = /^[\w-]{1,128}$/;
 
   function readPaper() {
     let p = null;
@@ -1567,9 +1599,14 @@
     catch { p = null; }
     return normalizePaper(p);
   }
-  function savePaper(p) { try {
-    localStorage.setItem(PAPER_KEY, JSON.stringify(p));
-  } catch { /* private mode: the draft holds for this visit */ } }
+  /* returns whether the draft actually held — a browser that blocks storage
+     gets told the truth by the callers, not a success toast over a void. Any
+     change also retires the last short link: it names the OLD paper. */
+  function savePaper(p) {
+    PAPER_SHORT = "";
+    try { localStorage.setItem(PAPER_KEY, JSON.stringify(p)); return true; }
+    catch { return false; }
+  }
 
   /* total: whatever arrives — a draft, a decoded link, a stored paper, a
      hand-edited file — leaves as a valid paper. Unknown kinds, broken refs
@@ -1700,13 +1737,22 @@
   function movePaperBlock(i, act) {
     const p = readPaper();
     if (!(i >= 0 && i < p.blocks.length)) return;
-    if (act === "pdel") p.blocks.splice(i, 1);
-    else {
+    let focus;
+    if (act === "pdel") {
+      p.blocks.splice(i, 1);
+      focus = p.blocks.length
+        ? { act: "pdel", i: Math.min(i, p.blocks.length - 1) }
+        : { act: "title" };
+    } else {
       const j = act === "pup" ? i - 1 : i + 1;
       if (j < 0 || j >= p.blocks.length) return;
       const t = p.blocks[i]; p.blocks[i] = p.blocks[j]; p.blocks[j] = t;
+      // keyboard focus follows the block it was moving — the repaint must not
+      // drop it on <body> mid-arrangement
+      focus = { act, i: j };
     }
-    savePaper(p); refreshPaperSummary(); schedulePaperRender();
+    if (!savePaper(p)) toast("this browser blocks storage — the change didn’t hold");
+    refreshPaperSummary(focus); schedulePaperRender();
   }
   /* add the open page as a story. The meta that rides along comes from the
      page's own plane — already in the fetch cache when the page hydrated — so
@@ -1715,24 +1761,32 @@
   async function addPageToPaper() {
     const ref = pageStoryRef();
     if (!ref) { toast("open a meeting or an issue to add it as a story"); return; }
-    const p = readPaper();
+    const dup = p => ref.story === "meeting"
+      ? p.blocks.some(b => b.kind === "story" && b.story === "meeting" && b.pid === ref.pid)
+      : p.blocks.some(b => b.kind === "story" && b.story === "issue" && b.slug === ref.slug);
+    if (dup(readPaper())) {
+      toast(`this ${ref.story} is already in your paper`); return; }
+    let nb;
     if (ref.story === "meeting") {
-      if (p.blocks.some(b => b.kind === "story" && b.story === "meeting" && b.pid === ref.pid)) {
-        toast("this meeting is already in your paper"); return; }
       const m = await getJSON(`${BASE}/meetings/${encodeURIComponent(ref.pid)}.json`) || {};
-      p.blocks.push(normalizeBlock({ kind: "story", story: "meeting", pid: ref.pid,
+      nb = normalizeBlock({ kind: "story", story: "meeting", pid: ref.pid,
         title: m.title || "", date: m.date || "", body: m.body || "",
-        town: m.town || "", thumb: m.thumb || "" }));
+        town: m.town || "", thumb: m.thumb || "" });
     } else {
-      if (p.blocks.some(b => b.kind === "story" && b.story === "issue" && b.slug === ref.slug)) {
-        toast("this issue is already in your paper"); return; }
       const it = await getJSON(`${BASE}/issues/${encodeURIComponent(ref.slug)}.json`) || {};
-      p.blocks.push(normalizeBlock({ kind: "story", story: "issue", slug: ref.slug,
+      nb = normalizeBlock({ kind: "story", story: "issue", slug: ref.slug,
         name: it.name || "", n_meetings: it.n_meetings,
-        first_seen: it.first_seen || "", last_seen: it.last_seen || "" }));
+        first_seen: it.first_seen || "", last_seen: it.last_seen || "" });
     }
-    p.blocks = p.blocks.filter(Boolean);
-    savePaper(p); refreshPaperSummary(); schedulePaperRender();
+    if (!nb) { toast("this page can’t join a paper"); return; }
+    // the fetch awaited — re-read the draft so an edit made meanwhile (this
+    // tab or another) isn’t silently reverted by a stale snapshot
+    const p = readPaper();
+    if (dup(p)) { toast(`this ${ref.story} is already in your paper`); return; }
+    p.blocks.push(nb);
+    if (!savePaper(p)) {
+      toast("this browser blocks storage — your paper can’t be kept here"); return; }
+    refreshPaperSummary(); schedulePaperRender();
     toast("added to your paper");
   }
   /* the reel joins as a snapshot: the block holds these clips as they are
@@ -1747,7 +1801,9 @@
     const nb = normalizeBlock({ kind: "reel", clips: clips.map(c => ({ ...c })) });
     if (!nb) { toast("these clips don’t make a playable reel"); return; }
     p.blocks.push(nb);
-    savePaper(p); refreshPaperSummary(); schedulePaperRender();
+    if (!savePaper(p)) {
+      toast("this browser blocks storage — your paper can’t be kept here"); return; }
+    refreshPaperSummary(); schedulePaperRender();
     toast("reel added to your paper — the tray keeps rolling");
   }
   function clearPaper() {
@@ -1800,6 +1856,7 @@
      link" (POST the portable form, get the content address back) and the
      read of a `?p=` address someone shared. Both fail soft to the covenant
      substrate — the long link and the file. */
+  let PAPER_SHORT = "";   // the last short link minted, valid until the paper changes
   async function paperShortLink() {
     const p = readPaper();
     if (!p.blocks.length && !p.title) {
@@ -1817,7 +1874,12 @@
       if (!r.ok) throw new Error(String(r.status));
       const d = await r.json();
       if (!d || !/^[0-9a-f]{16}$/.test(d.id || "")) throw new Error("bad id");
-      copyText(`${location.origin}${BASE}/p?p=${d.id}`,
+      // paint the link into the panel FIRST: the await may have outlived the
+      // click's user activation, and a clipboard some browsers then refuse
+      // must not be the only place the link exists
+      PAPER_SHORT = `${location.origin}${BASE}/p?p=${d.id}`;
+      refreshPaperSummary();
+      copyText(PAPER_SHORT,
         "short link copied — it serves this paper exactly as it stands");
     } catch {
       copyText(paperShareURL(p),
@@ -1845,13 +1907,33 @@
      way /app/r does. */
   let PAPER_DRAFT_PAGE = false;      // this /app/p render came from the draft
   let PAPER_RERENDER = 0;
+  let PAPER_GEN = 0;                 // render generation — a stale async render must not land
   function schedulePaperRender() {
     if (!PAPER_DRAFT_PAGE) return;   // not on /app/p, or it renders a shared paper
     clearTimeout(PAPER_RERENDER);
     PAPER_RERENDER = setTimeout(() => paper(), 350);
   }
+  /* fetch a set of planes a few at a time: a hostile link can name hundreds
+     of fake ids, and firing them all at once would hammer the host and stall
+     the paint. Real papers touch a handful; past the cap a block reads as
+     not-in-this-pressing rather than costing a fetch. */
+  async function fetchPlanes(ids, path, cap) {
+    const out = {};
+    const list = [...ids].slice(0, cap);
+    let i = 0;
+    const worker = async () => {
+      while (i < list.length) {
+        const id = list[i++];
+        const d = await getJSON(`${BASE}/${path}/${encodeURIComponent(id)}.json`);
+        if (d) out[id] = d;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(8, list.length) }, worker));
+    return out;
+  }
   async function paper() {
     const el = $("#paperbody"); if (!el) return;
+    const gen = ++PAPER_GEN;
     const st = decodePaper(location.search);
     if (st.v && !PAPER_VS.includes(st.v))
       return paperMessage(el, "This paper was shared from a newer version of "
@@ -1860,6 +1942,7 @@
     let doc = null, from = "";
     if (st.id) {
       const stored = await fetchStoredPaper(st.id);
+      if (gen !== PAPER_GEN) return;   // a newer render superseded this one
       if (!stored) return paperMessage(el, "No paper answers at this address. "
         + "The share store may be unreachable, the id may have lost a "
         + "character, or the paper was taken down. Papers also travel as full "
@@ -1878,6 +1961,10 @@
         + `<a href="${BASE}/">the record</a> itself.`);
     } else {
       doc = readPaper(); from = "draft";
+      // arm the re-render gate BEFORE the empty early-return: a page opened
+      // on an empty draft must still repaint as the paper takes shape in the
+      // panel beside it (four review lenses caught this one).
+      PAPER_DRAFT_PAGE = true;
       if (!doc.blocks.length && !doc.title)
         return paperMessage(el, "No paper here yet — this page renders one "
           + "when a link carries it, or shows your own draft. Enter the "
@@ -1894,15 +1981,11 @@
       else if (b.story === "meeting") mpids.add(b.pid);
       else islugs.add(b.slug);
     }
-    const mby = {}, iby = {};
-    await Promise.all([
-      ...[...mpids].map(async id => {
-        const m = await getJSON(`${BASE}/meetings/${encodeURIComponent(id)}.json`);
-        if (m) mby[id] = m; }),
-      ...[...islugs].map(async s => {
-        const it = await getJSON(`${BASE}/issues/${encodeURIComponent(s)}.json`);
-        if (it) iby[s] = it; }),
+    const [mby, iby] = await Promise.all([
+      fetchPlanes(mpids, "meetings", 64),
+      fetchPlanes(islugs, "issues", 64),
     ]);
+    if (gen !== PAPER_GEN) return;     // a newer render superseded this one
     const head = `<header class="phead">
         <h2 class="ptitle">${esc(doc.title || "Untitled paper")}</h2>
         <p class="pfrom">${from === "draft"
@@ -1913,10 +1996,16 @@
       </header>`;
     const blocks = doc.blocks.map(b => renderPaperBlock(b, mby, iby))
       .filter(Boolean).join("");
+    // a title-only paper is a sanctioned form — say what it is, not that its
+    // (nonexistent) blocks were curated away
     el.innerHTML = head + (blocks
-      || `<p class="hint">This paper’s blocks aren’t in this pressing of the
-          record — its meetings or issues may have been curated away. The
-          <a href="${BASE}/">record itself</a> is one link up.</p>`);
+      || (doc.blocks.length
+        ? `<p class="hint">This paper’s blocks aren’t in this pressing of the
+            record — its meetings or issues may have been curated away. The
+            <a href="${BASE}/">record itself</a> is one link up.</p>`
+        : `<p class="hint">This paper is a title so far — its editor hasn’t
+            added stories or reels yet. The <a href="${BASE}/">record
+            itself</a> is one link up.</p>`));
   }
   function renderPaperBlock(b, mby, iby) {
     if (b.kind === "story" && b.story === "meeting") {
@@ -2351,6 +2440,9 @@
     // can re-centre it over the shifted paper — an inline left:50% would beat the
     // rule. Only visibility is toggled here.
     if (!toEl) { toEl = document.createElement("div"); toEl.className = "cz-toast";
+      // a status region: every confirmation the sighted reader gets, a screen
+      // reader hears — polite, so it never interrupts mid-sentence
+      toEl.setAttribute("role", "status");
       document.body.appendChild(toEl); }
     toEl.textContent = msg; toEl.classList.add("on");
     clearTimeout(toEl._t); toEl._t = setTimeout(() => toEl.classList.remove("on"), 2600);

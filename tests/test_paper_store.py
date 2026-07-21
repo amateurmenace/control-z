@@ -70,6 +70,31 @@ class TestCanonicalForm(unittest.TestCase):
         pid = paper_id(canonical(portable()))
         self.assertRegex(pid, r"^[0-9a-f]{16}$")
 
+    def test_real_length_refs_are_accepted(self):
+        """The bake mints pids to 80 chars and issue slugs to 96
+        (web/bake.py) — the store must hold what the record actually names.
+        A review lens caught the original 64-char cap silently refusing
+        real refs."""
+        canonical(portable(blocks=[
+            {"kind": "story", "story": "meeting", "pid": "p" * 80},
+            {"kind": "story", "story": "issue", "slug": "s" * 96},
+            {"kind": "reel", "clips": [
+                {"pid": "p" * 80, "start": 1, "end": 2}]}]))
+
+    def test_a_trailing_newline_is_not_a_ref(self):
+        """fullmatch, not $ — "$" admits a trailing newline, and a strict
+        store must not hold refs the renderer then drops."""
+        with self.assertRaises(PaperError):
+            canonical(portable(blocks=[
+                {"kind": "story", "story": "meeting", "pid": "abc\n"}]))
+
+    def test_an_astronomical_clip_time_is_refused_not_a_crash(self):
+        """int(10**400) overflows float() — that must be a 422-shaped
+        PaperError, never an uncaught OverflowError (a 500)."""
+        with self.assertRaises(PaperError):
+            canonical(portable(blocks=[{"kind": "reel", "clips": [
+                {"pid": "abc", "start": 10 ** 400, "end": 10 ** 400 + 1}]}]))
+
     def test_a_title_only_paper_stores(self):
         canonical({"schema": SCHEMA, "title": "just a name", "blocks": []})
 
@@ -185,6 +210,15 @@ class TestPaperEndpoints(unittest.TestCase):
         self.assertEqual(self.client.get("/api/papers/xyz").status_code, 404)
         self.assertEqual(
             self.client.get("/api/papers/AAAAAAAAAAAAAAAA").status_code, 404)
+        # fullmatch: an id with a smuggled newline is not an address either
+        self.assertEqual(
+            self.client.get("/api/papers/0123456789abcde%0a").status_code, 404)
+
+    def test_an_astronomical_time_is_a_422_at_the_endpoint(self):
+        r = self.client.post("/api/papers", json=portable(blocks=[
+            {"kind": "reel", "clips": [
+                {"pid": "abc", "start": 10 ** 400, "end": 10 ** 400 + 1}]}]))
+        self.assertEqual(r.status_code, 422, r.text)
 
     def test_without_a_bucket_the_store_says_so(self):
         """papers=None and no RECORD_PAPERS_BUCKET → 503 with the covenant

@@ -42,8 +42,12 @@ MAX_BLOCKS = 64
 MAX_CLIPS = 100              # per reel block — matches the reader's cap
 TITLE_MAX = 200
 
-_REF = re.compile(r"^[A-Za-z0-9_-]{1,64}$")     # a pid or an issue slug
-ID_RX = re.compile(r"^[0-9a-f]{16}$")           # a paper's content address
+# A pid or an issue slug. The bake mints pids to 80 chars and issue slugs to
+# 96 (web/bake.py pid()/islug()); 128 leaves headroom and matches the reader's
+# PAPER_REF exactly. fullmatch, not match-with-$: "$" would admit a trailing
+# newline, and a strict store must not hold refs the renderer then drops.
+_REF = re.compile(r"[A-Za-z0-9_-]{1,128}")
+ID_RX = re.compile(r"[0-9a-f]{16}")             # a paper's content address
 
 
 class PaperError(ValueError):
@@ -56,7 +60,10 @@ def _t(x, what):
     identically whichever a client sent."""
     if isinstance(x, bool) or not isinstance(x, (int, float)):
         raise PaperError(f"{what} must be a number")
-    v = round(float(x), 1)
+    try:
+        v = round(float(x), 1)
+    except OverflowError:   # an int too large for a float is not a clip time
+        raise PaperError(f"{what} must be a finite time from the tape's start")
     if not math.isfinite(v) or v < 0:
         raise PaperError(f"{what} must be a finite time from the tape's start")
     return int(v) if float(v).is_integer() else v
@@ -79,13 +86,13 @@ def _block(b, i):
         if story == "meeting":
             _exact_keys(b, {"kind", "story", "pid"}, what)
             pid = b.get("pid")
-            if not isinstance(pid, str) or not _REF.match(pid):
+            if not isinstance(pid, str) or not _REF.fullmatch(pid):
                 raise PaperError(f"{what}: not a meeting id")
             return {"kind": "story", "story": "meeting", "pid": pid}
         if story == "issue":
             _exact_keys(b, {"kind", "story", "slug"}, what)
             slug = b.get("slug")
-            if not isinstance(slug, str) or not _REF.match(slug):
+            if not isinstance(slug, str) or not _REF.fullmatch(slug):
                 raise PaperError(f"{what}: not an issue slug")
             return {"kind": "story", "story": "issue", "slug": slug}
         raise PaperError(f"{what}: a story is a meeting or an issue")
@@ -103,7 +110,7 @@ def _block(b, i):
                 raise PaperError(f"{cw} is not an object")
             _exact_keys(c, {"pid", "start", "end"}, cw)
             pid = c.get("pid")
-            if not isinstance(pid, str) or not _REF.match(pid):
+            if not isinstance(pid, str) or not _REF.fullmatch(pid):
                 raise PaperError(f"{cw}: not a meeting id")
             start, end = _t(c.get("start"), f"{cw} start"), _t(c.get("end"), f"{cw} end")
             if end <= start:

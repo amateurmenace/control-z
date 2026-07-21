@@ -291,11 +291,21 @@ def create_app(corpus=None, papers=None) -> FastAPI:
             return JSONResponse(
                 {"error": "this pressing has no share store — share the full "
                           "link or the paper.json instead"}, status_code=503)
-        raw = await request.body()
-        if len(raw) > paperlib.MAX_BYTES:
-            return JSONResponse(
-                {"error": "this paper is too large to store — share it as a "
-                          "paper.json file instead"}, status_code=413)
+        too_big = JSONResponse(
+            {"error": "this paper is too large to store — share it as a "
+                      "paper.json file instead"}, status_code=413)
+        # refuse oversize before buffering it: the declared length first, and
+        # a running cap while streaming for callers that do not declare one
+        cl = request.headers.get("content-length", "")
+        if cl.isdigit() and int(cl) > paperlib.MAX_BYTES:
+            return too_big
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > paperlib.MAX_BYTES:
+                return too_big
+            chunks.append(chunk)
+        raw = b"".join(chunks)
         try:
             doc = _pjson.loads(raw)
         except ValueError:
@@ -323,7 +333,7 @@ def create_app(corpus=None, papers=None) -> FastAPI:
         if ps is None:
             return JSONResponse(
                 {"error": "this pressing has no share store"}, status_code=503)
-        if not paperlib.ID_RX.match(paper_id or ""):
+        if not paperlib.ID_RX.fullmatch(paper_id or ""):
             return JSONResponse(
                 {"error": "not a paper address — an id is sixteen hex "
                           "characters"}, status_code=404)
