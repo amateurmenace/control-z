@@ -420,8 +420,8 @@
     // an empty note is arranging surface, not traveling content — the share
     // row arms only when the PORTABLE paper is non-empty (a review catch:
     // an empty-note-only draft offered links that decode to "damaged")
-    const liveN = p.blocks.filter(b => b.kind !== "note" || b.text.trim()).length;
-    const share = liveN || p.title ? `<div class="cz-pshare">
+    const live = paperHasLive(p);
+    const share = live ? `<div class="cz-pshare">
         <a class="btn primary" href="${BASE}/p">📰 open your paper</a>
         <button type="button" class="btn" data-cz="plink">⧉ copy link</button>
         <button type="button" class="btn" data-cz="pjson">⬇ paper.json</button>
@@ -430,7 +430,7 @@
       </div>` : "";
     // the last short link minted for THIS paper, shown as a real link — a
     // clipboard is a privilege some browsers withhold, a link on screen is not
-    const shortOut = PAPER_SHORT && (liveN || p.title)
+    const shortOut = PAPER_SHORT && live
       ? `<p class="cz-pshort-out">short link:
            <a href="${esc(PAPER_SHORT)}">${esc(PAPER_SHORT.replace(location.origin, ""))}</a></p>`
       : "";
@@ -452,9 +452,9 @@
     const ti = $(".cz-ptitle", el);
     if (ti) ti.oninput = () => {
       const d = readPaper();
-      const had = !!(d.blocks.length || d.title);
+      const had = paperHasLive(d);
       d.title = cut(ti.value, PAPER_TITLE_MAX);
-      const has = !!(d.blocks.length || d.title);
+      const has = paperHasLive(d);
       if (!savePaper(d)) return;   // storage blocked — a toast per keystroke would be noise
       retireShortOut();            // the painted link names the old title now
       schedulePaperRender();
@@ -469,10 +469,16 @@
       // a stale index (another tab just rearranged) must not write over a
       // different block — the storage event's repaint reconciles the panel
       if (!(d.blocks[i] && d.blocks[i].kind === "note")) return;
+      const had = paperHasLive(d);
       d.blocks[i].text = noteText(ta.value);
+      const has = paperHasLive(d);
       if (!savePaper(d)) return;
       retireShortOut();
       schedulePaperRender();
+      // crossing the empty↔live boundary changes which share controls
+      // exist — repaint once, caret restored (the title's rule)
+      if (had !== has)
+        refreshPaperSummary({ act: "note", i, caret: ta.selectionStart });
     });
     if (focus) {
       let t = focus.act === "title" ? ti
@@ -1671,6 +1677,14 @@
      version" message instead of silently rendering a mutilated paper. */
   const paperV = p => p.blocks.some(
     b => b.kind === "note" || b.kind === "chart") ? "2" : "1";
+  /* does anything actually TRAVEL — a title, or a block that survives
+     portablePaper (an empty note does not). The share row, the title
+     handler and the note handler all read THIS one truth, so typing across
+     the empty↔live boundary repaints the row that depends on it (the fix
+     re-review's catch: a gate whose truth can change under a keystroke
+     needs a repaint on exactly that boundary). */
+  const paperHasLive = d => !!(d.title
+    || d.blocks.some(b => b.kind !== "note" || b.text.trim()));
   const PAPER_KEY = "cz-paper";        // the one draft this browser keeps
   const PAPER_TITLE_MAX = 200;
   const PAPER_MAX_BLOCKS = 64;

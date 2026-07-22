@@ -1928,6 +1928,7 @@ class TestPaper(unittest.TestCase):
             self.lift(r"const PAPER_NOTE_MAX = .+?;"),
             self.lift(r"const PAPER_CHARTS = .+?;"),
             self.lift(r"const paperV = .+?;"),
+            self.lift(r"const paperHasLive = .+?;"),
             self.lift(r"const cut = .+?;"),
             self.lift(r"const noteText = .+?;"),
             self.lift(r"function chartRecordURL\(b\) \{.+?\n  \}"),
@@ -2231,6 +2232,12 @@ class TestPaper(unittest.TestCase):
             "// an empty-note-only draft has nothing traveling — it stays v=1",
             "if (paperV(portablePaper({title:'', blocks:[{kind:'note',text:'  '}]})) !== '1')",
             "  fail('an empty note must not force v=2');",
+            "// and the one live-truth the share row + both typing handlers read:",
+            "// an empty note is not live, a typed one is, a title alone is",
+            "if (paperHasLive({title:'', blocks:[{kind:'note',text:' \\n '}]})) fail('empty note read as live');",
+            "if (!paperHasLive({title:'', blocks:[{kind:'note',text:'watch the tally'}]})) fail('a real note must be live');",
+            "if (!paperHasLive({title:'t', blocks:[]})) fail('a title alone is live');",
+            "if (!paperHasLive({title:'', blocks:[{kind:'chart',chart:'votes'}]})) fail('a chart is live');",
             "console.log('ok');",
         ])
         r = self.node(body)
