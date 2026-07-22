@@ -155,6 +155,10 @@
      reader sees, not what a refused write left behind (a review catch). */
   const shownMode = () => MODES.find(m =>
     document.documentElement.classList.contains("cz-m-" + m)) || readMode();
+  // the rail's painted truth, for the same reason — and doubly so: deriving
+  // the NEXT rail state from storage in a blocked browser would pin the
+  // toggle (collapse once, never expand), which is worse than dead
+  const shownRail = () => document.documentElement.classList.contains("cz-rail");
 
   /* the mode control is a real radiogroup (P3): one choice of three, arrow
      keys move it, and only the checked radio sits in the tab order (roving
@@ -318,8 +322,11 @@
     if (el && typeof el.focus === "function") el.focus();
   }
   function toggleRail() {
-    const v = !readRail(); writeRail(v);
-    document.documentElement.classList.toggle("cz-rail", readMode() === "studio" && v);
+    // painted truth on both axes (the re-review's catch: the fold converted
+    // two of the three studio-state readers and left this one lying) — the
+    // stored preference is still written for the next load, when it can be
+    const v = !shownRail(); writeRail(v);
+    document.documentElement.classList.toggle("cz-rail", shownMode() === "studio" && v);
     updateModeButtons();
   }
   function updateModeButtons() {
@@ -336,7 +343,7 @@
     // page that loads with the sidebar already collapsed reads "expand", not the
     // stale "collapse" baked into the markup
     const b = $(".cz-rail-btn", STUDIO);
-    if (b) { const railed = readRail(); b.textContent = railed ? "›" : "‹";
+    if (b) { const railed = shownRail(); b.textContent = railed ? "›" : "‹";
       b.title = railed ? "expand the studio" : "collapse the studio";
       b.setAttribute("aria-label", b.title); }
   }

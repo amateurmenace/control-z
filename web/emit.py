@@ -116,6 +116,14 @@ def xesc(s) -> str:
     return html.escape(str(s or ""), quote=True)
 
 
+def n_of(n, noun) -> str:
+    """A counted noun that stays English at one — "1 meeting", "3 meetings".
+    The re-review's catch: the featured card learned this while the front
+    page's own rail still pressed "1 meetings" one screen away."""
+    n = int(n or 0)
+    return f"{n} {noun}" + ("" if n == 1 else "s")
+
+
 def hms(t) -> str:
     t = max(0, float(t or 0))
     h, m, s = int(t // 3600), int((t % 3600) // 60), int(t % 60)
@@ -421,7 +429,7 @@ def page_home(meetings, issues, stats, manifest, base, featured=None):
     loud = "".join(
         f'<a class="lrow" href="/app/i/{i["slug"]}">'
         f'<b>{esc(i["name"])}</b>'
-        f'<span class="lmeta">{i["n_meetings"]} meetings · {i["n_segments"]} moments · '
+        f'<span class="lmeta">{n_of(i["n_meetings"], "meeting")} · {n_of(i["n_segments"], "moment")} · '
         f'{esc((i["first_seen"] or "")[:4])}–{esc((i["last_seen"] or "")[:4])}</span></a>'
         for i in stats["loud"])
 
@@ -824,7 +832,7 @@ def page_issue(i, manifest, base):
   <article class="issue">
     <a class="back" href="/app/">← the record</a>
     <h1>{esc(i["name"])}</h1>
-    <div class="idisclose">{origin} · tracked across {i["n_meetings"]} meetings ·
+    <div class="idisclose">{origin} · tracked across {n_of(i["n_meetings"], "meeting")} ·
       officials-only aggregation · supplements the official record</div>
     <div class="ichips">{aliases}{related}</div>
     <p class="feedlink"><a href="/app/feeds/{i["slug"]}.xml">☉ follow by RSS</a></p>
@@ -834,7 +842,7 @@ def page_issue(i, manifest, base):
     {ledger}
   </article>
 """
-    desc = (f'“{i["name"]}” — {i["n_meetings"]} meetings, {i["n_segments"]} moments '
+    desc = (f'“{i["name"]}” — {n_of(i["n_meetings"], "meeting")}, {n_of(i["n_segments"], "moment")} '
             f'on the record, {(i["first_seen"] or "")[:4]}–{(i["last_seen"] or "")[:4]}')
     return shell(f'{i["name"]} — the long view', desc,
                  f"{base}/app/i/{i['slug']}", body, "memory", manifest,
@@ -1501,7 +1509,7 @@ def page_graph(graph, manifest, base):
         dots += (f'<a href="/app/i/{esc(node["slug"])}">'
                  f'<circle cx="{x}" cy="{y}" r="{r:.1f}" fill="#052e16" '
                  f'fill-opacity=".82"><title>{esc(node["name"])} · '
-                 f'{node["n_meetings"]} meetings</title></circle></a>')
+                 f'{n_of(node["n_meetings"], "meeting")}</title></circle></a>')
         # label just outside the ring, anchored by side
         lx = round(cx + (R + 14) * math.cos(-math.pi/2 + 2*math.pi*i/max(1, n)), 1)
         ly = round(cy + (R + 14) * math.sin(-math.pi/2 + 2*math.pi*i/max(1, n)), 1)

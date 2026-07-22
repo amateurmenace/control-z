@@ -2617,3 +2617,14 @@ class TestStudioFootprint(unittest.TestCase):
         r = self.node(body)
         self.assertEqual(r.returncode, 0,
                          f"shownMode reads the wrong truth:\n{r.stdout}{r.stderr}")
+        # …and the CALL SITES are the fix (the re-review's catch: a revert to
+        # readMode() at any of them would lie again while this test stayed
+        # green). All four painted-truth consumers, pinned by token:
+        for token in ("const m = shownMode();",          # updateModeButtons
+                      "MODES.indexOf(shownMode())",      # the arrow keys
+                      "const v = !shownRail();",         # toggleRail's next state
+                      'shownMode() === "studio" && v',   # toggleRail's gate
+                      "const railed = shownRail();"):    # the handle's glyph
+            self.assertIn(token, self.JS,
+                          f"{token!r} left the painted truth — a control may "
+                          "be describing storage again")
