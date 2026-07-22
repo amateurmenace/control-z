@@ -2587,3 +2587,33 @@ class TestStudioFootprint(unittest.TestCase):
         self.assertNotIn("aria-pressed", studio_block,
                          "the mode control still speaks aria-pressed — a "
                          "radio is checked, not pressed")
+        # the stylesheet must move WITH the attribute: the checked-state fill
+        # keyed on [aria-pressed] shipped orphaned once (the P3 review's HIGH
+        # — every mode radio painted identical), so pin the pair here
+        css = (REPO / "web" / "static" / "app.web.css").read_text()
+        self.assertIn('.cz-mode[aria-checked="true"]', css,
+                      "the checked radio has no selected-state style")
+        self.assertNotIn('.cz-mode[aria-pressed', css,
+                         "a checked-state rule still keys on aria-pressed — "
+                         "it can never match the radio the JS paints")
+
+    def test_the_control_speaks_about_the_painted_mode_not_the_stored_one(self):
+        """The fold's fix: in a storage-blocked browser readMode() answers
+        "preview" while the page visibly sits in the studio (markMode painted
+        the class; writeMode's refused write was swallowed). shownMode() —
+        what updateModeButtons and the arrow keys read — derives from the
+        painted class first, storage second."""
+        body = "\n".join([
+            "const MODES = ['preview', 'studio', 'paper'];",
+            "const readMode = () => 'preview';",
+            "const cls = new Set(['cz-m-studio']);",
+            "const document = { documentElement: { classList: { contains: c => cls.has(c) } } };",
+            self.lift(r"const shownMode = .+?readMode\(\);"),
+            "if (shownMode() !== 'studio') { console.log('FAIL painted', shownMode()); process.exit(1); }",
+            "cls.clear();",
+            "if (shownMode() !== 'preview') { console.log('FAIL fallback', shownMode()); process.exit(1); }",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"shownMode reads the wrong truth:\n{r.stdout}{r.stderr}")

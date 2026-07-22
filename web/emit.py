@@ -967,10 +967,15 @@ def featured_papers(meetings, issues, stats):
         # the JS title cap is 200 UTF-16 units; 95 code points + ", watched"
         # stays under it even if every code point were astral
         title = f'{i["name"][:95]}, watched'
+        n = i.get("n_meetings") or 0
+        # a young record's loudest issue may hold one meeting — "longest
+        # thread across 1 meetings" would be both broken English and a boast
+        sub = (f"the record's longest thread — one issue across {n} "
+               "meetings, and its reach over time") if n > 1 else \
+              "one issue, tracked from its first appearance — and its reach over time"
         out.append({
             "title": title,
-            "sub": f'the record\'s longest thread — one issue across '
-                   f'{i["n_meetings"]} meetings, and its reach over time',
+            "sub": sub,
             "qs": _paper_qs(title,
                             [{"kind": "story", "story": "issue", "slug": i["slug"]},
                              {"kind": "chart", "chart": "reach", "slug": i["slug"]}]),
@@ -1004,9 +1009,11 @@ def page_paper(manifest, base, featured=None):
     P3 adds the featured papers: example links the press built from the
     record itself, server-rendered OUTSIDE #paperbody (the renderer owns that
     node's innerHTML and must never fight the stub for it). They belong to
-    the empty state; app.js hides them the moment any paper renders — and
-    with JavaScript off they simply stand, the one part of this page that
-    works without a script.
+    the empty state; app.js hides them the moment any paper renders. With
+    JavaScript off they stand as plain pressed links — but rendering the
+    paper a link carries still needs the reader's script, so a JS-off click
+    lands back on this same stub, whose hint above the cards says exactly
+    what is missing.
 
     JS-off, a paper cannot decode (it lives in the query string or the
     browser, which a static page cannot read) — so the honest fallback says

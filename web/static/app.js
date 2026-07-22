@@ -148,6 +148,13 @@
     MODES.forEach(x => el.classList.toggle("cz-m-" + x, x === m));
     el.classList.toggle("cz-rail", m === "studio" && readRail());
   }
+  /* the mode THIS page is showing: the html class markMode painted (the one
+     writer), falling back to storage. In a storage-blocked browser
+     readMode() answers "preview" while the page visibly sits in the studio —
+     the control's checked state and its arrows must speak about what the
+     reader sees, not what a refused write left behind (a review catch). */
+  const shownMode = () => MODES.find(m =>
+    document.documentElement.classList.contains("cz-m-" + m)) || readMode();
 
   /* the mode control is a real radiogroup (P3): one choice of three, arrow
      keys move it, and only the checked radio sits in the tab order (roving
@@ -246,9 +253,12 @@
     // lands the keyboard on the control the new mode shows.
     const grp = $(".cz-modes", STUDIO);
     if (grp) grp.addEventListener("keydown", e => {
+      // modified chords belong to the browser and to AT (Alt+Left is back) —
+      // only the plain keys are the radiogroup's to take
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
       const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
       const to = step
-        ? MODES[(MODES.indexOf(readMode()) + step + MODES.length) % MODES.length]
+        ? MODES[(MODES.indexOf(shownMode()) + step + MODES.length) % MODES.length]
         : e.key === "Home" ? MODES[0]
         : e.key === "End" ? MODES[MODES.length - 1] : "";
       if (!to) return;
@@ -313,7 +323,7 @@
     updateModeButtons();
   }
   function updateModeButtons() {
-    const m = readMode();
+    const m = shownMode();
     // aria-checked + roving tabindex: the checked radio is the group's one
     // tab stop; the rest are arrow-reachable (updateModeButtons runs before
     // setMode hands focus over, so the stop exists by the time focus moves)
