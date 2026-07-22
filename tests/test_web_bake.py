@@ -895,6 +895,25 @@ class TestBakeEdition(unittest.TestCase):
         page = (self.out / "officials" / "index.html").read_text()
         self.assertIn("The people", page)
 
+    def test_votes_plane_restates_the_meetings_own_roll_calls(self):
+        """specs/21 P2: votes.json gathers the roll calls the meeting planes
+        already show — one date-ordered plane, one fetch at any corpus size,
+        receipts by (pid, t). It must never disagree with the meeting pages
+        (officials.json is per-member and deliberately different)."""
+        plane = self._read("votes.json")
+        self.assertEqual(plane["n_meetings"], 1)
+        vs = plane["votes"]
+        self.assertEqual(len(vs), self._read("manifest.json")["counts"]["votes"])
+        v = vs[0]
+        self.assertEqual(set(v), {"pid", "date", "body", "town", "t",
+                                  "motion", "outcome", "tally"})
+        self.assertEqual((v["outcome"], v["tally"]), ("passes", "3–0"))
+        # the receipt resolves: the same vote, at the same second, on the
+        # meeting page the dot links to
+        m = self._read(f"meetings/{v['pid']}.json")
+        self.assertIn(v["t"], [x["t"] for x in m["votes"]])
+        self.assertEqual(v["motion"], m["votes"][0]["motion"])
+
     def test_stats_count_documents_and_votes(self):
         s = self._read("stats.json")
         self.assertEqual(s["counts"]["documents"], 1)
@@ -1906,6 +1925,10 @@ class TestPaper(unittest.TestCase):
             self.lift(r"const PAPER_MAX_BLOCKS = .+?;"),
             self.lift(r"const PAPER_MAX_CLIPS = .+?;"),
             self.lift(r"const PAPER_REF = .+?;"),
+            self.lift(r"const PAPER_NOTE_MAX = .+?;"),
+            self.lift(r"const PAPER_CHARTS = .+?;"),
+            self.lift(r"const noteText = .+?;"),
+            self.lift(r"function chartRecordURL\(b\) \{.+?\n  \}"),
             self.lift(r"function normalizePaper\(p\) \{.+?\n  \}"),
             self.lift(r"function normalizeBlock\(b\) \{.+?\n  \}"),
             self.lift(r"function portablePaper\(p\) \{.+?\n  \}"),
@@ -2080,6 +2103,142 @@ class TestPaper(unittest.TestCase):
         r = self.node(body)
         self.assertEqual(r.returncode, 0,
                          f"paperJSON malformed:\n{r.stdout}{r.stderr}")
+
+    P2_DRAFT = ('{ title: "P2, watched", blocks: ['
+                '{kind:"chart",chart:"votes"},'
+                '{kind:"chart",chart:"framing"},'
+                '{kind:"chart",chart:"framing",pid:"vid1",title:"Select Board"},'
+                '{kind:"chart",chart:"reach",slug:"budget-override",name:"budget override"},'
+                '{kind:"chart",chart:"topics"},'
+                '{kind:"note",text:"Watch the tally, not the speeches. '
+                '100% real — plus+comma, dots. ¿unicode?\\nSecond line."}]}')
+
+    def test_p2_blocks_round_trip_the_link(self):
+        """Charts and notes travel in the link like every other block — the
+        note twice-encoded so its own commas and percents survive
+        URLSearchParams's early decode, and no ride-along label leaks."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            f"const draft = {self.P2_DRAFT};",
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const url = paperShareURL(draft);",
+            "if (url.includes('Select') || url.includes('budget%20override'))",
+            "  fail('ride-along meta leaked into the link: '+url);",
+            "const back = decodePaper(url.slice(url.indexOf('?')));",
+            "if (back.blocks.length !== 6) fail('blocks '+back.blocks.length);",
+            "const a = JSON.stringify(portablePaper(draft));",
+            "const b = JSON.stringify(portablePaper({title: back.title, blocks: back.blocks}));",
+            "if (a !== b) fail('round-trip drifted:\\n'+a+'\\n'+b);",
+            "const note = back.blocks[5];",
+            "if (note.kind !== 'note') fail('note lost');",
+            "if (!note.text.includes('plus+comma,')) fail('note text mangled: '+note.text);",
+            "if (!note.text.includes('100%')) fail('percent mangled: '+note.text);",
+            "if (!note.text.includes('¿unicode?')) fail('unicode mangled');",
+            "if (!note.text.includes('\\nSecond line')) fail('newline lost');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"P2 round-trip failed:\n{r.stdout}{r.stderr}")
+
+    def test_mangled_p2_links_degrade_and_never_throw(self):
+        """decodeReel's law, extended to charts and notes: a lost character
+        reads as fewer blocks, never a crash — and a chart shape the record
+        never writes (a bare reach, a reffed votes) is a mangle, dropped."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const CASES = [",
+            "  ['?v=1&b=n.', 0],",
+            "  ['?v=1&b=n.%2520', 0],",           # a lone space — trims away
+            "  ['?v=1&b=n.%E0%A4%A', 0],",        # bad escape at the 2nd decode
+            "  ['?v=1&b=c.', 0],",
+            "  ['?v=1&b=c.sparkline', 0],",
+            "  ['?v=1&b=c.reach', 0],",           # reach needs its issue
+            "  ['?v=1&b=c.votes.vid1', 0],",      # votes carries no ref
+            "  ['?v=1&b=c.topics.vid1', 0],",
+            "  ['?v=1&b=c.framing.', 0],",        # an empty ref is a mangle
+            "  ['?v=1&b=c.framing.has%2520space', 0],",
+            "  ['?v=1&b=c.votes,n.hi,garbage', 2],",
+            "];",
+            "for (const [q, want] of CASES) {",
+            "  let got;",
+            "  try { got = decodePaper(q).blocks.length; }",
+            "  catch (e) { fail('THREW on '+JSON.stringify(q)+': '+e); }",
+            "  if (got !== want) fail(JSON.stringify(q)+' -> '+got+' blocks, want '+want);",
+            "}",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"P2 decodePaper is fragile:\n{r.stdout}{r.stderr}")
+
+    def test_note_normalize_is_total_and_the_empty_note_is_draft_only(self):
+        """The client cleans (total); the store refuses (strict) — and the
+        one place an empty note may live is the draft being typed into:
+        portablePaper and paperJSON carry none."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const long = normalizeBlock({kind:'note', text: 'a'.repeat(9999)});",
+            "if (long.text.length !== PAPER_NOTE_MAX) fail('cap '+long.text.length);",
+            "const ctl = normalizeBlock({kind:'note', text: 'a\\u0000b\\rc\\td'});",
+            "if (ctl.text !== 'ab\\ncd') fail('control clean: '+JSON.stringify(ctl.text));",
+            "if (normalizeBlock({kind:'note', text: 7}) !== null) fail('non-string note');",
+            "const empty = normalizeBlock({kind:'note', text: ''});",
+            "if (!empty || empty.text !== '') fail('the draft must keep an empty note');",
+            "const p = {title:'', blocks:[{kind:'note',text:'  '},{kind:'note',text:'kept'}]};",
+            "if (portablePaper(p).blocks.length !== 1) fail('portable must drop empty notes');",
+            "if (paperJSON(p).blocks.length !== 1) fail('paperJSON must drop empty notes');",
+            "if (normalizeBlock({kind:'chart', chart:'sparkline'}) !== null) fail('junk chart');",
+            "if (normalizeBlock({kind:'chart', chart:'reach'}) !== null) fail('bare reach');",
+            "if (normalizeBlock({kind:'chart', chart:'framing', pid:'has space'}) !== null) fail('bad pid');",
+            "const stray = normalizeBlock({kind:'chart', chart:'votes', slug:'x'});",
+            "if (JSON.stringify(stray) !== '{\"kind\":\"chart\",\"chart\":\"votes\"}')",
+            "  fail('stray ref survived: '+JSON.stringify(stray));",
+            "const keep = normalizeBlock({kind:'chart', chart:'reach', slug:'ok', name:'N', junk:1});",
+            "if (keep.junk !== undefined || keep.name !== 'N') fail('ride-along wrong');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"P2 normalize leaky:\n{r.stdout}{r.stderr}")
+
+    def test_paper_json_charts_carry_their_record_urls(self):
+        """Provenance for a chart is the page a reader can recount it on —
+        every chart block in the receipt names its record page."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            f"const draft = {self.P2_DRAFT};",
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const j = paperJSON(draft);",
+            "const urls = j.blocks.filter(b => b.kind === 'chart').map(b => b.url);",
+            "const want = ['https://publicrecord.studio/app/officials',",
+            "  'https://publicrecord.studio/app/analytics',",
+            "  'https://publicrecord.studio/app/m/vid1',",
+            "  'https://publicrecord.studio/app/i/budget-override',",
+            "  'https://publicrecord.studio/app/analytics'];",
+            "if (JSON.stringify(urls) !== JSON.stringify(want))",
+            "  fail('chart urls drifted: '+JSON.stringify(urls));",
+            "const note = j.blocks[5];",
+            "if (note.kind !== 'note' || !note.text.includes('tally')) fail('note lost from receipt');",
+            "if ('url' in note) fail('a note has no record URL — it is the editor’s words');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"paperJSON P2 malformed:\n{r.stdout}{r.stderr}")
+
+    def test_the_caps_and_kinds_match_the_store(self):
+        """One cap, one enum, two languages — the reader's constants must
+        equal the store's or a paper the panel accepts gets a 422 at share."""
+        from record.papers import CHARTS, NOTE_MAX
+        m = re.search(r"const PAPER_NOTE_MAX = (\d+);", self.JS)
+        self.assertTrue(m and int(m.group(1)) == NOTE_MAX,
+                        "PAPER_NOTE_MAX drifted from record.papers.NOTE_MAX")
+        m = re.search(r"const PAPER_CHARTS = \[(.+?)\];", self.JS)
+        self.assertEqual(tuple(re.findall(r'"(\w+)"', m.group(1))), CHARTS,
+                         "PAPER_CHARTS drifted from record.papers.CHARTS")
 
     def test_the_paper_make_path_touches_no_api(self):
         """The covenant, extended to P1 (specs/21 §5): composing, arranging,

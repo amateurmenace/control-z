@@ -8,10 +8,13 @@ never load-bearing** — every paper also travels as a URL-encoded link and an
 exportable ``paper.json``, so losing this bucket loses the shortness of the
 short links and nothing else (specs/17 §6.2 holds whole).
 
-The abuse posture, P1 (settled with Stephen 2026-07-21): the only free text a
-stored paper may carry is its **title**, length-capped and control-char-free;
-every other field is an exact-shaped reference into the record (a pid, a
-slug, a clip's two timestamps). Validation is **strict, not corrective** — an
+The abuse posture, P1 (settled with Stephen 2026-07-21) and extended for P2
+(notes, settled 2026-07-22): the free text a stored paper may carry is its
+**title** and its **notes** — each length-capped, plain text, control-char
+policed (a note may hold newlines; a title may not); every other field is an
+exact-shaped reference into the record (a pid, a slug, a clip's two
+timestamps, a chart kind from a closed list). Validation is **strict, not
+corrective** — an
 unknown key or a malformed block is a 422, never silently rewritten, because
 a store that "helpfully" edits documents stores things nobody ever saw. (The
 reader's own decoder is the opposite — total, malformed-degrades — and that
@@ -41,6 +44,17 @@ MAX_BYTES = 64 * 1024        # the raw POST and the canonical form both
 MAX_BLOCKS = 64
 MAX_CLIPS = 100              # per reel block — matches the reader's cap
 TITLE_MAX = 200
+# The P2 posture, settled with Stephen 2026-07-22: a note is the second and
+# last free text a stored paper may carry — plain text, capped, newlines
+# allowed (a note has paragraphs; a title does not), every other control
+# character refused. No markdown, no HTML: the reader esc()s it at render,
+# so what is stored is what is shown, verbatim and inert.
+NOTE_MAX = 2000
+# The chart kinds a paper may carry (specs/21 P2). A chart block is refs and
+# an enum, never data or free text — the reader computes the picture from the
+# record's own pressed planes, so a stored paper cannot assert a number the
+# record would not draw.
+CHARTS = ("votes", "reach", "framing", "topics")
 
 # A pid or an issue slug. The bake mints pids to 80 chars and issue slugs to
 # 96 (web/bake.py pid()/islug()); 128 leaves headroom and matches the reader's
@@ -117,8 +131,43 @@ def _block(b, i):
                 raise PaperError(f"{cw}: ends before it starts")
             out.append({"pid": pid, "start": start, "end": end})
         return {"kind": "reel", "clips": out}
+    if kind == "note":
+        _exact_keys(b, {"kind", "text"}, what)
+        text = b.get("text")
+        if not isinstance(text, str):
+            raise PaperError(f"{what}: a note's text must be a string")
+        if len(text) > NOTE_MAX:
+            raise PaperError(
+                f"{what}: the note is longer than {NOTE_MAX} characters — "
+                "share the fuller version as a paper.json file")
+        if any(ord(ch) < 0x20 and ch != "\n" for ch in text):
+            raise PaperError(f"{what}: the note carries control characters "
+                             "(only newlines may break it)")
+        if not text.strip():
+            raise PaperError(f"{what}: an empty note has nothing to store")
+        return {"kind": "note", "text": text}
+    if kind == "chart":
+        chart = b.get("chart")
+        if chart not in CHARTS:
+            raise PaperError(
+                f"{what}: unknown chart {chart!r} — this record draws "
+                f"{', '.join(CHARTS)}")
+        if chart == "reach":
+            _exact_keys(b, {"kind", "chart", "slug"}, what)
+            slug = b.get("slug")
+            if not isinstance(slug, str) or not _REF.fullmatch(slug):
+                raise PaperError(f"{what}: not an issue slug")
+            return {"kind": "chart", "chart": "reach", "slug": slug}
+        if chart == "framing" and "pid" in b:
+            _exact_keys(b, {"kind", "chart", "pid"}, what)
+            pid = b.get("pid")
+            if not isinstance(pid, str) or not _REF.fullmatch(pid):
+                raise PaperError(f"{what}: not a meeting id")
+            return {"kind": "chart", "chart": "framing", "pid": pid}
+        _exact_keys(b, {"kind", "chart"}, what)
+        return {"kind": "chart", "chart": chart}
     raise PaperError(f"{what}: unknown kind {kind!r} — this store holds "
-                     "stories and reels (charts and notes arrive later)")
+                     "stories, reels, charts and notes")
 
 
 def canonical(doc) -> str:

@@ -918,10 +918,12 @@ def page_paper(manifest, base):
     <a class="back" href="/app/">← the record</a>
     <h1>A paper, edited from the record</h1>
     <p class="presslede">Everyone gets the record; an editor makes it theirs.
-      A <b>paper</b> is a front page somebody curated — the stories, reels and
-      moments of the public record they judged worth your attention, arranged
-      and titled. Every block points back into the record itself, so nothing
-      here is asserted that the record cannot show you.</p>
+      A <b>paper</b> is a front page somebody curated — the stories, reels,
+      charts and notes of the public record they judged worth your attention,
+      arranged and titled. Every story, reel and chart points back into the
+      record itself (a chart is computed in your browser from the record's
+      own planes); a note is the editor's own words, and it is labeled as
+      exactly that.</p>
     <div class="paperbody" id="paperbody">
       <p class="hint">Reading a paper needs JavaScript — the paper lives in
         the link that brought you here (or in your own browser), not on any
@@ -936,9 +938,10 @@ def page_paper(manifest, base):
   </section>
 """
     return shell("Your paper — publicrecord.studio",
-                 "A curated front page of the public record — stories, reels "
-                 "and moments an editor arranged; every block points back "
-                 "into the record.",
+                 "A curated front page of the public record — stories, reels, "
+                 "charts and notes an editor arranged; the record's blocks "
+                 "point back into the record, and a note says whose words "
+                 "it is.",
                  f"{base}/app/p", body, "", manifest,
                  version=manifest["version"])
 

@@ -289,8 +289,9 @@ means the feed itself returned nothing; check the channel id.
 ### A shared paper needs to come down
 
 There is deliberately no delete API — takedown is a steward's hand, not an
-endpoint someone can find. The only free text a stored paper can carry is
-its title (everything else is refs into the record), so this should be rare:
+endpoint someone can find. The free text a stored paper can carry is its
+title and its notes — both length-capped plain text, rendered inert
+(everything else is refs into the record), so this should be rare:
 
 ```bash
 gcloud storage rm gs://publicrecord-papers/p/<id>.json

@@ -16,7 +16,7 @@ import json
 import unittest
 from pathlib import Path
 
-from record.papers import (SCHEMA, TITLE_MAX, MemPapers, PaperError,
+from record.papers import (NOTE_MAX, SCHEMA, TITLE_MAX, MemPapers, PaperError,
                            canonical, paper_id)
 
 REPO = Path(__file__).resolve().parents[1]
@@ -113,7 +113,7 @@ class TestCanonicalForm(unittest.TestCase):
             ({"schema": SCHEMA, "title": "a\x00b", "blocks": []},
              None, "control"),
             ({"schema": SCHEMA, "title": "", "blocks": []}, None, "empty"),
-            (portable(blocks=[{"kind": "note", "text": "hi"}]), None,
+            (portable(blocks=[{"kind": "widget", "text": "hi"}]), None,
              "unknown kind"),
             (portable(blocks=[{"kind": "story", "story": "meeting",
                                "pid": "has space"}]), None, "meeting id"),
@@ -138,6 +138,85 @@ class TestCanonicalForm(unittest.TestCase):
                 canonical(doc)
             self.assertIn(fragment, str(cm.exception).lower(),
                           f"for {doc!r} got: {cm.exception}")
+
+    def test_notes_store_on_the_settled_posture(self):
+        """P2 (settled with Stephen 2026-07-22): a note is plain text, capped,
+        newlines allowed, every other control character refused — the second
+        and last free text a stored paper may carry."""
+        c = canonical(portable(blocks=[
+            {"kind": "note", "text": "Two overrides in one spring.\n\n"
+                                     "Watch the tally, not the speeches."}]))
+        self.assertIn("Watch the tally", c)
+        # exactly at the cap is legal; one past it is refused
+        canonical(portable(blocks=[{"kind": "note", "text": "x" * NOTE_MAX}]))
+        cases = [
+            ({"kind": "note", "text": "x" * (NOTE_MAX + 1)}, "longer"),
+            ({"kind": "note", "text": "a\tb"}, "control"),
+            ({"kind": "note", "text": "a\rb"}, "control"),
+            ({"kind": "note", "text": "a\x00b"}, "control"),
+            ({"kind": "note", "text": "   \n  "}, "empty note"),
+            ({"kind": "note", "text": 7}, "string"),
+            ({"kind": "note"}, "exactly"),
+            ({"kind": "note", "text": "ok", "author": "me"}, "exactly"),
+        ]
+        for block, fragment in cases:
+            with self.assertRaises(PaperError, msg=repr(block)) as cm:
+                canonical(portable(blocks=[block]))
+            self.assertIn(fragment, str(cm.exception).lower(),
+                          f"for {block!r} got: {cm.exception}")
+
+    def test_charts_store_as_an_enum_and_refs_never_data(self):
+        """A chart block is a kind from a closed list plus at most one ref —
+        the reader computes the picture from the record's planes, so a stored
+        paper cannot assert a number the record would not draw."""
+        c = canonical(portable(blocks=[
+            {"kind": "chart", "chart": "votes"},
+            {"kind": "chart", "chart": "topics"},
+            {"kind": "chart", "chart": "framing"},
+            {"kind": "chart", "chart": "framing", "pid": "2YhgO14jXys"},
+            {"kind": "chart", "chart": "reach", "slug": "the-override"},
+        ]))
+        self.assertEqual(canonical(json.loads(c)), c)   # a fixed point too
+        cases = [
+            ({"kind": "chart", "chart": "sparkline"}, "unknown chart"),
+            ({"kind": "chart"}, "unknown chart"),
+            ({"kind": "chart", "chart": "reach"}, "exactly"),
+            ({"kind": "chart", "chart": "reach", "slug": "has space"},
+             "issue slug"),
+            ({"kind": "chart", "chart": "framing", "pid": "has space"},
+             "meeting id"),
+            ({"kind": "chart", "chart": "votes", "pid": "abc"}, "exactly"),
+            ({"kind": "chart", "chart": "topics", "slug": "abc"}, "exactly"),
+            ({"kind": "chart", "chart": "votes", "data": [1, 2]}, "exactly"),
+        ]
+        for block, fragment in cases:
+            with self.assertRaises(PaperError, msg=repr(block)) as cm:
+                canonical(portable(blocks=[block]))
+            self.assertIn(fragment, str(cm.exception).lower(),
+                          f"for {block!r} got: {cm.exception}")
+
+    def test_a_p2_paper_round_trips_the_endpoints(self):
+        """The full P2 shape — stories, a reel, charts, a note — stores and
+        serves byte-canonically, one address per paper."""
+        from fastapi.testclient import TestClient
+
+        from record.app import create_app
+        mem = MemPapers()
+        client = TestClient(create_app(corpus=object(), papers=mem))
+        doc = portable(blocks=[
+            {"kind": "story", "story": "issue", "slug": "the-override"},
+            {"kind": "chart", "chart": "reach", "slug": "the-override"},
+            {"kind": "chart", "chart": "votes"},
+            {"kind": "note", "text": "The spring the override kept\nreturning."},
+        ])
+        r = client.post("/api/papers", json=doc)
+        self.assertEqual(r.status_code, 200, r.text)
+        pid = r.json()["id"]
+        g = client.get(f"/api/papers/{pid}")
+        self.assertEqual(g.status_code, 200)
+        kinds = [b["kind"] for b in g.json()["blocks"]]
+        self.assertEqual(kinds, ["story", "chart", "chart", "note"])
+        self.assertEqual(mem.get(pid).decode(), canonical(doc))
 
     def test_the_reader_never_computes_the_hash(self):
         """The canonical form is decided HERE — app.js must not grow its own
