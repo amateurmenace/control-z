@@ -1,12 +1,12 @@
 # 22 — The cutting room: reels, cut from anywhere
 
-**Status:** v0.1 · **Stage:** **DRAFT — awaiting Stephen's settlement of §6
-before any surface is built** (the proposals are written to be disagreed
-with) · **Owner:** Stephen Walter (Weird Machine) · **Direction:** Stephen,
-2026-07-22 — *"the full ability to create highlight reels within and cross
-meetings."* · **Related:** specs/20 (the newspaper; §6/§7 built the reel
-composer and `/app/r` this room is furnished from), specs/21 (the studio,
-your paper — shipped P0–P3; the panel this room moves into),
+**Status:** v0.2 · **Stage:** **SETTLED (Stephen, 2026-07-22 — all five §6
+questions answered, every proposal taken) — P0 is buildable.** · **Owner:**
+Stephen Walter (Weird Machine) · **Direction:** Stephen, 2026-07-22 — *"the
+full ability to create highlight reels within and cross meetings."* ·
+**Related:** specs/20 (the newspaper; §6/§7 built the reel composer and
+`/app/r` this room is furnished from), specs/21 (the studio, your paper —
+shipped P0–P3; the panel this room moves into),
 `.claude/rules/branding.md` (§6.1 palette bounds), `record/OPERATING.md`
 (nothing here touches the server at all).
 
@@ -180,29 +180,34 @@ one fetch per meeting, parsed `[H:MM:SS]` starts, cached) and snaps
 everywhere. No new plane, no press change; where the fetch fails, the ±2 s
 nudge remains and the tray says so.
 
-## 6. The questions for Stephen — settle before building
+## 6. The settlements — Stephen, 2026-07-22 (all five answered; build to these)
 
-1. **Preview (§5.3):** new-tab deep links now and a scoped panel stage as
-   its own later phase (the proposal) — or new-tab only, permanently — or
-   the stage first, before any cutting surfaces?
-2. **Named reels (§5.5):** one working tray + file-into-paper (the
-   proposal), or a real named-reel library this spec should design now?
-3. **"Make this yours" (§5.4):** append/replace offered explicitly (the
-   proposal), or always-append (simpler, never destructive), or
-   always-replace-with-confirm?
-4. **Cut-from-anywhere scope (§5.1):** all three new surfaces in P0
-   (transcript + search + beads, the proposal), or transcript first and
-   the rest phased behind it?
-5. **Sub-segment trims (§5.6):** confirmed out (the proposal), or wanted?
+1. **Preview (§5.3): new-tab now, the stage later.** P0 ships preview as
+   deep links opening in a new tab — zero player risk, always honest. The
+   scoped panel stage is its own later phase (P2) behind a written
+   one-engine design, and `/app/p`'s reel blocks inherit it when it lands.
+2. **Named reels (§5.5): ONE working tray + file-into-paper.** The tray
+   stays the single bench; finished reels live as paper blocks and share
+   links; make-this-yours reopens any of them onto the bench. A library
+   may come later — the storage shape does not foreclose it.
+3. **"Make this yours" (§5.4): append or replace, offered explicitly.**
+   Empty tray: the reel just arrives. Otherwise an explicit choice —
+   append after what you have, or replace it behind a confirm. Never
+   silently either.
+4. **Cut-from-anywhere scope (§5.1): all three surfaces in P0.**
+   Transcript rows + search hits + issue beads together — one coherent
+   "the record is cuttable" moment, one deploy, one review.
+5. **Sub-segment trims (§5.6): OUT, confirmed.** Trim stays snapped to
+   the record's own units; the desk keeps finesse.
 
 ## 7. Phasing — one deploy per phase, each behind its settlement
 
-- **P0 — cut from anywhere + the tray everywhere.** §5.1's ticks on the
-  settled surfaces; §5.2's per-clip tray in the panel; §5.6's
-  transcript.txt snapping so cross-page trims are honest; preview per
-  §6.1's answer (new-tab links unless Stephen chose otherwise). Client-only
-  throughout — no emit change beyond tick affordances in the stubs'
-  hydration, no plane change, no server change.
+- **P0 — cut from anywhere + the tray everywhere.** §5.1's ticks on all
+  three settled surfaces (transcript rows, search hits, issue beads);
+  §5.2's per-clip tray in the panel; §5.6's transcript.txt snapping so
+  cross-page trims are honest; preview as new-tab deep links per §6.1.
+  Client-only throughout — no emit change beyond tick affordances in the
+  stubs' hydration, no plane change, no server change.
 - **P1 — the remix loop.** §5.4 make-this-yours on `/app/r`;
   file-this-reel-into-your-paper named in the tray (the block type already
   exists); the cite sheet and `reel.json` offered from the panel tray
