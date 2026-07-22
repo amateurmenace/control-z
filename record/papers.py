@@ -136,11 +136,16 @@ def _block(b, i):
         text = b.get("text")
         if not isinstance(text, str):
             raise PaperError(f"{what}: a note's text must be a string")
-        if len(text) > NOTE_MAX:
+        # the cap counts UTF-16 units — the READER's unit — or a stored
+        # astral-heavy note would be legal here and silently truncated at
+        # every render (the client caps at 2,000 units; a review catch)
+        units = sum(2 if ord(ch) > 0xFFFF else 1 for ch in text)
+        if units > NOTE_MAX:
             raise PaperError(
                 f"{what}: the note is longer than {NOTE_MAX} characters — "
                 "share the fuller version as a paper.json file")
-        if any(ord(ch) < 0x20 and ch != "\n" for ch in text):
+        if any((ord(ch) < 0x20 and ch != "\n") or ord(ch) == 0x7F
+               for ch in text):
             raise PaperError(f"{what}: the note carries control characters "
                              "(only newlines may break it)")
         if not text.strip():

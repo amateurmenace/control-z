@@ -281,8 +281,9 @@ def create_app(corpus=None, papers=None) -> FastAPI:
         Idempotent by construction: the same paper always answers the same
         id, and a re-POST writes nothing. No identity is taken and none
         exists to take — the store holds documents, not authors. Validation
-        is strict (record/papers.py): refs and two timestamps per clip, the
-        title the only free text. The store is additive, never load-bearing —
+        is strict (record/papers.py): refs and two timestamps per clip, a
+        chart kind from a closed list — the title and the notes the only
+        free text, each capped and control-char policed. The store is additive, never load-bearing —
         a 503 here costs a reader the SHORT link, and the long link and
         paper.json still carry every paper (the covenant, specs/17 §6.2)."""
         from . import papers as paperlib

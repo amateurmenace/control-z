@@ -1927,6 +1927,7 @@ class TestPaper(unittest.TestCase):
             self.lift(r"const PAPER_REF = .+?;"),
             self.lift(r"const PAPER_NOTE_MAX = .+?;"),
             self.lift(r"const PAPER_CHARTS = .+?;"),
+            self.lift(r"const paperV = .+?;"),
             self.lift(r"const cut = .+?;"),
             self.lift(r"const noteText = .+?;"),
             self.lift(r"function chartRecordURL\(b\) \{.+?\n  \}"),
@@ -2205,6 +2206,77 @@ class TestPaper(unittest.TestCase):
         self.assertEqual(r.returncode, 0,
                          f"P2 normalize leaky:\n{r.stdout}{r.stderr}")
 
+    def test_p2_papers_travel_as_v2_and_p1_papers_stay_byte_stable(self):
+        """A paper carrying kinds the shipped v1 reader cannot represent
+        (notes, charts) must not travel under v=1 — the old reader would
+        silently render a mutilated paper instead of its honest
+        newer-version message (a review catch). And a stories+reels paper
+        must keep encoding EXACTLY as P1 did, byte for byte — every P1 link
+        and address in the wild depends on it."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            f"const p1 = {self.DRAFT};",
+            f"const p2 = {self.P2_DRAFT};",
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const q1 = encodePaperQS(p1);",
+            "if (!q1.startsWith('v=1&')) fail('P1 paper drifted off v=1: '+q1.slice(0,20));",
+            "const expect = 'v=1&t=Overrides%2C%20watched'",
+            "  + '&b=m.vid1,i.budget-override,r.vid1:900.2-907.3~vid2:12-24';",
+            "if (q1 !== expect) fail('P1 bytes drifted:\\n'+q1+'\\n'+expect);",
+            "const q2 = encodePaperQS(p2);",
+            "if (!q2.startsWith('v=2&')) fail('P2 paper must travel as v=2: '+q2.slice(0,20));",
+            "if (!PAPER_VS.includes('2')) fail('the new reader must accept v=2');",
+            "const back = decodePaper('?' + q2);",
+            "if (back.v !== '2' || back.blocks.length !== 6) fail('v=2 decode broke');",
+            "// an empty-note-only draft has nothing traveling — it stays v=1",
+            "if (paperV(portablePaper({title:'', blocks:[{kind:'note',text:'  '}]})) !== '1')",
+            "  fail('an empty note must not force v=2');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"version gate broken:\n{r.stdout}{r.stderr}")
+
+    def test_chart_votes_never_draws_an_outcome_the_record_does_not_hold(self):
+        """The record mints more than passes/fails (tabled, tied; desk
+        imports carry their own words). A binarized chart drew a tabled
+        motion as a FAILED one (a review catch): now passes = filled dot,
+        fails = hollow dot, anything else = the half-tone square, with the
+        exact word in the tooltip and the legend naming the third class only
+        when it appears."""
+        extra = "\n".join([
+            'const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g,',
+            '  c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;" }[c]));',
+            self.lift(r"function chartShell\(kicker, sub, body, twin, src\) \{.+?\n  \}"),
+            self.lift(r"const chartUnfetched = .+?;"),
+            self.lift(r"const chartDay = .+?;"),
+            self.lift(r"function chartVotes\(plane\) \{.+?\n  \}"),
+        ])
+        body = "\n".join([
+            self.PRELUDE, self.helpers(), extra,
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const mixed = chartVotes({ n_meetings: 1, votes: [",
+            "  {pid:'vid1', date:'2026-03-10', t:10, motion:'a', outcome:'passes', tally:'3–0'},",
+            "  {pid:'vid1', date:'2026-03-10', t:20, motion:'b', outcome:'fails', tally:'0–3'},",
+            "  {pid:'vid1', date:'2026-03-10', t:30, motion:'c', outcome:'tabled', tally:''},",
+            "]});",
+            "if ((mixed.match(/<circle/g) || []).length !== 2) fail('two circles expected');",
+            "if (!/fill=\"#ffffff\" stroke=\"#052e16\"/.test(mixed)) fail('fails must stay hollow');",
+            "if (!/<rect[^>]*fill-opacity=\"\\.5\"/.test(mixed)) fail('tabled must be the half-tone square');",
+            "if (!mixed.includes('other outcomes')) fail('legend must name the third class');",
+            "if (!mixed.includes('tabled')) fail('the exact word must ride the twin/tooltip');",
+            "if (!mixed.includes('role=\"group\"')) fail('role=img would hide every receipt from AT');",
+            "if (!mixed.includes('pb-twinwrap')) fail('the twin needs its scroll container');",
+            "const plain = chartVotes({ n_meetings: 1, votes: [",
+            "  {pid:'vid1', date:'2026-03-10', t:10, motion:'a', outcome:'passes', tally:'3–0'},",
+            "]});",
+            "if (plain.includes('other outcomes')) fail('no third class → no third legend entry');",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"chartVotes outcomes broken:\n{r.stdout}{r.stderr}")
+
     def test_a_cap_cut_never_strands_half_an_emoji(self):
         """PAPER_NOTE_MAX and PAPER_TITLE_MAX count UTF-16 units; a bare
         slice at the cap can split a surrogate pair, and encodeURIComponent
@@ -2227,6 +2299,15 @@ class TestPaper(unittest.TestCase):
             "if (back.title.length !== PAPER_TITLE_MAX) fail('title cap ' + back.title.length);",
             "const n = normalizeBlock({kind:'note', text: 'x'.repeat(PAPER_NOTE_MAX - 1) + '\\u{1F600}'});",
             "if (n.text.length !== PAPER_NOTE_MAX - 1) fail('the pair must be given up whole: ' + n.text.length);",
+            "// a hand-edited draft can hold a lone surrogate ANYWHERE (JSON",
+            "// round-trips it) — the encoders must survive that too",
+            "for (const dirty of ['a\\uDC00b', 'a\\uD800b', '\\uDC00', 'ok \\uD800'])",
+            "  try {",
+            "    const u = paperShareURL({ title: dirty, blocks: [{kind:'note', text: dirty}] });",
+            "    if (/%ED/i.test(u)) fail('a lone half leaked into the link: '+u);",
+            "  } catch (e) { fail('interior lone surrogate THREW: '+e); }",
+            "if (cut('a\\uDC00b\\uD800c', 99) !== 'abc') fail('lone halves must drop: '+JSON.stringify(cut('a\\uDC00b\\uD800c', 99)));",
+            "if (cut('a\\u{1F600}b', 99) !== 'a\\u{1F600}b') fail('a whole pair must survive cut');",
             "console.log('ok');",
         ])
         r = self.node(body)

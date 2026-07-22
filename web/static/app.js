@@ -357,6 +357,18 @@
     const el = $(".cz-paperbody", STUDIO); if (!el) return;
     const p = readPaper();
     const n = p.blocks.length;
+    // the storage-event and composer paths repaint with no focus arg — if
+    // the caret is in OUR title input or a note, capture it NOW, before the
+    // innerHTML wipe below (after the wipe activeElement is <body> and this
+    // branch can never fire — a review catch; the P1 title read shipped
+    // dead the same way)
+    if (!focus) {
+      const ae = document.activeElement;
+      if (ae && ae.classList && ae.classList.contains("cz-ptitle"))
+        focus = { act: "title", caret: ae.selectionStart };
+      else if (ae && ae.classList && ae.classList.contains("cz-pnote"))
+        focus = { act: "note", i: +ae.dataset.i, caret: ae.selectionStart };
+    }
     const rows = p.blocks.map((b, i) => {
       const label = b.kind === "reel"
         ? `▶ a reel — ${b.clips.length} clip${b.clips.length > 1 ? "s" : ""} · ${hms(reelRuntime(b.clips))}`
@@ -405,7 +417,11 @@
       + (clips.length ? `<button type="button" class="btn" data-cz="preel">＋ your reel (${clips.length} clip${clips.length > 1 ? "s" : ""})</button>` : "")
       + `<button type="button" class="btn" data-cz="pnote">＋ a note</button>`
       + chartMenu;
-    const share = n || p.title ? `<div class="cz-pshare">
+    // an empty note is arranging surface, not traveling content — the share
+    // row arms only when the PORTABLE paper is non-empty (a review catch:
+    // an empty-note-only draft offered links that decode to "damaged")
+    const liveN = p.blocks.filter(b => b.kind !== "note" || b.text.trim()).length;
+    const share = liveN || p.title ? `<div class="cz-pshare">
         <a class="btn primary" href="${BASE}/p">📰 open your paper</a>
         <button type="button" class="btn" data-cz="plink">⧉ copy link</button>
         <button type="button" class="btn" data-cz="pjson">⬇ paper.json</button>
@@ -414,7 +430,7 @@
       </div>` : "";
     // the last short link minted for THIS paper, shown as a real link — a
     // clipboard is a privilege some browsers withhold, a link on screen is not
-    const shortOut = PAPER_SHORT && (n || p.title)
+    const shortOut = PAPER_SHORT && (liveN || p.title)
       ? `<p class="cz-pshort-out">short link:
            <a href="${esc(PAPER_SHORT)}">${esc(PAPER_SHORT.replace(location.origin, ""))}</a></p>`
       : "";
@@ -458,16 +474,6 @@
       retireShortOut();
       schedulePaperRender();
     });
-    // the storage-event and composer paths repaint with no focus arg — if the
-    // caret was in OUR title input or a note, preserve it rather than
-    // dropping to <body>
-    if (!focus) {
-      const ae = document.activeElement;
-      if (ae && ae.classList && ae.classList.contains("cz-ptitle"))
-        focus = { act: "title", caret: ae.selectionStart };
-      else if (ae && ae.classList && ae.classList.contains("cz-pnote"))
-        focus = { act: "note", i: +ae.dataset.i, caret: ae.selectionStart };
-    }
     if (focus) {
       let t = focus.act === "title" ? ti
         : focus.act === "note"
@@ -1657,7 +1663,14 @@
      never a throw. */
 
   const PAPER_V = "1";
-  const PAPER_VS = ["1"];
+  const PAPER_VS = ["1", "2"];
+  /* which link version a paper needs: v=1 is the shipped P1 grammar
+     (stories + reels) and stays byte-identical for those papers forever;
+     v=2 marks a paper carrying kinds a v1 reader cannot represent (notes,
+     charts) — the shipped reader then shows its honest "shared from a newer
+     version" message instead of silently rendering a mutilated paper. */
+  const paperV = p => p.blocks.some(
+    b => b.kind === "note" || b.kind === "chart") ? "2" : "1";
   const PAPER_KEY = "cz-paper";        // the one draft this browser keeps
   const PAPER_TITLE_MAX = 200;
   const PAPER_MAX_BLOCKS = 64;
@@ -1676,11 +1689,16 @@
        framing — the eight civic lenses: one meeting (pid) or the whole record
        topics  — what keeps coming back                 (analytics.json) */
   const PAPER_CHARTS = ["votes", "reach", "framing", "topics"];
-  /* cut a string at a cap WITHOUT splitting a surrogate pair — a slice
-     that strands a lone high surrogate makes encodeURIComponent THROW, and
-     decodeReel's law forbids every encoder and decoder here from throwing.
-     (The title's caps get this too — the same latent crash shipped in P1.) */
-  const cut = (s, n) => s.slice(0, n).replace(/[\uD800-\uDBFF]$/, "");
+  /* cut a string at a cap WITHOUT stranding half a surrogate pair — and
+     drop any lone surrogate already inside it (a hand-edited draft can hold
+     one; JSON round-trips it). encodeURIComponent THROWS on a lone half,
+     and decodeReel's law forbids every encoder and decoder here from
+     throwing. (The title's caps get this too — the P1 slice had the same
+     latent crash.) */
+  const cut = (s, n) => s
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "")
+    .replace(/([\uD800-\uDBFF])?([\uDC00-\uDFFF])/g, (m, hi) => hi ? m : "")
+    .slice(0, n).replace(/[\uD800-\uDBFF]$/, "");
   /* a note's text, made safe to keep: newlines stay (a note has paragraphs),
      every other control character goes, the cap holds. The client is TOTAL —
      it cleans and keeps; the store is STRICT — it refuses (record/papers.py).
@@ -1816,7 +1834,7 @@
             ? "." + encodeURIComponent(b.slug || b.pid) : "")
       : b.story === "issue" ? "i." + encodeURIComponent(b.slug)
       : "m." + encodeURIComponent(b.pid));
-    return `v=${PAPER_V}`
+    return `v=${paperV(p)}`
       + (p.title ? `&t=${encodeURIComponent(p.title)}` : "")
       + (parts.length ? `&b=${parts.join(",")}` : "");
   }
@@ -2098,7 +2116,8 @@
   }
   async function paperShortLink() {
     const p = readPaper();
-    if (!p.blocks.length && !p.title) {
+    const port = portablePaper(p);   // what would actually travel
+    if (!port.blocks.length && !port.title) {
       toast("your paper is empty — nothing to share yet"); return; }
     if (!API) {
       copyText(paperShareURL(p),
@@ -2109,14 +2128,25 @@
       const r = await fetch(API + "/api/papers", {
         method: "POST", credentials: "omit", signal: ctl.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(portablePaper(p)) });
-      if (!r.ok) throw new Error(String(r.status));
+        body: JSON.stringify(port) });
+      if (!r.ok) {
+        // the store answers in sentences (413 too-large, 422 refused, 503
+        // no bucket) — say ITS reason; "didn’t answer" would be false, and
+        // a 70KB "full link" is not the guidance a too-large paper needs
+        let said = "";
+        try { said = ((await r.json()) || {}).error || ""; } catch { /* not JSON */ }
+        if (said) { toast(said); return; }
+        throw new Error(String(r.status));
+      }
       const d = await r.json();
       if (!d || !/^[0-9a-f]{16}$/.test(d.id || "")) throw new Error("bad id");
       // paint the link into the panel FIRST: the await may have outlived the
       // click's user activation, and a clipboard some browsers then refuse
-      // must not be the only place the link exists
-      PAPER_SHORT = `${location.origin}${BASE}/p?p=${d.id}`;
+      // must not be the only place the link exists. A paper carrying P2
+      // kinds mints a v=2 address, so a reader still on the shipped v1
+      // shell gets the honest newer-version message, never a mutilated one.
+      const pv = paperV(port);
+      PAPER_SHORT = `${location.origin}${BASE}/p?${pv === "1" ? "" : `v=${pv}&`}p=${d.id}`;
       // the repaint must hand focus back to the button that was pressed
       refreshPaperSummary({ act: "pshort" });
       copyText(PAPER_SHORT,
@@ -2356,7 +2386,7 @@
         ${sub ? `<p class="pb-chartsub">${sub}</p>` : ""}
         ${body}
         ${twin ? `<details class="graphtwin"><summary>the same, as a table</summary>
-          <table class="twin">${twin}</table></details>` : ""}
+          <div class="pb-twinwrap"><table class="twin">${twin}</table></div></details>` : ""}
         ${src ? `<p class="pb-chartsrc">${src}</p>` : ""}
       </section>`;
   }
@@ -2397,19 +2427,32 @@
     const maxN = Math.max(...cols.map(c => c.votes.length));
     const plotH = maxN * pitch + 12;
     const W = pad * 2 + cols.length * colW, H = plotH + 36;
-    let marks = "", labels = "", prevYear = null;
+    let marks = "", labels = "", prevYear = null, hasOther = false;
     cols.forEach((c, i) => {
       const cx = r1(pad + i * colW + colW / 2);
       c.votes.forEach((v, j) => {
         const cy = r1(plotH - dotR - 2 - j * pitch);
-        const passed = v.outcome === "passes";
+        // three marks, never a lie: a filled dot is "passes", a hollow dot
+        // is "fails", and any other outcome the record holds (tabled, tied,
+        // a desk import's own wording) is a half-tone square — the exact
+        // word rides the tooltip, the aria-label and the twin. Binarizing
+        // would draw a tabled motion as a failed one (a review catch).
+        const mark = v.outcome === "passes" ? "pass"
+          : v.outcome === "fails" ? "fail" : "other";
+        if (mark === "other") hasOther = true;
         const tip = `${c.date || "undated"} · ${v.outcome}`
           + (v.tally ? ` ${v.tally}` : "") + ` — ${v.motion || "(motion)"}`;
-        marks += `<a href="${BASE}/m/${esc(c.pid)}#t${Math.floor(v.t || 0)}">`
-          + `<circle cx="${cx}" cy="${cy}" r="${dotR}" `
-          + (passed ? `fill="#052e16" fill-opacity=".82"`
-                    : `fill="#ffffff" stroke="#052e16" stroke-width="2"`)
-          + `><title>${esc(tip)}</title></circle></a>`;
+        marks += `<a href="${BASE}/m/${esc(c.pid)}#t${Math.floor(v.t || 0)}"`
+          + ` aria-label="${esc(tip.slice(0, 140))}">`
+          + (mark === "other"
+            ? `<rect x="${r1(cx - dotR + 1)}" y="${r1(cy - dotR + 1)}" `
+              + `width="${(dotR - 1) * 2}" height="${(dotR - 1) * 2}" rx="2" `
+              + `fill="#052e16" fill-opacity=".5"`
+            : `<circle cx="${cx}" cy="${cy}" r="${dotR}" `
+              + (mark === "pass" ? `fill="#052e16" fill-opacity=".82"`
+                                 : `fill="#ffffff" stroke="#052e16" stroke-width="2"`))
+          + `><title>${esc(tip)}</title>`
+          + (mark === "other" ? `</rect></a>` : `</circle></a>`);
       });
       const y = c.date.slice(0, 4);
       labels += `<text x="${cx}" y="${plotH + 14}" text-anchor="middle" `
@@ -2420,8 +2463,10 @@
         prevYear = y;
       }
     });
+    // role="group", NOT role="img": img flattens the subtree and every
+    // per-dot receipt link would vanish from assistive tech (a review catch)
     const svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" `
-      + `xmlns="http://www.w3.org/2000/svg" role="img" aria-label="the `
+      + `xmlns="http://www.w3.org/2000/svg" role="group" aria-label="the `
       + `record’s roll calls, meeting by meeting — ${votes.length} votes `
       + `across ${plane.n_meetings} meetings; the table below carries every `
       + `motion and outcome">`
@@ -2441,7 +2486,9 @@
         + `every dot opens the tape where the vote was taken`,
       `<div class="pb-chartwrap">${svg}</div>
        <p class="pb-chartkey"><span class="pk-dot pk-full"></span> passes
-         <span class="pk-dot pk-hollow"></span> fails</p>`,
+         <span class="pk-dot pk-hollow"></span> fails${hasOther
+           ? `\n         <span class="pk-dot pk-other"></span> other outcomes — the table has each word`
+           : ""}</p>`,
       twin,
       `counted from the record’s own roll calls —
        <a href="${BASE}/officials">who voted how</a> holds every member’s record`);
@@ -2473,7 +2520,8 @@
       const t0 = nb ? Math.floor(n.beads[0].t || 0) : 0;
       const tip = `${n.date || "undated"} · ${n.body || n.title || n.pid} — `
         + `${nb} moment${nb === 1 ? "" : "s"}`;
-      marks += `<a href="${BASE}/m/${esc(n.pid)}${nb ? `#t${t0}` : ""}">`
+      marks += `<a href="${BASE}/m/${esc(n.pid)}${nb ? `#t${t0}` : ""}"`
+        + ` aria-label="${esc(tip)}">`
         + `<rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="2" `
         + `fill="#052e16" fill-opacity="${nb ? ".82" : ".35"}">`
         + `<title>${esc(tip)}</title></rect></a>`
@@ -2489,7 +2537,7 @@
       }
     });
     const svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" `
-      + `xmlns="http://www.w3.org/2000/svg" role="img" aria-label="`
+      + `xmlns="http://www.w3.org/2000/svg" role="group" aria-label="`
       + `${esc(it.name || b.slug)} — appearances meeting by meeting; the `
       + `table below carries the same counts">`
       + `<line x1="0" y1="${plotH + 0.5}" x2="${W}" y2="${plotH + 0.5}" `
@@ -2559,7 +2607,7 @@
         + `here — <a href="${BASE}/analytics">the record, drawn</a> reads in place`);
     const order = analytics.lens_order || [];
     const totals = order.map(nm => ({ name: nm,
-      n: (analytics.framing || []).reduce((s, r) => s + (r.lenses[nm] || 0), 0) }));
+      n: (analytics.framing || []).reduce((s, r) => s + ((r.lenses || {})[nm] || 0), 0) }));
     totals.sort((a, x) => x.n - a.n);
     if (!totals.length || !totals.some(t => t.n))
       return chartShell(kicker, "",

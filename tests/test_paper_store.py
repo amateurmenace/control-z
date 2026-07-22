@@ -147,13 +147,21 @@ class TestCanonicalForm(unittest.TestCase):
             {"kind": "note", "text": "Two overrides in one spring.\n\n"
                                      "Watch the tally, not the speeches."}]))
         self.assertIn("Watch the tally", c)
-        # exactly at the cap is legal; one past it is refused
+        # exactly at the cap is legal; one past it is refused — and the cap
+        # counts UTF-16 units (the reader's unit), so an astral-heavy note
+        # the reader would silently truncate is refused here instead:
+        # 1,000 astral chars = 2,000 units (legal); 1,001 = 2,002 (refused)
         canonical(portable(blocks=[{"kind": "note", "text": "x" * NOTE_MAX}]))
+        canonical(portable(blocks=[
+            {"kind": "note", "text": "\U0001d400" * (NOTE_MAX // 2)}]))
         cases = [
             ({"kind": "note", "text": "x" * (NOTE_MAX + 1)}, "longer"),
+            ({"kind": "note", "text": "\U0001d400" * (NOTE_MAX // 2 + 1)},
+             "longer"),
             ({"kind": "note", "text": "a\tb"}, "control"),
             ({"kind": "note", "text": "a\rb"}, "control"),
             ({"kind": "note", "text": "a\x00b"}, "control"),
+            ({"kind": "note", "text": "a\x7fb"}, "control"),
             ({"kind": "note", "text": "   \n  "}, "empty note"),
             ({"kind": "note", "text": 7}, "string"),
             ({"kind": "note"}, "exactly"),
