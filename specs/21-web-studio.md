@@ -1,18 +1,20 @@
 # 21 — Be the editor of your own paper: the web studio
 
-**Status:** v0.4 · **Stage:** **P2 SHIPPED + LIVE (edition v2.1.9, image r31,
-2026-07-22) — charts + notes: four chart kinds (votes over time on the new
-votes.json plane · an issue's reach · the framing lenses · recurring topics),
-computed client-side from the pressed planes in the paper palette with table
-twins and receipts; notes as the editor's own words (strict store posture
-checkpointed 2026-07-22 — plain text, 2,000 UTF-16 units, newlines only, the
-second and last free text the store holds), labeled "the editor's note" at
-render; P2 papers travel as v=2 so the shipped v1 reader degrades honestly.
-Two adversarial passes folded (16 + 1 confirmed). P1 shipped v2.1.7/r29
-2026-07-21 (your paper + the share store); P0 v2.1.6/r28 2026-07-20.
-**P3 (templates, featured papers, the a11y nit) remains — then the spec is
-done.** The next direction after P3 is specs/22, the cutting room
-(`specs/22-session-prompt.md`).** · **Owner:** Stephen Walter (Weird Machine) ·
+**Status:** v0.5 · **Stage:** **DONE — all four phases SHIPPED + LIVE.**
+P3 (edition v2.1.10, image r32, 2026-07-22): templates (pre-shaped drafts,
+client-only, confirm-gated, the note left to the editor), featured papers
+(built at press time from the record's own top issues and votes as plain
+/app/p links — a Python codec twin pinned byte-for-byte to the JS by a node
+parity test, v= by paperV's own rule; the /app/p empty state + one quiet
+front-page line, per Stephen 2026-07-22), and the mode control as a true
+radiogroup (aria-checked, roving tabindex, arrow keys). Two review passes
+folded 12 + 3 findings — the HIGH was the checked-state selector orphaned
+by the aria migration; the re-review caught the fix stopping one
+storage-reader short. P2 shipped v2.1.9/r31 2026-07-22 (charts + notes,
+votes.json, v=2 travel); P1 v2.1.7/r29 2026-07-21 (your paper + the share
+store); P0 v2.1.6/r28 2026-07-20 (the three-mode footprint). **The next
+room is specs/22 — the cutting room (`specs/22-cutting-room.md`, drafted,
+awaiting settlement).** · **Owner:** Stephen Walter (Weird Machine) ·
 **Related:** specs/20 (the newspaper — the reader this builds on and keeps as a
 *mode*), `.claude/rules/branding.md` (the brand law + the audience split; the
 studio-mode palette is now a *ratified* amendment, §6.1), specs/17 §6.2 (the
@@ -189,8 +191,22 @@ One deploy per phase; the covenant (§5) and the bounds of §6 hold on every one
   deploy (outcome binarization, AT-invisible receipts, the v=2 gate, the
   store's own error sentences surfaced, the dead caret-capture, surrogate-
   safe caps, the share row's boundary repaint).
-- **P3 — deepen.** Templates, more block types, example / featured papers as a
-  front door, polish.
+- **P3 — deepen. ✓ SHIPPED + LIVE (v2.1.10 / r32, 2026-07-22) — and the
+  spec is done.** Templates as client-side draft writers (offered only on a
+  wholly empty draft; never overwrite without a confirm; the note joins
+  empty — the editor's words are nobody's to pre-write). Featured papers as
+  the front door, built at press time from the record's own top issues and
+  votes: ordinary `/app/p` links pressed by a Python twin of the JS codec,
+  pinned byte-for-byte by a node parity test, v= by `paperV`'s exact rule —
+  server-rendered outside `#paperbody` in the stub's empty state (hidden by
+  the renderer whenever a real paper stands, returning when the draft
+  empties; standing as plain links JS-off) plus one quiet front-page line.
+  The mode control became a true radiogroup (`aria-checked`, roving
+  tabindex, arrows + Home/End, modified chords left to the browser), and
+  the fold taught it to describe the PAINTED mode — a storage-blocked
+  browser's controls speak about what the reader sees. Two adversarial
+  passes folded 12 + 3 findings (the orphaned checked-state selector; the
+  focus-ring token trap; G183 underlines; `n_of()` honest at one).
 
 ## 8. Non-goals
 

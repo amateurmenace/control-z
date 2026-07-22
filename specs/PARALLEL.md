@@ -157,7 +157,39 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-22 (latest) — **specs/21 P2: charts + notes — LIVE at v2.1.9
+- 2026-07-22 (latest) — **specs/21 is DONE: P3 — templates, featured
+  papers, the radiogroup — LIVE at v2.1.10 (image r32).** Templates write
+  pre-shaped drafts client-side (empty-draft-only, confirm-gated, the note
+  joins empty). Featured papers are built AT PRESS TIME in
+  `emit.featured_papers` — computed inside `emit_stubs` from arguments
+  bake and press already pass identically, so parity is structural — and
+  travel as ordinary `/app/p?v=2` links; the Python codec twin
+  (`_js_euc`/`_paper_qs`) is pinned byte-for-byte to `encodePaperQS` by a
+  node parity test (decode → re-encode → identical, v= by `paperV`'s
+  rule). The mode control is a real radiogroup with a roving tabindex —
+  and it describes the PAINTED mode (`shownMode`/`shownRail` read the
+  html classes; storage is the fallback), because a storage-blocked
+  browser's radios must not claim "preview" over a visibly open studio.
+  New laws worth knowing: a state-attribute migration must move the CSS
+  selector WITH it (the review's HIGH: `[aria-pressed="true"]` styled a
+  state the JS no longer writes — the pair is now test-pinned); a bare
+  `var(--focus-ring)` without the `var(--state)` fallback resolves to
+  outline:none and silently kills the global focus ring (the sheet
+  documents it — believe it); links in pressed prose need underlines
+  (G183: ink vs slate is 2.36:1); `n_of()` for every counted noun the
+  bake prints. Namespaces now minted: `pf-` (featured cards), `.featline`,
+  `cz-tpl*`. 903 tests. Two review passes folded 12+3. Live-verified
+  2026-07-22: manifest 2.1.10, SW `cz-record-2.1.10-66c05a9544c70585`,
+  API revision 00022-cl6 (r32, health ok/neural/steward), Pages commit
+  5d9f6d4; the pressed featured papers are the real record's (the roll
+  calls · Capital Improvement Projects across 10 meetings · the June 18
+  School Committee) and the roll-calls link renders live with the real
+  27 votes; both prod store papers (88ba5977746282f1, aab17fcb26e41b50)
+  serve unregressed. specs/22 — the cutting room — is DRAFTED
+  (`specs/22-cutting-room.md`) and awaits Stephen's settlement of §6
+  (preview vs the /app/r singleton, named reels, make-this-yours, P0
+  scope) before any surface builds.
+- 2026-07-22 — **specs/21 P2: charts + notes — LIVE at v2.1.9
   (image r31).** A paper now carries pictures and its editor's own words:
   four chart kinds (votes over time on the NEW `votes.json` plane —
   `bake_votes` in BOTH web/bake.py and record/press.py, the parity test

@@ -2,6 +2,58 @@
 
 ## unreleased
 
+### specs/21 P3 — templates, the featured papers, and the radiogroup — 2026-07-22 (v2.1.10) · the spec is DONE
+
+The studio's last owed phase, and the smallest: three ways in, no new
+server surface, no new store surface.
+
+**Templates** — pre-shaped papers the editor starts from, offered only
+while the draft is wholly empty: *the roll calls, watched* anywhere;
+*this issue, watched* on an issue's page; *this meeting, covered* on a
+meeting's. A template writes the same blocks the panel's own buttons
+would — and its note joins **empty**, because the editor's words are
+nobody's to pre-write. It re-checks the draft at the click and asks
+before replacing anything another tab may have typed.
+
+**Featured papers** — the front door: up to three example papers built
+**at press time** from the record's own top issues and votes (the roll
+calls with the record's framing; the loudest issue with its reach; the
+latest meeting with its framing and the recurring topics), pressed as
+ordinary `/app/p` links by a Python twin of the JS codec and **pinned to
+it byte-for-byte by a node parity test** (decode in node, re-encode,
+identical — and v= must equal `paperV`'s own judgement, so every featured
+link travels v=2 the moment it carries a chart). They render in the
+`/app/p` stub's empty state OUTSIDE `#paperbody` (the renderer owns that
+node), stand as plain links with JavaScript off, retire the moment any
+real paper renders, and return when the draft empties. The front page
+says it once, quietly: *papers, pressed from the record*.
+
+**The radiogroup** — the mode control stops pretending to be three
+toggles: `role=radiogroup`, `role=radio` + `aria-checked`, a roving
+tabindex so the control costs a keyboard exactly one stop, and arrow keys
+(Home/End too) that move the choice; modified chords stay the browser's.
+
+Two review passes folded 12 + 3 findings. The review's HIGH was the
+selector the migration orphaned — `.cz-mode[aria-pressed="true"]` styled
+a state the JS no longer writes, so every mode radio painted identical;
+the pair (attribute written, selector styled) is now pinned by a test.
+The re-review then caught the fix stopping one reader short: `toggleRail`
+still consulted storage while its neighbours had learned the painted
+truth — and the honest fix reads BOTH axes off the painted classes,
+because a storage-blocked browser deriving the next rail state from
+storage would collapse once and never expand. Also folded: the featured
+cards' focus ring (a bare `var(--focus-ring)` resolves to `outline:none`
+— the sheet's own documented trap), underlined featline links (ink vs
+slate prose is 2.36:1, under G183's 3:1 for color-alone), and `n_of()` —
+every counted noun the bake prints now survives n=1 ("1 meeting", not
+"1 meetings", on the front rail, the issue page, its description, and
+the graph's tooltips).
+
+903 tests. **specs/21 is done** — P0 (the footprint) → P1 (your paper +
+the store) → P2 (charts + notes) → P3 (the front door and the polish).
+The next room is specs/22, the cutting room
+(`specs/22-cutting-room.md`, drafted and awaiting Stephen's settlement).
+
 ### specs/21 P2 — data viz + analyses: charts and notes join your paper — 2026-07-22 (v2.1.9)
 
 A paper can now carry pictures and its editor's own words. **Four chart
