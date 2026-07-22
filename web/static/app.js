@@ -437,7 +437,7 @@
     if (ti) ti.oninput = () => {
       const d = readPaper();
       const had = !!(d.blocks.length || d.title);
-      d.title = ti.value.slice(0, PAPER_TITLE_MAX);
+      d.title = cut(ti.value, PAPER_TITLE_MAX);
       const has = !!(d.blocks.length || d.title);
       if (!savePaper(d)) return;   // storage blocked — a toast per keystroke would be noise
       retireShortOut();            // the painted link names the old title now
@@ -1676,14 +1676,18 @@
        framing — the eight civic lenses: one meeting (pid) or the whole record
        topics  — what keeps coming back                 (analytics.json) */
   const PAPER_CHARTS = ["votes", "reach", "framing", "topics"];
+  /* cut a string at a cap WITHOUT splitting a surrogate pair — a slice
+     that strands a lone high surrogate makes encodeURIComponent THROW, and
+     decodeReel's law forbids every encoder and decoder here from throwing.
+     (The title's caps get this too — the same latent crash shipped in P1.) */
+  const cut = (s, n) => s.slice(0, n).replace(/[\uD800-\uDBFF]$/, "");
   /* a note's text, made safe to keep: newlines stay (a note has paragraphs),
      every other control character goes, the cap holds. The client is TOTAL —
      it cleans and keeps; the store is STRICT — it refuses (record/papers.py).
      That split is decodeReel's law meeting the store's, one function each. */
-  const noteText = s => String(s == null ? "" : s)
+  const noteText = s => cut(String(s == null ? "" : s)
     .replace(/\r\n?/g, "\n")
-    .replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, "")
-    .slice(0, PAPER_NOTE_MAX);
+    .replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, ""), PAPER_NOTE_MAX);
 
   function readPaper() {
     let p = null;
@@ -1706,7 +1710,7 @@
   function normalizePaper(p) {
     const out = { title: "", blocks: [] };
     if (!p || typeof p !== "object") return out;
-    if (typeof p.title === "string") out.title = p.title.slice(0, PAPER_TITLE_MAX);
+    if (typeof p.title === "string") out.title = cut(p.title, PAPER_TITLE_MAX);
     for (const b of (Array.isArray(p.blocks) ? p.blocks : [])) {
       if (out.blocks.length >= PAPER_MAX_BLOCKS) break;
       const nb = normalizeBlock(b);
@@ -1829,7 +1833,7 @@
     const id = (q.get("p") || "").trim();
     const out = { v: q.get("v") || "",
                   id: /^[0-9a-f]{16}$/.test(id) ? id : "",
-                  title: (q.get("t") || "").slice(0, PAPER_TITLE_MAX),
+                  title: cut(q.get("t") || "", PAPER_TITLE_MAX),
                   blocks: [] };
     for (const part of (q.get("b") || "").split(",")) {
       if (out.blocks.length >= PAPER_MAX_BLOCKS) break;

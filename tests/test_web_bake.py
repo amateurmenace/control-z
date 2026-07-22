@@ -1927,6 +1927,7 @@ class TestPaper(unittest.TestCase):
             self.lift(r"const PAPER_REF = .+?;"),
             self.lift(r"const PAPER_NOTE_MAX = .+?;"),
             self.lift(r"const PAPER_CHARTS = .+?;"),
+            self.lift(r"const cut = .+?;"),
             self.lift(r"const noteText = .+?;"),
             self.lift(r"function chartRecordURL\(b\) \{.+?\n  \}"),
             self.lift(r"function normalizePaper\(p\) \{.+?\n  \}"),
@@ -2203,6 +2204,34 @@ class TestPaper(unittest.TestCase):
         r = self.node(body)
         self.assertEqual(r.returncode, 0,
                          f"P2 normalize leaky:\n{r.stdout}{r.stderr}")
+
+    def test_a_cap_cut_never_strands_half_an_emoji(self):
+        """PAPER_NOTE_MAX and PAPER_TITLE_MAX count UTF-16 units; a bare
+        slice at the cap can split a surrogate pair, and encodeURIComponent
+        THROWS on the stranded half — a copy-link click would die on a
+        paper whose emoji landed on the boundary. cut() gives the pair up
+        instead (decodeReel's law: never a throw)."""
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "const noted = { title: '', blocks: [",
+            "  {kind:'note', text: 'x'.repeat(PAPER_NOTE_MAX - 1) + '\\u{1F600}'}]};",
+            "const titled = { title: 'y'.repeat(PAPER_TITLE_MAX - 1) + '\\u{1F600}',",
+            "  blocks: [] };",
+            "let url;",
+            "try { url = paperShareURL(noted); }",
+            "catch (e) { fail('note at the cap THREW: ' + e); }",
+            "try { url = paperShareURL(titled); }",
+            "catch (e) { fail('title at the cap THREW: ' + e); }",
+            "const back = decodePaper('?v=1&t=' + 'z'.repeat(300));",
+            "if (back.title.length !== PAPER_TITLE_MAX) fail('title cap ' + back.title.length);",
+            "const n = normalizeBlock({kind:'note', text: 'x'.repeat(PAPER_NOTE_MAX - 1) + '\\u{1F600}'});",
+            "if (n.text.length !== PAPER_NOTE_MAX - 1) fail('the pair must be given up whole: ' + n.text.length);",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"surrogate cut broken:\n{r.stdout}{r.stderr}")
 
     def test_paper_json_charts_carry_their_record_urls(self):
         """Provenance for a chart is the page a reader can recount it on —
