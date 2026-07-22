@@ -901,6 +901,32 @@ class Bake:
         self.note("officials.json", _gz_of(doc))
         return officials
 
+    # -- votes: the record's roll calls, restated as one plane ------------
+    def bake_votes(self, meetings):
+        """The roll calls the meeting pages already show, gathered into one
+        date-ordered plane so a chart (specs/21 P2) can read the whole record
+        in a single fetch at any corpus size. Nothing is re-analyzed and
+        nothing new is claimed: each row is a vote a meeting plane carries,
+        with its receipt (pid + t). The per-member officials.json holds the
+        raw member records; this is the pressed roll-call list, and the two
+        deliberately differ the way the meeting page differs from the vote
+        table."""
+        rows = []
+        for m in meetings:
+            for v in (m.get("votes") or []):
+                rows.append({"pid": m["pid"], "date": m["date"],
+                             "body": m["body"], "town": m["town"],
+                             "t": v["t"], "motion": v["motion"],
+                             "outcome": v["outcome"], "tally": v["tally"]})
+        # date order, undated last ("~" sorts after every digit); ties break
+        # on pid then tape time, so the plane is byte-stable across presses
+        rows.sort(key=lambda r: (r["date"] or "~", r["pid"], r["t"]))
+        doc = {"votes": rows,
+               "n_meetings": len({r["pid"] for r in rows})}
+        _json(self.out / "votes.json", doc)
+        self.note("votes.json", _gz_of(doc))
+        return doc
+
     # -- analytics: the record, drawn (the desk's Library, static) --------
     def bake_analytics(self, meetings):
         """Cross-meeting analytics — the picture the desk's Library draws, made
@@ -1174,6 +1200,7 @@ def bake(corpus_db: str, out_dir: str, version: str, site_base: str,
     stats = b.bake_stats(meetings, issues)
     towns = b.bake_towns(meetings)
     officials = b.bake_officials(meetings)
+    b.bake_votes(meetings)
     analytics = b.bake_analytics(meetings)
     graph = b.bake_graph(issues)
     b.bake_urls(meetings)

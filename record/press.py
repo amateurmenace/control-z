@@ -218,6 +218,7 @@ def press(corpus, out_dir: str, version: str = "",
     # than at the desk, not less.
     towns = b.bake_towns(meetings)
     officials = b.bake_officials(meetings)
+    b.bake_votes(meetings)
     analytics = b.bake_analytics(meetings)
     graph = b.bake_graph(issues)
     b.bake_urls(meetings)

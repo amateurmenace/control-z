@@ -36,6 +36,12 @@ class TestPressMirrorsBake(unittest.TestCase):
         from web.bake import bake
         self.assertIn("bake_kits", _stage_calls(bake))
 
+    def test_bake_votes_is_in_the_sequence(self):
+        """specs/21 P2's plane — the sequence-equality test above then forces
+        the hosted press to carry it too."""
+        from web.bake import bake
+        self.assertIn("bake_votes", _stage_calls(bake))
+
     def test_both_hand_emit_stubs_the_kits_plane(self):
         from record.press import press
         from web.bake import bake
