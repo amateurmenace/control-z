@@ -1,13 +1,18 @@
 # 21 — Be the editor of your own paper: the web studio
 
-**Status:** v0.3 · **Stage:** **P1 SHIPPED + LIVE (edition v2.1.7, image r29,
-2026-07-21) — your paper (the curated document: stories + reels + a title,
-arranged and shared three covenant ways) + the content-addressed share store
-(POST/GET `/api/papers`, private bucket `publicrecord-papers`, checkpointed
-with Stephen before the write path existed). The same pressing shipped the AI
-constitution (`/app/ai`) + the footer recredit, and repaired a long-standing
-SW offline bug (redirected stub responses). P0 shipped v2.1.6/r28 2026-07-20.
-**P2 (data viz + analyses) next.**** · **Owner:** Stephen Walter (Weird Machine) ·
+**Status:** v0.4 · **Stage:** **P2 SHIPPED + LIVE (edition v2.1.9, image r31,
+2026-07-22) — charts + notes: four chart kinds (votes over time on the new
+votes.json plane · an issue's reach · the framing lenses · recurring topics),
+computed client-side from the pressed planes in the paper palette with table
+twins and receipts; notes as the editor's own words (strict store posture
+checkpointed 2026-07-22 — plain text, 2,000 UTF-16 units, newlines only, the
+second and last free text the store holds), labeled "the editor's note" at
+render; P2 papers travel as v=2 so the shipped v1 reader degrades honestly.
+Two adversarial passes folded (16 + 1 confirmed). P1 shipped v2.1.7/r29
+2026-07-21 (your paper + the share store); P0 v2.1.6/r28 2026-07-20.
+**P3 (templates, featured papers, the a11y nit) remains — then the spec is
+done.** The next direction after P3 is specs/22, the cutting room
+(`specs/22-session-prompt.md`).** · **Owner:** Stephen Walter (Weird Machine) ·
 **Related:** specs/20 (the newspaper — the reader this builds on and keeps as a
 *mode*), `.claude/rules/branding.md` (the brand law + the audience split; the
 studio-mode palette is now a *ratified* amendment, §6.1), specs/17 §6.2 (the
@@ -162,11 +167,28 @@ One deploy per phase; the covenant (§5) and the bounds of §6 hold on every one
   workflow passes (23 + 13 confirmed findings) folded before deploy — the
   re-review also repaired a pre-P1 SW bug (bare-stub precache cached
   redirected responses; offline stub navigation was broken on live).
-- **P2 — data viz + analyses.** Chart blocks computed **client-side over the
-  planes** (`analytics.json`, `graph.json`, votes/framing in `meetings/*.json`) —
-  inline SVG within the strict CSP, each with a table twin (the a11y rule the
-  baked charts already keep); note/analysis blocks. A curated paper carries
-  charts + text, not just stories + reels.
+- **P2 — data viz + analyses. ✓ SHIPPED + LIVE (v2.1.9 / r31, 2026-07-22).**
+  Chart blocks computed **client-side over the planes**, each with a table
+  twin and a receipt under every mark, in the paper palette (deep green is
+  measurement). The cut, settled with Stephen 2026-07-22: **votes over
+  time** (a new pressed plane, `votes.json` — the meeting pages' own roll
+  calls restated date-ordered, one fetch at any corpus size; filled dot
+  passes, hollow fails, half-tone square any other outcome the record
+  wrote), **an issue's reach**, **the framing lenses** (one meeting or the
+  whole record), **recurring topics**; participation deferred until a
+  diarized meeting exists. **Note blocks** — the editor's own words, labeled
+  out loud at render; plain text, 2,000 UTF-16 units, newlines only; the
+  client cleans (total), the store refuses (strict) — the second and last
+  free text a stored paper may carry (the checkpoint). Papers carrying P2
+  kinds travel as **v=2** (links and minted short links), so the shipped v1
+  reader shows its honest newer-version message rather than a silently
+  thinner paper; stories+reels papers stay byte-identical v=1. Positional
+  charts are natural-size SVG in a scrolling wrap; magnitude bars are HTML
+  rows (the heatmap's precedent — real, wrappable, AA text at every width).
+  Two adversarial workflow passes folded 16 + 1 confirmed findings before
+  deploy (outcome binarization, AT-invisible receipts, the v=2 gate, the
+  store's own error sentences surfaced, the dead caret-capture, surrogate-
+  safe caps, the share row's boundary repaint).
 - **P3 — deepen.** Templates, more block types, example / featured papers as a
   front door, polish.
 

@@ -157,7 +157,29 @@ section below, updated on main.
 
 ## State of main (lane A updates this)
 
-- 2026-07-21 (latest) — **specs/21 P1: your paper + the share store, AND the
+- 2026-07-22 (latest) — **specs/21 P2: charts + notes — LIVE at v2.1.9
+  (image r31).** A paper now carries pictures and its editor's own words:
+  four chart kinds (votes over time on the NEW `votes.json` plane —
+  `bake_votes` in BOTH web/bake.py and record/press.py, the parity test
+  names it; an issue's reach; the framing lenses; recurring topics), all
+  computed client-side from the pressed planes, paper palette, table twins,
+  receipts under every mark. Notes: the editor's words, labeled at render;
+  the store accepts them as the second and last free text (strict — 2,000
+  UTF-16 units, newlines only; the checkpoint 2026-07-22). P2 papers travel
+  as **v=2** (the shipped v1 reader degrades honestly); stories+reels
+  papers stay byte-identical v=1 — links AND store addresses. Two
+  adversarial passes folded 16 + 1 findings. New house laws worth knowing:
+  free text in the `b=` param rides TWICE-encoded (URLSearchParams decodes
+  once before the comma split); every free-text cap goes through `cut()`
+  (lone surrogates make encodeURIComponent throw); check CSS class names
+  against the whole sheet before minting (`.lensbar` was the meeting
+  page's 9px pill and silently squashed the chart rows → `pb-` namespace).
+  898 tests. Live-verified: store round-trip on prod (P2 paper
+  88ba5977746282f1 with the real 27 roll calls), P1 paper aab17fcb
+  unregressed, SW cache `cz-record-2.1.9`. P3 (templates + featured papers
+  + the radiogroup nit) still owed; then specs/22 — the cutting room
+  (`specs/22-session-prompt.md` is the orientation).
+- 2026-07-21 — **specs/21 P1: your paper + the share store, AND the
   AI constitution. SHIPPED + LIVE, edition v2.1.7, image r29.** The making
   surface: a curated paper (schema `publicrecord.paper/1` — story blocks by
   pid/slug, reel blocks reusing the clip encoding, a title) edited in the

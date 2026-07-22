@@ -2,6 +2,55 @@
 
 ## unreleased
 
+### specs/21 P2 — data viz + analyses: charts and notes join your paper — 2026-07-22 (v2.1.9)
+
+A paper can now carry pictures and its editor's own words. **Four chart
+kinds** — votes over time (every roll call the record holds: a filled dot
+passes, a hollow dot fails, a half-tone square is any other outcome the
+record wrote — tabled, tied — with the exact word on the tooltip and the
+table; every dot opens the tape where the vote was taken), an issue's reach
+(its appearances, meeting by meeting), the framing lenses (one meeting, or
+the whole record), and recurring topics — all computed **in the reader's
+browser from the record's own pressed planes**, so a paper cannot assert a
+number the record would not draw. A chart block is an enum and a ref, never
+data. Every chart keeps the rules the baked charts keep: a table twin, a
+receipt under every mark (exposed to assistive tech — role="group", never
+role="img"), and the paper palette, where deep green is measurement and no
+studio hue exists. A new pressed plane carries the roll calls:
+**votes.json** — the meeting pages' own votes restated date-ordered, one
+fetch at any corpus size (officials.json is per-member and deliberately
+different).
+
+**Notes** are the editor's words — the settled posture (checkpointed
+2026-07-22): plain text, 2,000 characters, newlines only, no markdown; the
+client cleans (total), the store refuses (strict, 422 — and its cap counts
+the reader's own UTF-16 units, so a stored note never renders shorter than
+it was stored). The rendered block is labeled **"the editor's note"** out
+loud, because a reader must never mistake an editor's words for the
+record's. Notes travel all three covenant ways — draft, link
+(twice-encoded, so their own commas survive the query-string split), and
+paper.json — plus the share store, as the second and last free text a
+stored paper may carry. Papers carrying P2 kinds travel as **v=2**, so a
+reader still on the shipped v1 shell gets its honest "shared from a newer
+version" message instead of a silently mutilated paper; a stories+reels
+paper still encodes byte-for-byte as P1 did.
+
+The studio panel grows **＋ a note** (a field under its row, saving on
+every keystroke without stealing the caret) and **＋ a chart** (a quiet
+menu offering what the open page can chart plus the record-wide three).
+`cut()` keeps every free-text cap surrogate-safe — a bare slice could
+strand half an emoji and make the encoders throw (a latent P1 crash on the
+title cap, fixed at all four sites, lone surrogates dropped anywhere they
+hide).
+
+Two adversarial review passes: 16 confirmed findings folded (the outcome
+binarization, the AT-invisible receipts, the v=2 gate, the store's honest
+"too large" sentence surfaced instead of "didn't answer", the caret capture
+that had read activeElement after the innerHTML wipe since P1, the twin
+tables' scroll container, the UTF-16 cap), then the focused re-review of
+the fixes caught its one HIGH — the share row's new truth had no repaint
+trigger on the note-emptiness boundary — and that folded too.
+
 ### "Our AI Constitution" + the shareable link — 2026-07-21 (v2.1.8)
 
 The constitution takes its proper name — **Our AI Constitution** — in the
