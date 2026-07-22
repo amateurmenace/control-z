@@ -19,6 +19,7 @@ import html
 import re
 import shutil
 from pathlib import Path
+from urllib.parse import quote
 
 from web import tools
 
@@ -353,7 +354,7 @@ def _brief_card(m):
               f'{int(round((m.get("duration") or 0)/60))} min</span></div></a>')
 
 
-def page_home(meetings, issues, stats, manifest, base):
+def page_home(meetings, issues, stats, manifest, base, featured=None):
     c = stats["counts"]
     ms = sorted(meetings, key=lambda m: (m.get("date") or ""), reverse=True)
     lead = ms[0] if ms else None
@@ -462,6 +463,17 @@ def page_home(meetings, issues, stats, manifest, base):
         for v in allvotes[:4]) \
         or '<p class="hint">no roll calls read yet</p>'
 
+    # -- one quiet line for the papers the press built (specs/21 P3) --
+    # the front page's whole nod to the studio: three links and an invitation,
+    # in the folio's register, after everything the record itself has to say
+    featline = ""
+    if featured:
+        links = " · ".join(
+            f'<a href="/app/p?{esc(f["qs"])}">{esc(f["title"])}</a>'
+            for f in featured)
+        featline = ('  <p class="featline">papers, pressed from the record: '
+                    f'{links} — <a href="/app/p">or edit your own</a></p>\n')
+
     # -- coverage strip --
     mx = max([m["total"] for m in stats["coverage"]] or [1])
     bars = "".join(
@@ -507,7 +519,7 @@ def page_home(meetings, issues, stats, manifest, base):
       <a class="seeall" href="/app/officials">the votes →</a></div>
       <div class="vteasers">{votes_teaser}</div></section>
   </div>
-"""
+{featline}"""
     return shell("The record — publicrecord.studio",
                  f"{c['meetings']} meetings, {c['hours']} hours, {c['issues']} issues "
                  "tracked across the record — open in any browser.",
@@ -898,7 +910,87 @@ def page_reel(manifest, base):
                  version=manifest["version"])
 
 
-def page_paper(manifest, base):
+def _js_euc(s) -> str:
+    """encodeURIComponent's exact charset — everything outside
+    A-Za-z0-9-_.!~*'() is %-escaped as UTF-8, uppercase hex. quote() with
+    that safe set is the byte-for-byte twin; the node parity test holds it."""
+    return quote(str(s), safe="-_.!~*'()")
+
+
+def _paper_qs(title, blocks) -> str:
+    """The Python twin of app.js encodePaperQS, for the block kinds the press
+    itself mints — stories and charts. (No reels: reel-shaped things demand
+    play-testing against a real tape. No notes: a note is the editor's own
+    words, and they are nobody's to pre-write.) v matches paperV exactly —
+    v=2 the moment a chart or note rides along, v=1 only for stories+reels —
+    so the shipped v1 reader degrades honestly on these links too."""
+    parts = []
+    for b in blocks:
+        if b["kind"] == "story" and b["story"] == "meeting":
+            parts.append("m." + _js_euc(b["pid"]))
+        elif b["kind"] == "story" and b["story"] == "issue":
+            parts.append("i." + _js_euc(b["slug"]))
+        elif b["kind"] == "chart":
+            ref = b.get("slug") or b.get("pid") or ""
+            parts.append("c." + b["chart"] + (("." + _js_euc(ref)) if ref else ""))
+    v = "2" if any(b["kind"] in ("chart", "note") for b in blocks) else "1"
+    qs = "v=" + v
+    if title:
+        qs += "&t=" + _js_euc(title)
+    if parts:
+        qs += "&b=" + ",".join(parts)
+    return qs
+
+
+def featured_papers(meetings, issues, stats):
+    """The front door's examples (specs/21 P3, settled with Stephen
+    2026-07-22): two or three papers built at press time from the record's
+    own top issues and votes, each an ordinary /app/p link — the same link
+    form every paper travels as, no store, no state, nothing new to serve.
+    Deterministic by construction (the pressed inputs only), so
+    byte-idempotent presses hold. Every block is a ref into the record;
+    the one free text is each paper's title, and it names only what the
+    record itself holds."""
+    out = []
+    if any(m.get("votes") for m in meetings):
+        out.append({
+            "title": "the roll calls, watched",
+            "sub": "every roll call on the record, dot by dot — and how the "
+                   "talk around them was framed",
+            "qs": _paper_qs("the roll calls, watched",
+                            [{"kind": "chart", "chart": "votes"},
+                             {"kind": "chart", "chart": "framing"}]),
+        })
+    loud = (stats or {}).get("loud") or []
+    if loud:
+        i = loud[0]
+        # the JS title cap is 200 UTF-16 units; 95 code points + ", watched"
+        # stays under it even if every code point were astral
+        title = f'{i["name"][:95]}, watched'
+        out.append({
+            "title": title,
+            "sub": f'the record\'s longest thread — one issue across '
+                   f'{i["n_meetings"]} meetings, and its reach over time',
+            "qs": _paper_qs(title,
+                            [{"kind": "story", "story": "issue", "slug": i["slug"]},
+                             {"kind": "chart", "chart": "reach", "slug": i["slug"]}]),
+        })
+    ms = sorted(meetings, key=lambda m: (m.get("date") or ""), reverse=True)
+    if ms:
+        m = ms[0]
+        out.append({
+            "title": "the latest meeting, covered",
+            "sub": f'{m.get("title") or m["pid"]} — as a story, with its '
+                   "framing and what keeps coming back record-wide",
+            "qs": _paper_qs("the latest meeting, covered",
+                            [{"kind": "story", "story": "meeting", "pid": m["pid"]},
+                             {"kind": "chart", "chart": "framing", "pid": m["pid"]},
+                             {"kind": "chart", "chart": "topics"}]),
+        })
+    return out
+
+
+def page_paper(manifest, base, featured=None):
     """Your paper — /app/p (specs/21 §7, P1). A curated paper lives entirely
     outside the server: in its link (?v=1&t=<title>&b=<blocks>), in the
     browser's own draft, or — when the editor asked for a short link — at a
@@ -909,10 +1001,30 @@ def page_paper(manifest, base):
     hue never reaches a rendered paper — the volume was the editor's, in their
     studio, and it stays there.
 
+    P3 adds the featured papers: example links the press built from the
+    record itself, server-rendered OUTSIDE #paperbody (the renderer owns that
+    node's innerHTML and must never fight the stub for it). They belong to
+    the empty state; app.js hides them the moment any paper renders — and
+    with JavaScript off they simply stand, the one part of this page that
+    works without a script.
+
     JS-off, a paper cannot decode (it lives in the query string or the
     browser, which a static page cannot read) — so the honest fallback says
     exactly that and sends the reader to the record itself, where every story
     and moment reads in place."""
+    feats = "".join(
+        f'<a class="pf-card" href="/app/p?{esc(f["qs"])}">'
+        f'<b>{esc(f["title"])}</b>'
+        f'<span class="pf-sub">{esc(f["sub"])}</span></a>'
+        for f in (featured or []))
+    feat_html = f"""
+    <div class="pfeat" id="pfeat">
+      <div class="sectionhead"><span class="kicker">no paper in hand? three the press built</span></div>
+      <p class="pf-lede">Examples pressed from the record itself — each an
+        ordinary paper link, built the way any editor's is. Open one, then
+        enter the studio and make it yours.</p>
+      <div class="pf-cards">{feats}</div>
+    </div>""" if feats else ""
     body = f"""
   <section class="paper-page" id="paperpage">
     <a class="back" href="/app/">← the record</a>
@@ -930,7 +1042,7 @@ def page_paper(manifest, base):
         page a server could print. With JavaScript off, open <a
         href="/app/">the record</a> or <a href="/app/s">search it</a> — every
         story a paper could cite reads there in full.</p>
-    </div>
+    </div>{feat_html}
     <p class="disclose">A paper is its editor's selection, not the record's
       judgement — the full record is one link up. Papers travel as links and
       files; a short link is served from a content-addressed store that knows
@@ -1976,7 +2088,12 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
     v = manifest["version"]
     # before a single stub renders: the chrome needs to know what it may offer
     set_edition(towns)
-    (out / "index.html").write_text(page_home(meetings, issues, stats, manifest, base), encoding="utf-8")
+    # the featured papers are computed HERE, from arguments bake and press
+    # already pass identically — so the two pressings cannot drift apart
+    featured = featured_papers(meetings, issues, stats)
+    (out / "index.html").write_text(
+        page_home(meetings, issues, stats, manifest, base, featured=featured),
+        encoding="utf-8")
     (out / "s" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "s" / "index.html").write_text(page_search(manifest, base), encoding="utf-8")
     (out / "add" / "index.html").parent.mkdir(parents=True, exist_ok=True)
@@ -2005,10 +2122,11 @@ def emit_stubs(out, meetings, issues, stats, manifest, base, officials=None,
     (out / "r" / "index.html").write_text(
         page_reel(manifest, base), encoding="utf-8")
     # your paper — one static stub; a curated paper lives in its link, the
-    # browser's draft, or a content-addressed id (specs/21 P1)
+    # browser's draft, or a content-addressed id (specs/21 P1). P3: the
+    # empty state offers the featured papers the press built above.
     (out / "p" / "index.html").parent.mkdir(parents=True, exist_ok=True)
     (out / "p" / "index.html").write_text(
-        page_paper(manifest, base), encoding="utf-8")
+        page_paper(manifest, base, featured=featured), encoding="utf-8")
     # Our AI Constitution — when a model touches the record, whose it is,
     # where it runs, and what stands without it; linked from every footer.
     # /app/constitution is its shareable spelling (a slim redirect); the

@@ -265,6 +265,14 @@ h1{font-family:var(--font-mono);font-weight:var(--weight-bold);
   border:var(--border-w) solid var(--border-hairline);border-radius:var(--radius-sm);
   border-left:var(--border-w-strong) solid var(--accent)}
 .vteaser:hover{background:var(--tint-1)}
+/* one quiet line, after everything the record itself has to say: the papers
+   the press built (specs/21 P3) — the folio's register, no card, no color */
+.featline{font-family:var(--font-mono);font-size:var(--text-xs);
+  color:var(--text-secondary);margin:var(--space-6) 0 0;
+  border-top:var(--border-w) solid var(--border-hairline);
+  padding-top:var(--space-3);line-height:var(--leading-body)}
+.featline a{color:var(--text-primary)}
+.featline a:hover{color:var(--accent)}
 .vt-motion{display:block;font-size:var(--text-sm);color:var(--text-primary)}
 .vt-meta{display:block;font-family:var(--font-mono);font-size:var(--text-xs);
   color:var(--text-secondary);margin-top:3px}
@@ -493,6 +501,27 @@ h1{font-family:var(--font-mono);font-weight:var(--weight-bold);
   opacity:.82;border-radius:var(--radius-sm)}
 .pb-bar .pb-n{font-family:var(--font-mono);color:var(--text-primary);
   white-space:nowrap}
+
+/* /app/p — the featured papers (specs/21 P3): the empty state's front door.
+   Pressed at press time as plain links, rendered outside #paperbody, hidden
+   by the renderer the moment a real paper stands. The paper palette only —
+   mcard's register, and not one studio hue (§6.1). */
+.pfeat{margin:var(--space-6) 0 0}
+.pf-lede{font-size:var(--text-sm);color:var(--text-secondary);max-width:60ch;
+  margin:var(--space-2) 0 var(--space-3)}
+.pf-cards{display:grid;gap:var(--space-3);
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.pf-card{display:block;background:var(--surface-card);
+  border:var(--border-w) solid var(--border-hairline);
+  border-left:var(--border-w-strong) solid var(--accent);
+  border-radius:var(--radius-sm);padding:var(--space-3) var(--space-4);
+  text-decoration:none;color:var(--text-primary)}
+.pf-card b{display:block;font-family:var(--font-mono);font-size:var(--text-base);
+  margin-bottom:var(--space-1)}
+.pf-card:hover b{color:var(--accent);text-decoration:underline}
+.pf-card:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.pf-sub{display:block;font-size:var(--text-xs);color:var(--text-secondary);
+  line-height:var(--leading-body)}
 
 /* /app/ai — the AI constitution. The record's quiet register throughout:
    neutrals + deep green, native interactivity (details/summary), the same
@@ -1042,6 +1071,14 @@ html.cz-m-studio.cz-rail .cz-rail-btn{margin:0}
 .cz-chartmenu{display:flex;flex-wrap:wrap;gap:var(--space-2);
   margin-top:var(--space-2);padding:var(--space-2);
   border:var(--border-w) solid var(--border-hairline);border-radius:var(--radius-sm)}
+/* templates (P3) — a starting shape, offered only while the draft is empty.
+   The head speaks in cz-tag's register; the buttons are the panel's own. */
+.cz-tpls{display:flex;flex-wrap:wrap;gap:var(--space-2);
+  margin:var(--space-3) 0 0}
+.cz-tplhead{flex:0 0 100%;font:var(--weight-bold) var(--text-xs)/1 var(--font-mono);
+  letter-spacing:var(--tracking-label);text-transform:uppercase;
+  color:var(--text-secondary)}
+.cz-tpls .btn{font-size:var(--text-xs)}
 .cz-chartmenu .btn{font-size:var(--text-xs)}
 .cz-pshort-out{font:var(--weight-medium) var(--text-xs)/1.5 var(--font-mono);
   color:var(--text-secondary);margin:var(--space-2) 0 0;overflow-wrap:anywhere}

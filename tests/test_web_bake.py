@@ -337,6 +337,29 @@ class TestBakeEdition(unittest.TestCase):
         self.assertEqual(m["edition_date"], "2026-06-18")  # corpus-derived, not wall-clock
         self.assertTrue(m["corpus_hash"])
 
+    def test_featured_papers_press_into_the_stub_and_the_front_page(self):
+        """specs/21 P3: the press builds example papers as plain /app/p
+        links. On the stub they must sit OUTSIDE #paperbody — the renderer
+        owns that node's innerHTML, and anything pressed inside it would be
+        torn down on the first render. On the front page: one quiet line."""
+        stub = (self.out / "p" / "index.html").read_text()
+        self.assertIn('id="pfeat"', stub)
+        # paperbody holds only its JS-off hint, so the first </div> past its
+        # open tag is its close — pfeat must land beyond it
+        pb = stub.index('id="paperbody"')
+        self.assertGreater(stub.index('id="pfeat"'), stub.index("</div>", pb))
+        # this corpus holds a roll call → the rolls paper leads, and every
+        # featured link travels v=2 (each carries a chart — paperV's rule;
+        # & rides HTML-escaped in an attribute)
+        self.assertIn("/app/p?v=2&amp;t=the%20roll%20calls%2C%20watched", stub)
+        self.assertIn("b=c.votes,c.framing", stub)
+        home = (self.out / "index.html").read_text()
+        self.assertIn('class="featline"', home)
+        self.assertIn("or edit your own", home)
+        self.assertIn("/app/p?v=2", home)
+        # the latest-meeting paper names the latest meeting (vid2, June)
+        self.assertIn("b=m.vid2,c.framing.vid2,c.topics", stub)
+
     def test_meeting_json_and_stub(self):
         mj = self._read("meetings/vid1.json")
         self.assertEqual(mj["title"], "Select Board — March")
@@ -2357,6 +2380,94 @@ class TestPaper(unittest.TestCase):
         self.assertEqual(tuple(re.findall(r'"(\w+)"', m.group(1))), CHARTS,
                          "PAPER_CHARTS drifted from record.papers.CHARTS")
 
+    def test_featured_papers_match_the_js_codec_byte_for_byte(self):
+        """specs/21 P3: the press builds featured-paper links in PYTHON
+        (emit.featured_papers); the JS codec is the law. Decode each pressed
+        query in node, re-encode it with encodePaperQS — the bytes must be
+        identical, and the pressed v= must equal paperV's own judgement on
+        the decoded paper. A drift here ships front-door links the reader
+        reads differently than the press intended."""
+        feats = emit.featured_papers(
+            [{"pid": "vid1", "title": "Select Board — March",
+              "date": "2026-03-10",
+              "votes": [{"t": 12.0, "outcome": "passes"}]},
+             {"pid": "vid2", "title": "École — Réunion & vote",
+              "date": "2026-04-02", "votes": []}],
+            [],
+            # unicode + & + ' in the one dynamic title, so the two
+            # encoders' charsets are exercised, not just ASCII
+            {"loud": [{"slug": "budget-override",
+                       "name": "l'école & the override", "n_meetings": 2}]})
+        self.assertEqual(len(feats), 3, feats)
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "const FEATS = " + json.dumps([f["qs"] for f in feats]) + ";",
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "for (const qs of FEATS) {",
+            "  const back = decodePaper('?' + qs);",
+            "  if (!back.blocks.length) fail('nothing decoded from '+qs);",
+            "  const re = encodePaperQS({ title: back.title, blocks: back.blocks });",
+            "  if (re !== qs) fail('byte drift\\npy '+qs+'\\njs '+re);",
+            "  const v = new URLSearchParams(qs).get('v');",
+            "  if (v !== paperV(portablePaper({title: back.title, blocks: back.blocks})))",
+            "    fail('v drifted on '+qs);",
+            "}",
+            "console.log('ok');",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         "the Python link-builder drifted from the JS codec:\n"
+                         f"{r.stdout}{r.stderr}")
+
+    def test_a_template_writes_the_draft_and_never_overwrites_without_asking(self):
+        """specs/21 P3: a template is a pre-shaped draft, and the overwrite
+        rule is load-bearing — a draft that grew between paint and press
+        (another tab) is replaced only past a confirm. Executed with the
+        panel stubbed; the planes dark, so the refs must stand on their own."""
+        tpl = self.lift(r"  async function applyPaperTemplate\(t\) \{.+?\n  \}")
+        body = "\n".join([
+            self.PRELUDE, self.helpers(),
+            "let saved = null, confirms = 0, confirmAnswer = false;",
+            "const window = { confirm: () => { confirms++; return confirmAnswer; } };",
+            "const getJSON = async () => null;",
+            "let cur = { title: '', blocks: [] };",
+            "const readPaper = () => normalizePaper(cur);",
+            "const savePaper = p => { saved = p; return true; };",
+            "const pageStoryRef = () => ({ story: 'issue', slug: 'budget-override' });",
+            "const refreshPaperSummary = () => {};",
+            "const schedulePaperRender = () => {};",
+            "const toast = () => {};",
+            tpl,
+            "function fail(m){ console.log('FAIL', m); process.exit(1); }",
+            "(async () => {",
+            "  await applyPaperTemplate('rolls');",
+            "  if (!saved) fail('empty draft: the template did not write');",
+            "  if (saved.title !== 'the roll calls, watched') fail('title '+saved.title);",
+            "  if (JSON.stringify(saved.blocks.map(b => b.kind + ':' + (b.chart || '')))",
+            "      !== JSON.stringify(['chart:votes','chart:framing','note:']))",
+            "    fail('rolls shape '+JSON.stringify(saved.blocks));",
+            "  if (saved.blocks[2].text !== '') fail('a template wrote the editor’s words');",
+            "  if (confirms) fail('asked for consent on an empty draft');",
+            "  saved = null;",
+            "  await applyPaperTemplate('issue');",
+            "  if (!saved) fail('issue template did not write');",
+            "  if (saved.title !== 'budget-override, watched') fail('issue title '+saved.title);",
+            "  if (saved.blocks[0].slug !== 'budget-override'",
+            "      || saved.blocks[1].chart !== 'reach') fail('issue shape '+JSON.stringify(saved.blocks));",
+            "  cur = { title: 'mine', blocks: [] }; saved = null; confirmAnswer = false;",
+            "  await applyPaperTemplate('rolls');",
+            "  if (!confirms) fail('never asked before replacing a live draft');",
+            "  if (saved) fail('replaced a draft the editor refused to lose');",
+            "  confirmAnswer = true;",
+            "  await applyPaperTemplate('rolls');",
+            "  if (!saved) fail('consent given, nothing written');",
+            "  console.log('ok');",
+            "})();",
+        ])
+        r = self.node(body)
+        self.assertEqual(r.returncode, 0,
+                         f"the template misbehaved:\n{r.stdout}{r.stderr}")
+
     def test_the_paper_make_path_touches_no_api(self):
         """The covenant, extended to P1 (specs/21 §5): composing, arranging,
         encoding and exporting a paper read localStorage, strings and the
@@ -2379,7 +2490,10 @@ class TestPaper(unittest.TestCase):
         for token in ("function paper(", 'const PAPER_KEY = "cz-paper"',
                       "function refreshPaperSummary(",
                       "function paperShortLink(", "function decodePaper(",
-                      'test(path)) paper()'):
+                      'test(path)) paper()',
+                      # P3: the templates and the featured papers' hide hook
+                      "function applyPaperTemplate(", 'data-cz="ptpl"',
+                      '$("#pfeat")'):
             self.assertIn(token, self.JS, f"{token!r} drifted in app.js")
 
 
@@ -2453,3 +2567,23 @@ class TestStudioFootprint(unittest.TestCase):
                       'classList.toggle("cz-m-"', 'const MODE_KEY = "cz-studio-mode"',
                       "function refreshReelSummary(", "function setMode("):
             self.assertIn(token, self.JS, f"{token!r} drifted in app.js")
+
+    def test_the_mode_control_is_a_radiogroup_with_roving_tabindex(self):
+        """specs/21 P3's a11y contract: the mode control is one choice of
+        three — role=radiogroup on the group, role=radio + aria-checked on
+        each button, a roving tabindex (the checked radio is the group's one
+        tab stop), and arrow keys that move the choice. aria-pressed leaves
+        the studio block entirely (the reel tick elsewhere keeps its own —
+        that one really is a toggle)."""
+        for token in ('role="radiogroup"', 'role="radio"', "aria-checked",
+                      "b.tabIndex = on ? 0 : -1",
+                      "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+                      '"Home"', '"End"'):
+            self.assertIn(token, self.JS,
+                          f"{token!r} missing from the mode control")
+        studio_block = self.JS[
+            self.JS.index("THE STUDIO — the three-mode footprint"):
+            self.JS.index("SCOPE: the town")]
+        self.assertNotIn("aria-pressed", studio_block,
+                         "the mode control still speaks aria-pressed — a "
+                         "radio is checked, not pressed")
