@@ -89,7 +89,7 @@ carry straight over.
 - **Apple silicon, macOS 15.5 or later.** Signed with Developer ID
   (team 6M536MV7GT), notarized and stapled.
 - `civicmedia-studio-2.1.0-macos-arm64.dmg` — 126.7 MB, sha256
-  `e453709556fcdd63a6231931d1641708b5ea970ec894c7d486b14f596d786b18`
+  `b0fef62221a3016c58d6161f205593d5d53e05e329e9b65c7c19f6d00dc9c760`
 - `NOTICE.txt` and the FFmpeg LGPL-2.1 licence ride in the DMG beside the app.
 - AI features are optional and use **your own** key; the app asks when one is
   needed. The built-in proxy account has a monthly cap — if it's ever spent,
