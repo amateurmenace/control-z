@@ -1648,18 +1648,9 @@ button.ix-kind:disabled { opacity: .45; cursor: default; }
   border-radius: 8px; padding: 7px 10px; font-family: var(--mono); font-size: 12px; }
 
 /* grabber: the bin, one card per recording */
-.gb-binrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-  background: rgba(255,255,255,.6); border: 1px solid var(--line-soft); border-radius: 9px;
-  padding: 8px 10px; margin-top: 6px; }
-.gb-binmain { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 3px; }
-.gb-binmain .bname { font-size: 13px; font-weight: 600; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; }
 .gb-binmeta { font-family: var(--mono); font-size: 10.5px; color: var(--cream-faint);
   display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .gb-binacts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.gb-binacts > button { border: 1px solid var(--line); background: #fff; border-radius: 7px;
-  padding: 4px 10px; font-size: 11.5px; color: var(--cream-dim); }
-.gb-binacts > button:hover:not(:disabled) { border-color: var(--cream-faint); color: var(--cream); }
 
 /* highlighter: no words yet — the fixes, right where the words would be */
 .hl-nowords { padding: 26px 16px; text-align: center; color: var(--cream-dim);
@@ -1965,7 +1956,9 @@ body.tray-open .hl-mon.floating { bottom: 78px; }
   .hl-makesum, .hl-stepsep { display: none; }
 }
 @media (max-width: 900px) {
-  .hl-flow { flex-wrap: nowrap; overflow-x: auto; padding: 7px 12px; gap: 8px; }
+  /* only the steps scroll — a scrolling bar would clip the settings popover */
+  .hl-flow { flex-wrap: nowrap; padding: 7px 12px; gap: 8px; }
+  .hl-steps { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; }
   .hl-step i { display: none; }
   .hl-step em { font-size: 12px; white-space: nowrap; }
   .hl-flowgap { display: none; }

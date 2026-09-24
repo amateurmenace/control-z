@@ -104,6 +104,23 @@ landed 2–3 s late, and search, highlights and summaries all read the
 doubles. Transcripts cached by the old parse re-read their caption file once
 (`VTT_PARSE_V`); Scribe's words are never touched.
 
+**The redesign's own review** (a fresh reader, before the tag) caught nine,
+all folded. The once-only re-read took whatever caption file sorted first — a
+Highlighter translation (`meeting.arabic.srt`) sorts before `meeting.en.vtt`,
+so English words could be overwritten by Arabic; it now re-reads only the file
+its model names (`captions:meeting.en.vtt`), and `_captions_for` ranks the
+English track first and never takes Interpreter's `.translated.` files. (No
+transcript on this Mac was hit: all three re-read from English.) The rolling
+rules apply only to YouTube's rolling shape (word-timed files): a hand-made
+roll call keeps its second "Aye.", a real 40 ms cue stays, and a whitespace
+line between SRT cues ends the cue again. Clips never pad past the end of the
+recording, and YouTube's "ended" ends the clip (the reel could hang there);
+the reel follows its clip by identity through a drag, a keep or a drop; a
+pause is never overridden by the backstop; a reel still building for one
+meeting never lands on the next one you open; Space inside the reel maker
+presses the chip, not the player. Publisher's clip candidates read through
+the Highlighter's loader, so they re-read with it.
+
 **The wire.** "Send to next app" on every page that holds a meeting:
 Grabber → Highlighter → Publisher → the Record, Scribe → Interpreter →
 Narrator, with a ▾ for any other stop that can take it. The Grabber's

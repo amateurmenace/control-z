@@ -176,6 +176,23 @@ class TestVTT(unittest.TestCase):
         self.assertEqual([w["w"] for w in segs[1]["words"]],
                          ["Welcome", "to", "the", "board"])
 
+    def test_whitespace_between_cues_still_ends_a_cue(self):
+        # an SRT whose separators carry a stray space: the next cue's index
+        # must never ride into the text before it ("Good evening. 2")
+        srt = ("1\n00:00:01,000 --> 00:00:03,000\nGood evening.\n \n"
+               "2\n00:00:03,000 --> 00:00:05,000\nThe meeting will come to order.\n\t\n")
+        self.assertEqual([s["text"] for s in parse_vtt(srt)],
+                         ["Good evening.", "The meeting will come to order."])
+
+    def test_hand_made_captions_keep_a_real_repeat_and_a_short_cue(self):
+        # no word tags = not YouTube's rolling shape: a roll call's second
+        # "Aye." is a second vote, and a 40 ms cue is still a cue
+        vtt = ("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nCouncilor Smith?\n>> Aye.\n\n"
+               "00:00:02.000 --> 00:00:03.000\n>> Aye.\nCouncilor Jones?\n\n"
+               "00:00:03.000 --> 00:00:03.040\nNo.\n")
+        self.assertEqual([s["text"] for s in parse_vtt(vtt)],
+                         ["Councilor Smith? >> Aye.", ">> Aye. Councilor Jones?", "No."])
+
     def test_rolling_repeats_deduped(self):
         segs = parse_vtt(VTT)
         texts = [s["text"] for s in segs]

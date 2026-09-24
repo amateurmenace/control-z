@@ -284,6 +284,10 @@ def parse_vtt(text: str) -> List[dict]:
     """
     segments: List[dict] = []
     lines = text.replace("\r\n", "\n").split("\n")
+    # the rolling rules below are YouTube's auto-caption shape (it alone
+    # times its words); hand-made captions, SRT and our own VTTs keep a
+    # real repeat and a real short cue
+    rolling = bool(_WORDTAG.search(text))
     i, last_text, prev_last = 0, "", ""
     while i < len(lines):
         m = _CUE.search(lines[i])
@@ -293,8 +297,12 @@ def parse_vtt(text: str) -> List[dict]:
         start, end = _secs(*m.groups()[:4]), _secs(*m.groups()[4:])
         i += 1
         raw = []
-        # a cue ends at an EMPTY line — YouTube's one-space line is content
-        while i < len(lines) and lines[i] != "" and not _CUE.search(lines[i]):
+        # a blank line ends a cue — except a whitespace-only FIRST line,
+        # which is how YouTube opens a block (it holds no words, but ending
+        # the cue there lost the block's opening line to its snapshot)
+        while i < len(lines) and not _CUE.search(lines[i]):
+            if not lines[i].strip() and (raw or lines[i] == ""):
+                break
             raw.append(lines[i])
             i += 1
         kept = [ln for ln in raw if _clean_line(ln)]
@@ -302,12 +310,13 @@ def parse_vtt(text: str) -> List[dict]:
             continue
         cleaned = [_clean_line(ln) for ln in kept]
         full_last = cleaned[-1]
-        # the carried line (the previous cue's last line, shown again above
-        # the new words) and the snapshot (that line alone) are repeats
-        if prev_last and cleaned[0] == prev_last:
-            kept, cleaned = kept[1:], cleaned[1:]
-        if end - start <= 0.05 and not _WORDTAG.search("\n".join(kept)):
-            kept, cleaned = [], []            # a snapshot never carries news
+        if rolling:
+            # the carried line (the previous cue's last line, shown again
+            # above the new words) and the snapshot (that line alone) repeat
+            if prev_last and cleaned[0] == prev_last:
+                kept, cleaned = kept[1:], cleaned[1:]
+            if end - start <= 0.05 and not _WORDTAG.search("\n".join(kept)):
+                kept, cleaned = [], []        # a snapshot never carries news
         prev_last = full_last
         body = "\n".join(kept)
         clean = " ".join(cleaned).strip()

@@ -98,18 +98,25 @@ def _sidecars(source: str):
             p.with_suffix(".insight.json"))
 
 
+def _cap_rank(f: Path) -> tuple:
+    # the meeting's own English words first, .vtt before .srt — a
+    # translation written beside it ("meeting.arabic.srt") sorts behind
+    n = f.name.lower()
+    return (".en." not in n, f.suffix != ".vtt", n)
+
+
 def _captions_for(path: Path):
-    """The .vtt/.srt beside a source (session dir or local file).
+    """The .vtt/.srt beside a source (session dir or local file) — the
+    meeting's own captions, never a translation made from them
+    (Interpreter's ".translated." files are skipped outright).
     startswith, not glob — these names carry "[id]", poison to glob."""
     if path.is_dir():
-        hits = sorted(s for s in path.iterdir() if s.suffix in (".vtt", ".srt"))
-        return hits[0] if hits else None
-    for ext in (".vtt", ".srt"):
-        hits = sorted(s for s in path.parent.iterdir()
-                      if s.name.startswith(path.stem) and s.suffix == ext)
-        if hits:
-            return hits[0]
-    return None
+        hits = [s for s in path.iterdir() if s.suffix in (".vtt", ".srt")]
+    else:
+        hits = [s for s in path.parent.iterdir()
+                if s.name.startswith(path.stem) and s.suffix in (".vtt", ".srt")]
+    hits = sorted((h for h in hits if ".translated." not in h.name), key=_cap_rank)
+    return hits[0] if hits else None
 
 
 def _info_for(source: str) -> dict:
@@ -141,37 +148,70 @@ def _session_meta(d: Path) -> dict:
     return meta
 
 
+def _caption_segments(cap: Path) -> list:
+    """A caption file -> transcript segments, entities unescaped, blanks gone."""
+    from highlighter.highlights import parse_vtt
+    segs = parse_vtt(cap.read_text(errors="replace"))
+    for s in segs:
+        # caption files carry HTML entities (">>" speaker marks arrive
+        # as &gt;&gt;) — the transcript holds the characters themselves
+        s["text"] = html.unescape(s["text"])
+        for w in s.get("words") or []:
+            w["w"] = html.unescape(w["w"])
+    return [s for s in segs if s["text"].strip()]
+
+
+def _borrow_sidecar(src: Path, dst: Path) -> bool:
+    """Copy a twin's transcript — only one that reads (a corrupt copy used
+    to send _load_transcript round the same branch forever)."""
+    try:
+        text = src.read_text()
+        json.loads(text)
+    except (OSError, ValueError):
+        return False
+    dst.write_text(text)
+    return True
+
+
 def _load_transcript(source: str):
     """(transcript dict, origin) — scribe sidecar, else captions, else the
     library twin's words (a session whose video was already downloaded
     borrows the local copy's transcript instead of re-asking YouTube)."""
     from czcore.moments import VTT_PARSE_V
-    from highlighter.highlights import parse_vtt, transcript_dict
+    from highlighter.highlights import transcript_dict
 
     sc, _, _ = _sidecars(source)
     p = Path(source)
-    cap = _captions_for(p)
     if sc.exists():
         try:
             t = json.loads(sc.read_text())
-            origin = ("captions" if str(t.get("model", "")).startswith("captions")
-                      else "scribe")
-            # words read from captions by an older parse_vtt (every rolling
-            # line doubled, before v2) re-read their caption file once —
-            # Scribe's own words are never touched
-            if not (origin == "captions" and cap
-                    and t.get("parse_v", 1) < VTT_PARSE_V):
-                return t, origin
+            model = str(t.get("model", ""))
+            origin = "captions" if model.startswith("captions") else "scribe"
+            if origin == "captions" and t.get("parse_v", 1) < VTT_PARSE_V:
+                # words read by an older parse_vtt (every rolling line doubled
+                # before v2) re-read THEIR OWN caption file once — the one the
+                # model names, never a translation beside it. Nothing to
+                # re-read (a borrowed copy), or nothing in it: the words stand.
+                # Scribe's words are never touched.
+                name = Path(model.split(":", 1)[1]).name if ":" in model else ""
+                own = ((p if p.is_dir() else p.parent) / name) if name else None
+                segs = _caption_segments(own) if own and own.is_file() else []
+                if segs:
+                    t = transcript_dict(segs, str(p.resolve()),
+                                        origin=f"captions:{own.name}")
+                    t["parse_v"] = VTT_PARSE_V
+                    sc.write_text(json.dumps(t))
+            return t, origin
         except ValueError:
             pass
+    cap = _captions_for(p)
     if not cap and p.is_dir():
         # the FULL recording only — a section clip or a reel shares the id
         # tag but not the timeline, and its words would be wrong
         twin = full_video_for(p.name)
         if twin:
             tsc, _, _ = _sidecars(str(twin))
-            if tsc.exists():
-                sc.write_text(tsc.read_text())
+            if tsc.exists() and _borrow_sidecar(tsc, sc):
                 return _load_transcript(source)
             cap = _captions_for(twin)
     if not cap and p.is_file():
@@ -184,19 +224,11 @@ def _load_transcript(source: str):
         sess = (_meetings_dir() / m.group(1)) if m else None
         if sess and sess.is_dir():
             ssc, _, _ = _sidecars(str(sess))
-            if ssc.exists():
-                sc.write_text(ssc.read_text())
+            if ssc.exists() and _borrow_sidecar(ssc, sc):
                 return _load_transcript(source)
             cap = _captions_for(sess)
     if cap:
-        segs = parse_vtt(cap.read_text(errors="replace"))
-        for s in segs:
-            # caption files carry HTML entities (">>" speaker marks arrive
-            # as &gt;&gt;) — the transcript holds the characters themselves
-            s["text"] = html.unescape(s["text"])
-            for w in s.get("words") or []:
-                w["w"] = html.unescape(w["w"])
-        segs = [s for s in segs if s["text"].strip()]
+        segs = _caption_segments(cap)
         if segs:
             t = transcript_dict(segs, str(Path(source).resolve()),
                                 origin=f"captions:{cap.name}")
@@ -1182,6 +1214,15 @@ def register_highlighter(app, jobs, frames):
             # speaker off mid-thought — 12 s gives each moment its sentence
             # (fewer, fuller clips at the same length)
             picks = build_reel(scored, target=target, min_clip=12.0)
+            # ...but never past the end of the recording: a clip padded
+            # beyond the last frame never reaches its out point, and the
+            # reel would wait there forever
+            meta = _session_meta(Path(source)) if _is_session(source) else {}
+            last = float(meta.get("duration") or 0) or max(
+                float(x["end"]) for x in t["segments"]) + 2.0
+            for pk in picks:
+                pk["end"] = round(min(float(pk["end"]), last), 3)
+            picks = [pk for pk in picks if pk["end"] - pk["start"] >= 1.0]
             payload = {"picks": picks, "target": target,
                        "origin": origin, "keywords": keywords,
                        "lane": [{"start": s["start"], "end": s["end"],
@@ -1215,7 +1256,7 @@ def register_highlighter(app, jobs, frames):
                                 status_code=409)
         p = Path(path)
         out = str(p.with_suffix("")) + ".reel"
-        name = (_session_meta(p).get("title") if p.is_dir() else p.name)[:70]
+        name = p.name[:70]
         cards = ([{"label": str(r.get("label", "")) or f"Moment {k + 1}",
                    "t": float(r.get("start", 0))}
                   for k, r in enumerate(ranges)] if want_cards else None)

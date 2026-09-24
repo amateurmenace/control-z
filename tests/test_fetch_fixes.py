@@ -501,6 +501,43 @@ class TestCaptionReread(unittest.TestCase):
             self.assertEqual(origin, "scribe")
             self.assertEqual(t["segments"][0]["text"], "Scribe heard this")
 
+    def test_a_translation_beside_it_never_replaces_the_words(self):
+        # the Highlighter writes meeting.<language>.srt beside the meeting;
+        # "arabic" sorts before "en" — the re-read must take the file the
+        # words came FROM, and a fresh read must take the English one
+        from suite.tools import highlighter as hl
+        with tempfile.TemporaryDirectory() as td:
+            sess = Path(td) / "abcdefghijk"
+            sess.mkdir()
+            (sess / "meeting.en.vtt").write_text(ROLLING_VTT)
+            (sess / "meeting.arabic.srt").write_text(
+                "1\n00:00:01,000 --> 00:00:03,000\nمساء الخير\n")
+            side = sess / "meeting.scribe.json"
+            side.write_text(json.dumps({"version": 1, "model": "captions:meeting.en.vtt",
+                                        "segments": [{"start": 1, "end": 3, "text": "Good evening"}] * 2}))
+            t, _ = hl._load_transcript(str(sess))
+            self.assertEqual([s["text"] for s in t["segments"]], ["Good evening", "the motion"])
+            side.unlink()
+            self.assertEqual(hl._captions_for(sess).name, "meeting.en.vtt")
+            t, _ = hl._load_transcript(str(sess))
+            self.assertEqual(t["segments"][0]["text"], "Good evening")
+
+    def test_words_with_nothing_to_reread_stand(self):
+        # a transcript borrowed from its twin (no caption file beside it)
+        # keeps its words — it is never swapped for another caption file
+        from suite.tools import highlighter as hl
+        with tempfile.TemporaryDirectory() as td:
+            sess = Path(td) / "abcdefghijk"
+            sess.mkdir()
+            (sess / "meeting.spanish.srt").write_text(
+                "1\n00:00:01,000 --> 00:00:03,000\nBuenas noches\n")
+            kept = {"version": 1, "model": "captions:meeting.en.vtt",
+                    "segments": [{"start": 1, "end": 3, "text": "Good evening"}]}
+            (sess / "meeting.scribe.json").write_text(json.dumps(kept))
+            t, origin = hl._load_transcript(str(sess))
+            self.assertEqual((origin, t["segments"][0]["text"]), ("captions", "Good evening"))
+            self.assertNotIn("parse_v", json.loads((sess / "meeting.scribe.json").read_text()))
+
 
 class TestFullRecording(unittest.TestCase):
     def test_only_the_full_recording_counts(self):

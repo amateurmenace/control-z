@@ -112,7 +112,14 @@ def meeting_meta(source: str) -> dict:
 
 
 def segments(source: str) -> List[dict]:
-    t = _read_json(sidecars(source)["scribe"])
+    # through the Highlighter's reader when it's here, like Interpreter: a
+    # transcript cached by an older caption parse (every rolling line
+    # doubled) re-reads itself once. The sidecar alone otherwise.
+    try:
+        from suite.tools.highlighter import _load_transcript
+        t, _ = _load_transcript(str(source))
+    except (ImportError, OSError):
+        t = _read_json(sidecars(source)["scribe"])
     return list(t.get("segments") or []) if t else []
 
 

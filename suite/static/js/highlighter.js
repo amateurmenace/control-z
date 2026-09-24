@@ -676,6 +676,8 @@ const HighlighterPage = (() => {
     // and any pasted URL land here
     if (/^https?:\/\//i.test(source || "")) return ingest(source);
     try {
+      endReel(false);
+      makingReset();
       S.source = source;
       S.keep = new Set(); S.timeline = []; S.picks = []; S.lane = [];
       S.insight = null; S.curClip = -1; S.sectionFiles = [];
@@ -762,8 +764,12 @@ const HighlighterPage = (() => {
       const info = d.info || {};
       if (typeof info.playerState === "number") {
         const was = S.ytPlaying;
-        S.ytPlaying = info.playerState === 1;
+        // buffering (3) is still playing — the monitor mustn't dock and
+        // lift again on every seek
+        S.ytPlaying = info.playerState === 1 || info.playerState === 3;
         if (was !== S.ytPlaying) syncMonitor();
+        // the recording ran out under a clip: that clip is over
+        if (info.playerState === 0 && S.curClip >= 0) endClip(S.curClip);
       }
       if (typeof info.currentTime === "number") {
         S.sessionTime = info.currentTime;
@@ -772,6 +778,7 @@ const HighlighterPage = (() => {
           drawSpark();
           followTranscript();
           reelTick(S.sessionTime);
+          monClock(S.sessionTime);
         }
       }
     });
@@ -852,6 +859,7 @@ const HighlighterPage = (() => {
     drawSpark();
     followTranscript();
     reelTick(audio.currentTime);
+    monClock(audio.currentTime);
     if (!audio.paused) raf = requestAnimationFrame(tick);
   }
 
@@ -880,6 +888,12 @@ const HighlighterPage = (() => {
     paintMonBar();
     $("#hl-playreel", el).textContent = S.reelOn && reeling ? "■ Stop reel" : "▶ Play reel";
     if (S.session) $("#hl-play", el).textContent = S.ytPlaying ? "⏸" : "▶";
+  }
+  let monSec = -1;
+  function monClock(t) {
+    const mon = $("#hl-mon", el);
+    if (!mon || !mon.classList.contains("floating") || S.curClip >= 0) return;
+    if (Math.floor(t) !== monSec) { monSec = Math.floor(t); paintMonBar(); }
   }
   function paintMonBar() {
     const mon = $("#hl-mon", el);
@@ -1568,6 +1582,13 @@ const HighlighterPage = (() => {
     return $(".hl-styles .chip.on", el)?.dataset.k || "";
   }
 
+  // a reel in the making belongs to the meeting it started on: opening
+  // another (or Reset) orphans it — its picks never land on the new one
+  let makeSeq = 0;
+  function makingStart() { makeSeq += 1; setMaking(true); return makeSeq; }
+  function makingEnd(tok) { if (tok === makeSeq) setMaking(false); }
+  function makingReset() { makeSeq += 1; setMaking(false); }
+
   // the reel maker is busy: every ✨ door says so (top, timeline, card)
   function setMaking(on) {
     S.making = on;
@@ -1581,14 +1602,15 @@ const HighlighterPage = (() => {
 
   async function detect() {
     if (!S.source || S.making) return 0;
-    setMaking(true);
+    const src = S.source, tok = makingStart();
     try {
       const job = await api("/api/highlighter/detect", {
         path: S.source, target: parseFloat($("#hl-target", el).value),
         keywords: styleKeywords(), energy: !S.session,
       });
-      watchJob(job.id, j => { $("#hl-detectmsg", el).textContent = j.message || j.status; });
+      watchJob(job.id, j => { if (S.source === src) $("#hl-detectmsg", el).textContent = j.message || j.status; });
       const done = await jobDone(job.id);
+      if (S.source !== src || tok !== makeSeq) return 0;   // you moved on
       if (done.status === "error") {
         $("#hl-detectmsg", el).textContent = done.error;
         toast(done.error, true);
@@ -1603,7 +1625,7 @@ const HighlighterPage = (() => {
       drawSpark();
       return S.picks.length;
     } catch (e) { toast(e.message, true); return 0; }
-    finally { setMaking(false); }
+    finally { makingEnd(tok); }
   }
 
   // the cut list IS the reel: build_reel already sized it to the length
@@ -1651,6 +1673,7 @@ const HighlighterPage = (() => {
     tl.classList.remove("fresh");
     void tl.offsetWidth;                  // restart the arrival flash
     tl.classList.add("fresh");
+    setTimeout(() => tl.classList.remove("fresh"), 900);   // once, not on every edit
   }
   function closeMakePop() {
     const pop = $("#hl-makepop", el);
@@ -1746,6 +1769,14 @@ const HighlighterPage = (() => {
 
   function renderTimeline() {
     const box = $("#hl-timeline", el);
+    if (S.curClip >= 0) {
+      // the reel follows its clip through a drag, a keep or a drop; the
+      // playing clip dropped from the reel stops it
+      const i = S.timeline.indexOf(S.curObj);
+      if (i >= 0) S.curClip = i;
+      else { S.curClip = -1; S.reelOn = false; clearTimeout(S.playTimer); pause(); syncMonitor(); }
+      paintMonBar();                     // "clip 2 of 8" follows the edit
+    }
     if (!S.timeline.length) {
       box.innerHTML = `<div class="hl-tlempty">
         <div class="hl-tlempty-big">Your reel is empty.</div>
@@ -1849,10 +1880,12 @@ const HighlighterPage = (() => {
     S.reelOn = !!thenNext;
     S.clipTicked = false;
     const c = S.timeline[k];
+    S.curObj = c;          // the clip itself — edits mid-reel move its index
     renderTimeline();
     seek(c.start, true, true);
     // backstop only: an embed that never reports its clock still moves on
-    S.playTimer = setTimeout(() => { if (!S.clipTicked) endClip(k); },
+    // (never over a pause — you stopped it; it stays stopped)
+    S.playTimer = setTimeout(() => { if (!S.clipTicked && isPlaying()) endClip(S.curClip); },
                              Math.max(200, (c.end - c.start) * 1000) + 4000);
   }
   function endClip(k) {
@@ -2103,12 +2136,13 @@ const HighlighterPage = (() => {
 
   async function aiReel() {
     if (!S.source || S.making) return 0;
-    setMaking(true);
+    const src = S.source, tok = makingStart();
     try {
       const job = await api("/api/highlighter/ai-reel", {
         path: S.source, target: parseFloat($("#hl-target", el).value) });
-      watchJob(job.id, j => { $("#hl-detectmsg", el).textContent = j.message || j.status; });
+      watchJob(job.id, j => { if (S.source === src) $("#hl-detectmsg", el).textContent = j.message || j.status; });
       const done = await jobDone(job.id);
+      if (S.source !== src || tok !== makeSeq) return 0;   // you moved on
       if (done.status === "error") {
         $("#hl-detectmsg", el).textContent = done.error;
         toast(done.error, true);
@@ -2124,7 +2158,7 @@ const HighlighterPage = (() => {
         + " with your key — every timestamp checked against the clock";
       return S.picks.length;
     } catch (e) { toast(e.message, true); return 0; }
-    finally { setMaking(false); }
+    finally { makingEnd(tok); }
   }
 
   // [MM:SS] / [H:MM:SS] in generated prose become the same clickable pills
@@ -2508,6 +2542,7 @@ const HighlighterPage = (() => {
     $("#hl-play", el).onclick = togglePlay;
     audio.addEventListener("play", () => { $("#hl-play", el).textContent = "⏸"; raf = requestAnimationFrame(tick); syncMonitor(); });
     audio.addEventListener("pause", () => { $("#hl-play", el).textContent = "▶"; if (raf) cancelAnimationFrame(raf); tick(); syncMonitor(); });
+    audio.addEventListener("ended", () => { if (S.curClip >= 0) endClip(S.curClip); });
 
     $$("#hl-pills .hl-step[data-sec]", el).forEach(p => p.onclick = () => showSec(p.dataset.sec));
     $("#hl-loaded", el).addEventListener("scroll", () => {
@@ -2602,7 +2637,10 @@ const HighlighterPage = (() => {
     // never while typing in a field
     addEventListener("keydown", e => {
       if (CZ.current !== "highlighter" || !S.source) return;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+      const a = document.activeElement;
+      if (["INPUT", "TEXTAREA", "SELECT", "SUMMARY"].includes(a?.tagName)) return;
+      // inside a popup, Space presses what's focused (a chip, a length)
+      if (a?.closest?.(".hl-pop, .cz-overlay, .hl-overlay, #hl-exportmodal")) return;
       if (e.code === "Space") {
         e.preventDefault();
         togglePlay();
@@ -2697,6 +2735,7 @@ const HighlighterPage = (() => {
       insight: null, sectionFiles: [], docs: null, fileUrl: null });
     $("#hl-exportmodal", el).style.display = "none";
     monClosed = false;
+    makingReset();
     $("#hl-mon", el).classList.remove("floating", "reeling");
     $("#hl-monwrap", el).style.height = "";
     closeMakePop();
