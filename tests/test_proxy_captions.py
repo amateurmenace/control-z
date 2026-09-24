@@ -34,6 +34,11 @@ class TestProxyConfig(unittest.TestCase):
             proxy, "support_dir", lambda sub="": Path(self.td.name))
         patch_dir.start()
         self.addCleanup(patch_dir.stop)
+        # a builder's baked-in account must never leak into these tests
+        patch_house = mock.patch.object(
+            proxy, "HOUSE_FILE", Path(self.td.name) / "house_proxy.json")
+        patch_house.start()
+        self.addCleanup(patch_house.stop)
         self.addCleanup(self.td.cleanup)
         # tests must not inherit a real environment configuration
         import os
@@ -83,6 +88,67 @@ class TestProxyConfig(unittest.TestCase):
 
     def test_status_carries_relay(self):
         self.assertIn("relay", proxy.status())
+
+    # -- the switch + the built-in account (2026-09 fetch fixes) ---------------
+
+    def test_house_account_is_off_until_switched_on(self):
+        proxy.set_house("houseacct", "housepw")
+        st = proxy.status()
+        self.assertTrue(st["available"])
+        self.assertEqual(st["source"], "house")
+        self.assertFalse(st["switch"])
+        self.assertFalse(st["enabled"])
+        self.assertIsNone(proxy.proxy_url())          # default OFF
+        proxy.set_enabled(True)
+        self.assertIn("houseacct-1:housepw", proxy.proxy_url())
+        self.assertTrue(proxy.status()["enabled"])
+        proxy.set_enabled(False)
+        self.assertIsNone(proxy.proxy_url())
+
+    def test_house_file_is_not_plaintext(self):
+        p = proxy.set_house("stationacct", "s3cretpw")
+        raw = p.read_text()
+        self.assertNotIn("stationacct", raw)
+        self.assertNotIn("s3cretpw", raw)
+        self.assertEqual(proxy._house()["username"], "stationacct")
+
+    def test_house_status_never_names_the_account(self):
+        proxy.set_house("stationacct", "s3cretpw")
+        blob = json.dumps(proxy.status())
+        self.assertNotIn("stationacct", blob)
+        self.assertNotIn("s3cretpw", blob)
+
+    def test_own_account_beats_house_and_saving_switches_on(self):
+        proxy.set_house("houseacct", "housepw")
+        proxy.set_config("mine", "minepw")
+        self.assertEqual(proxy.status()["source"], "file")
+        self.assertTrue(proxy.status()["enabled"])     # typing it in = on
+        self.assertIn("mine-1:minepw", proxy.proxy_url())
+        proxy.set_config("", "")                       # own account removed
+        self.assertEqual(proxy.status()["source"], "house")
+        # …and the switch goes OFF: traffic never lands on the built-in
+        # account without the person choosing it
+        self.assertFalse(proxy.status()["switch"])
+        self.assertIsNone(proxy.proxy_url())
+
+    def test_legacy_file_with_credentials_counts_as_on(self):
+        # a proxy.json written before the switch existed
+        (Path(self.td.name) / "proxy.json").write_text(
+            json.dumps({"username": "old", "password": "pw"}))
+        self.assertTrue(proxy.switch_on())
+        self.assertIn("old-1:pw", proxy.proxy_url())
+
+    def test_switch_survives_relay_changes(self):
+        proxy.set_house("h", "p")
+        proxy.set_enabled(True)
+        proxy.set_relay(False)
+        self.assertTrue(proxy.switch_on())
+        self.assertFalse(proxy.relay_enabled())
+
+    def test_test_without_account_says_so(self):
+        r = proxy.test()
+        self.assertFalse(r["ok"])
+        self.assertIn("no proxy account", r["error"])
 
 
 WATCH_HTML = (

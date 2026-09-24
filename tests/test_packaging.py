@@ -190,6 +190,33 @@ class TestFreezeResourceContract(unittest.TestCase):
         for s in settings:
             self.assertGreater(s.stat().st_size, 0, f"empty template: {s.name}")
 
+    def test_stencil_engine_ships_as_a_file_and_imports_no_suite(self):
+        """The signed app runs stencil/sam2_engine.py in the managed
+        runtime's OWN Python — a suite import there would break the helper
+        the moment it starts (that Python has torch + SAM 2, nothing else)."""
+        import ast
+        f = REPO / "stencil" / "sam2_engine.py"
+        self.assertTrue(f.exists())
+        spec = (REPO / "packaging" / "suite.spec").read_text()
+        self.assertIn('"stencil" / "sam2_engine.py"', spec)
+        allowed = {"__future__", "json", "os", "sys", "tempfile", "pathlib",
+                   "numpy", "torch", "sam2", "PIL"}
+        for node in ast.walk(ast.parse(f.read_text())):
+            if isinstance(node, ast.Import):
+                mods = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                mods = [(node.module or "").split(".")[0]] if not node.level else ["<relative>"]
+            else:
+                continue
+            for m in mods:
+                self.assertIn(m, allowed, f"sam2_engine.py imports {m!r}")
+
+    def test_built_in_proxy_account_is_never_committed(self):
+        """czcore/house_proxy.json carries a real account — the repo is
+        public, so it must stay gitignored (the freeze bakes it in)."""
+        ignore = (REPO / ".gitignore").read_text()
+        self.assertIn("czcore/house_proxy.json", ignore)
+
 
 if __name__ == "__main__":
     unittest.main()

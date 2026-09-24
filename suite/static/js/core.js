@@ -33,12 +33,14 @@ const TOOLS = [
     verb: "knows where everything is", one: "your footage, searchable in plain words" },
   { id: "slate",   name: "Slate",   acc: "var(--slate)",   ready: true,
     verb: "makes it official", one: "lower thirds, slates, bars, countdowns" },
-  { id: "highlighter", name: "Highlighter", acc: "var(--highlighter)",
-    ready: true, group: "community", long: "Community Highlighter",
-    verb: "finds the moments", one: "meeting video → highlight reel, in text" },
+  /* the community rail reads in the order a meeting travels (the wire):
+     fetch it → find the moments → kit it → keep it → carry it across */
   { id: "grabber", name: "Grabber", acc: "var(--grabber)",
     ready: true, group: "community", long: "Video Grabber",
     verb: "brings the meeting home", one: "search, fetch, conform civic recordings" },
+  { id: "highlighter", name: "Highlighter", acc: "var(--highlighter)",
+    ready: true, group: "community", long: "Community Highlighter",
+    verb: "finds the moments", one: "meeting video → highlight reel, in text" },
   /* the Library page (id "kb") retired in 1.7.1 — its cross-meeting
      analytics live inside Highlighter's analyzer and Memory's Analytics
      view now (analytics.js), and its montage tray became czTray. The
@@ -75,7 +77,11 @@ function glyphSVG(acc, ready, square) {
 }
 
 /* ---------- api ---------- */
-async function api(path, body) {
+/* A route that needs an AI key answers {need:"llm_key", feature, alt}
+   (suite/tools/keyneed.py). Instead of a dead-end error, the add-a-key
+   popup opens right there; save a key and the same request goes out once
+   more, so the click that asked for it simply works. */
+async function api(path, body, _retried) {
   const opts = body === undefined ? {} : {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -85,8 +91,14 @@ async function api(path, body) {
   let data = null;
   try { data = await r.json(); } catch (e) { /* non-JSON error body */ }
   if (!r.ok) {
+    if (data && data.need === "llm_key" && !_retried && window.czKeyModal) {
+      const saved = await czKeyModal({ feature: data.feature, alt: data.alt });
+      if (saved) return api(path, body, true);
+    }
     const msg = (data && data.error) ? data.error : `${r.status} ${r.statusText}`;
-    throw new Error(msg);
+    const err = new Error(msg);
+    if (data && data.need) err.need = data.need;
+    throw err;
   }
   return data;
 }
@@ -125,6 +137,7 @@ function watchJob(id, fn) {
 }
 
 /* wait for a job to finish; progress via watcher */
+const _keyAsked = new Set();
 function jobDone(id) {
   return new Promise(resolve => {
     let off = null, settled = false;
@@ -132,10 +145,24 @@ function jobDone(id) {
       if (!["done", "error", "cancelled"].includes(job.status)) return;
       settled = true;
       if (off) off();
+      // a job that ran into "no API key" mid-flight offers the popup too
+      if (job.status === "error" && /no API key configured/i.test(job.error || "")
+          && !_keyAsked.has(id) && window.czKeyModal) {
+        _keyAsked.add(id);
+        czKeyModal({ feature: job.label || "This step", retry: false });
+      }
       resolve(job);
     });
     if (settled) off();   // already terminal: watchJob fired before off existed
   });
+}
+
+/* cancel any queued/running job — the ✕ on every progress card and toast */
+async function cancelJob(id, btn) {
+  const was = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = was.length > 2 ? "cancelling…" : "…"; }
+  try { await api(`/api/jobs/${id}/cancel`, {}); }
+  catch (e) { toast(e.message, true); if (btn) { btn.disabled = false; btn.textContent = was; } }
 }
 
 let ws = null, wsRetry = 500;
@@ -185,9 +212,35 @@ async function setDensity(tool, d) {
 }
 
 /* ---------- router ---------- */
-function registerPage(name, el, onshow) {
-  CZ.pages[name] = { el, onshow };
+/* opts.reset: put the page back the way it opens — nothing loaded, no
+   results, no half-typed fields. Files and sidecars on disk are never
+   touched (a reset clears the VIEW, not the work). Pages with a reset get
+   the same ↺ Reset button at the right end of their header bar. */
+function registerPage(name, el, onshow, opts) {
+  CZ.pages[name] = { el, onshow, reset: opts && opts.reset };
   $("#main").appendChild(el);
+  if (opts && opts.reset) {
+    const bar = $(".mediabar", el) || $(".cz-resetslot", el);
+    if (bar) {
+      const b = document.createElement("button");
+      b.className = "reset-btn";
+      b.type = "button";
+      b.textContent = "↺ Reset";
+      b.title = "clear this page back to a fresh start — nothing on disk is deleted";
+      b.onclick = () => resetPage(name);
+      bar.appendChild(b);
+    }
+  }
+}
+function resetPage(name) {
+  const p = CZ.pages[name];
+  if (!p || !p.reset) return;
+  try { p.reset(); } catch (e) { console.error(e); }
+  // any per-page inner scroller back to the top, too
+  $$(".ws-center, .inspector, #hl-landing, #hl-loaded", p.el)
+    .forEach(s => { try { s.scrollTop = 0; } catch (e) {} });
+  p.el.scrollTop = 0;
+  toast(`${(toolById(name) || {}).name || "Page"} reset — your files are untouched`);
 }
 function go(name, arg) {
   const page = CZ.pages[name];
@@ -432,6 +485,8 @@ function czProgress(container, opts = {}) {
       <span class="czprog-label">${esc(opts.label || "working…")}</span>
       <span class="czprog-pct"></span>
       <span class="czprog-clock">0s</span>
+      <button class="czprog-cancel" type="button" style="display:none"
+        title="stop this job — partial files are removed">✕ Cancel</button>
     </div>
     <div class="czprog-bar"><i class="indet"></i></div>
     <div class="czprog-msg">queued…</div>`;
@@ -440,6 +495,7 @@ function czProgress(container, opts = {}) {
   const pct = $(".czprog-pct", box);
   const msg = $(".czprog-msg", box);
   const clock = $(".czprog-clock", box);
+  const cancel = $(".czprog-cancel", box);
   const t0 = Date.now();
   const tick = setInterval(() => {
     const s = Math.round((Date.now() - t0) / 1000);
@@ -449,6 +505,11 @@ function czProgress(container, opts = {}) {
     el: box,
     update(j) {
       if (j.message) msg.textContent = j.message;
+      if (j.id) {
+        const live = ["queued", "running"].includes(j.status);
+        cancel.style.display = live ? "" : "none";
+        cancel.onclick = () => cancelJob(j.id, cancel);
+      }
       const has = j.progress != null && j.progress > 0;
       bar.classList.toggle("indet", !has);
       if (has) {
@@ -458,12 +519,16 @@ function czProgress(container, opts = {}) {
     },
     finish(done) {
       clearInterval(tick);
+      cancel.style.display = "none";
       bar.classList.remove("indet");
       if (done.status === "done") {
         box.classList.add("ok");
         bar.style.width = "100%";
         pct.textContent = "";
         msg.textContent = done.message || "done";
+      } else if (done.status === "cancelled") {
+        box.classList.add("cancelled");
+        msg.textContent = "cancelled — partial files removed";
       } else {
         box.classList.add("err");
         msg.textContent = done.error || done.message || "stopped";
@@ -539,3 +604,373 @@ const fmtTime = s => {
 };
 const esc = s => String(s).replace(/[&<>"']/g,
   c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* ---------- czModal: one overlay for every popup ----------
+   Closes on ✕, Escape, or a click on the dimmed backdrop. Returns
+   {el, box, close}; onClose runs once however it closed. */
+function czModal({ title = "", html = "", width = 560, onClose } = {}) {
+  const el = document.createElement("div");
+  el.className = "cz-overlay";
+  el.innerHTML = `<div class="cz-modal" role="dialog" aria-modal="true"
+      aria-label="${esc(title)}" style="width:min(${width}px,94vw)">
+    <div class="cz-modal-head"><h2>${esc(title)}</h2>
+      <button class="cz-modal-x" type="button" aria-label="close">✕</button></div>
+    <div class="cz-modal-body">${html}</div></div>`;
+  document.body.appendChild(el);
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    el.remove();
+    removeEventListener("keydown", onKey, true);
+    if (onClose) onClose();
+  };
+  const onKey = e => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  addEventListener("keydown", onKey, true);
+  $(".cz-modal-x", el).onclick = close;
+  el.addEventListener("mousedown", e => { if (e.target === el) close(); });
+  // keys typed in a popup are the popup's (Space on a tab button must not
+  // toggle the Highlighter's playback underneath); Escape still closes it
+  el.addEventListener("keydown", e => { if (e.key !== "Escape") e.stopPropagation(); });
+  const opener = document.activeElement;
+  const done = close;
+  return { el, box: $(".cz-modal-body", el), close: () => {
+    done();
+    try { if (opener && opener.focus) opener.focus(); } catch (e) {}
+  } };
+}
+
+/* ---------- czKeyModal: "this needs an AI key" — and how to get one ----------
+   Opened by api() when a route answers need:"llm_key", by jobDone when a
+   job hits "no API key" mid-flight, and by any ✨ button whose feature
+   needs a key. Resolves true once a key is saved (the caller retries). */
+const KEY_PROVIDERS = [
+  { id: "anthropic", name: "Anthropic (Claude)", prefix: "sk-ant-",
+    url: "https://console.anthropic.com/settings/keys",
+    steps: [
+      `Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a> and sign up or sign in.`,
+      `Open <b>Settings → Billing</b> and add a little credit — $5 goes a long way (a meeting summary costs about a cent).`,
+      `Open <b>Settings → API Keys</b>, press <b>Create Key</b>, name it “Civic Media Studio”, and copy it. It starts with <code>sk-ant-</code>.`,
+      `Paste it below and press <b>Save key</b>.`] },
+  { id: "openai", name: "OpenAI", prefix: "sk-",
+    url: "https://platform.openai.com/api-keys",
+    steps: [
+      `Go to <a href="https://platform.openai.com/" target="_blank" rel="noopener">platform.openai.com</a> and sign up or sign in.`,
+      `Open <b>Settings → Billing</b> and add a few dollars of credit.`,
+      `Open <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">API keys</a>, press <b>Create new secret key</b>, and copy it. It starts with <code>sk-</code>.`,
+      `Paste it below and press <b>Save key</b>.`] },
+  { id: "gemini", name: "Google Gemini", prefix: "AIza",
+    url: "https://aistudio.google.com/apikey",
+    steps: [
+      `Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> and sign in with a Google account.`,
+      `Press <b>Create API key</b> and copy it. It starts with <code>AIza</code>. Gemini has a free tier — a good way to try this out.`,
+      `Paste it below and press <b>Save key</b>.`] },
+];
+
+function czKeyModal({ feature = "", alt = "", retry = true } = {}) {
+  if (window._czKeyOpen) return window._czKeyOpen;   // one popup at a time
+  const p = new Promise(resolve => {
+    let saved = false;
+    const m = czModal({
+      title: "🔑 Add an AI key",
+      width: 600,
+      onClose: () => { window._czKeyOpen = null; resolve(saved); },
+      html: `
+        <p class="cz-lede">${feature ? `<b>${esc(feature)}</b> writes new text with an AI model,
+          so it needs a key.` : "This feature writes new text with an AI model, so it needs a key."}
+          Everything else in the app works without one.</p>
+        <div class="cz-note">
+          <b>What's a key?</b> A private code from an AI company that lets this app use
+          their model on <i>your</i> account. Only the words of the meeting you're working on
+          are sent — only when you press a button marked ✨. The key is stored on this
+          computer only. You can remove it any time in Settings → AI.</div>
+        <div class="cz-tabs" role="tablist">${KEY_PROVIDERS.map((pv, i) =>
+          `<button class="cz-tab${i ? "" : " on"}" role="tab" data-pv="${pv.id}"
+            aria-selected="${!i}">${pv.name}</button>`).join("")}</div>
+        <div id="cz-key-steps"></div>
+        <div class="cz-keyrow">
+          <input type="password" id="cz-key-in" spellcheck="false" autocomplete="off"
+            placeholder="paste your key here — sk-ant-… · sk-… · AIza…">
+          <button class="btn primary" id="cz-key-save" style="width:auto">Save key</button>
+        </div>
+        <div class="cz-keymsg" id="cz-key-msg"></div>
+        ${alt ? `<div class="cz-alt">No key? ${esc(alt)}.</div>` : ""}`,
+    });
+    const steps = id => {
+      const pv = KEY_PROVIDERS.find(x => x.id === id);
+      $("#cz-key-steps", m.box).innerHTML =
+        `<ol class="cz-steps">${pv.steps.map(s => `<li>${s}</li>`).join("")}</ol>`;
+    };
+    steps("anthropic");
+    $$(".cz-tab", m.box).forEach(t => t.onclick = () => {
+      $$(".cz-tab", m.box).forEach(x => {
+        x.classList.toggle("on", x === t);
+        x.setAttribute("aria-selected", String(x === t));
+      });
+      steps(t.dataset.pv);
+    });
+    const input = $("#cz-key-in", m.box);
+    setTimeout(() => input.focus(), 50);
+    const save = async () => {
+      const key = input.value.trim();
+      const msg = $("#cz-key-msg", m.box);
+      if (!key) { msg.textContent = "paste a key first"; msg.className = "cz-keymsg err"; return; }
+      if (!/^(sk-|AIza)/.test(key)) {
+        msg.textContent = "that doesn't look like a key — Anthropic keys start sk-ant-, OpenAI sk-, Gemini AIza";
+        msg.className = "cz-keymsg err"; return;
+      }
+      $("#cz-key-save", m.box).disabled = true;
+      try {
+        const st = await api("/api/settings/llm", { api_key: key, model: "" });
+        saved = true;
+        msg.textContent = `✓ saved — ${st.provider || "key"} · ${st.model || ""}`;
+        msg.className = "cz-keymsg ok";
+        toast(retry ? "AI key saved — carrying on with what you asked for"
+                    : "AI key saved — press the button again to run it");
+        setTimeout(m.close, 500);
+      } catch (e) {
+        msg.textContent = e.message; msg.className = "cz-keymsg err";
+        $("#cz-key-save", m.box).disabled = false;
+      }
+    };
+    $("#cz-key-save", m.box).onclick = save;
+    input.addEventListener("keydown", e => { if (e.key === "Enter") save(); });
+  });
+  window._czKeyOpen = p;
+  return p;
+}
+window.czKeyModal = czKeyModal;
+
+/* the ✨ buttons wear a small key mark while no key is set — clicking them
+   opens the popup instead of failing. Pages call this after a status read. */
+function markKeyButtons(root, hasKey) {
+  $$("[data-needs-key]", root).forEach(b => {
+    // remember the button's own tooltip once, so adding a key restores it
+    if (b.dataset.titleKey === undefined) b.dataset.titleKey = b.title || "";
+    b.classList.toggle("needs-key", !hasKey);
+    b.title = hasKey ? b.dataset.titleKey
+      : "needs an AI key — press to add one (a popup explains how)";
+  });
+}
+
+/* ---------- folders: pick one, show one ---------- */
+async function pickFolder(start) {
+  try {
+    const r = await api("/api/dialog/open-folder", { start: start || "" });
+    return r.path || null;
+  } catch (e) {
+    // a plain browser has no native picker — ask for the path instead
+    const typed = prompt("Folder path (e.g. ~/Downloads/Civic Media Studio):", start || "");
+    return typed ? typed.trim() : null;
+  }
+}
+
+async function showFolder(path) {
+  try { await api("/api/media/reveal", { path, open: true, mkdir: true }); }
+  catch (e) { toast(e.message, true); }
+}
+
+/* a "files go HERE" row: the path, Show in Finder, Change…, Default.
+   load() -> path; save(pathOr"") -> new path. Returns {refresh}. */
+function czLocRow(container, { label, load, save, hint }) {
+  const row = document.createElement("div");
+  row.className = "cz-loc";
+  container.appendChild(row);
+  let cur = "";
+  async function refresh() {
+    try { cur = await load(); } catch (e) { cur = ""; }
+    const home = (CZ.appInfo && CZ.appInfo.home) || "";
+    const shown = home && cur.startsWith(home) ? "~" + cur.slice(home.length) : cur;
+    row.innerHTML = `
+      <span class="cz-loc-label">${esc(label)}</span>
+      <code class="cz-loc-path" title="${esc(cur)}">${esc(shown || "—")}</code>
+      <span class="cz-loc-acts">
+        <button type="button" data-act="show">Show in Finder</button>
+        <button type="button" data-act="change">Change…</button>
+      </span>
+      ${hint ? `<span class="cz-loc-hint">${hint}</span>` : ""}`;
+    $('[data-act="show"]', row).onclick = () => cur && showFolder(cur);
+    $('[data-act="change"]', row).onclick = async () => {
+      const p = await pickFolder(cur);
+      if (!p) return;
+      try { await save(p); toast("saved — new files land in " + p); refresh(); }
+      catch (e) { toast(e.message, true); }
+    };
+  }
+  refresh();
+  return { refresh, get: () => cur };
+}
+
+/* ---------- the proxy switch (Grabber + Highlighter + Settings) ----------
+   YouTube sometimes refuses one computer ("429 Too Many Requests",
+   "confirm you're not a bot"). The switch routes YouTube requests through
+   a residential proxy — OFF by default; pages call card.nudge(why) the
+   moment a fetch fails that way, and the card opens itself to explain. */
+const czBlocked = msg => /429|too many requests|not a bot|confirm you.re not|rate.?limit|flagged this address|limiting this computer|HTTP Error 403/i
+  .test(msg || "");
+
+function czProxyCard(container, { compact = true } = {}) {
+  const card = document.createElement("div");
+  card.className = "cz-proxy" + (compact ? " compact" : "");
+  container.appendChild(card);
+  let st = null, open = !compact, why = "";
+  async function refresh() {
+    try { st = await api("/api/settings/proxy"); } catch (e) { return; }
+    render();
+  }
+  function whose() {
+    if (!st) return "";
+    return st.source === "house" ? "the built-in account"
+      : st.source === "env" ? "the account set in this computer's environment"
+      : st.source === "file" ? `your Webshare account (${esc(st.username_masked)})` : "";
+  }
+  function render() {
+    if (!st) return;
+    const on = !!st.enabled, avail = !!st.available, env = st.source === "env";
+    card.classList.toggle("on", on);
+    card.classList.toggle("alert", !!why && !on);
+    card.innerHTML = `
+      <div class="cz-proxy-head">
+        <button class="cz-proxy-title" type="button" aria-expanded="${open}">
+          <span class="cz-proxy-dot"></span>
+          <b>Proxy ${on ? "on" : "off"}</b>
+          <span class="cz-proxy-sum">${on ? `YouTube requests go through ${whose()}`
+            : why ? "YouTube is limiting this computer — the proxy usually fixes it"
+            : "YouTube blocking downloads or captions? Turn this on."}</span>
+          <span class="cz-proxy-caret">${open ? "▴" : "▾"}</span>
+        </button>
+        ${env ? `<span class="badge">set by environment</span>` : `
+        <label class="cz-switch" title="${avail ? "route YouTube requests through the proxy"
+          : "no proxy account yet — set one up in Settings"}">
+          <input type="checkbox" ${on ? "checked" : ""} ${avail ? "" : "disabled"}
+            aria-label="use the proxy for YouTube">
+          <span></span></label>`}
+      </div>
+      <div class="cz-proxy-body" style="display:${open ? "" : "none"}">
+        ${why ? `<div class="cz-proxy-why">What happened: ${esc(why.slice(0, 220))}</div>` : ""}
+        <p><b>What this is.</b> Sometimes YouTube stops answering one computer — you'll see
+          <i>“HTTP Error 429: Too Many Requests”</i> or <i>“confirm you're not a bot”</i>.
+          The proxy sends this app's YouTube requests through a different internet address
+          (a <a href="https://www.webshare.io/" target="_blank" rel="noopener">Webshare</a>
+          residential network), so they go through. It only carries YouTube traffic for the
+          fetches you start, and only while it's on.</p>
+        <p><b>When to use it.</b> Leave it off until YouTube refuses you, then switch it on and
+          try again. Downloads can be a little slower through it.</p>
+        <p>${avail ? `Account in use: <b>${whose()}</b>.` :
+          `<b>No proxy account yet.</b> This copy of the app doesn't include one — add your own Webshare account in Settings.`}
+          To use your own account, go to <a href="#" data-go-settings>Settings → Fetch network</a>.</p>
+        <div class="cz-proxy-acts">
+          ${avail ? `<button class="btn" type="button" data-test style="width:auto">Test the connection</button>` : ""}
+          <button class="btn" type="button" data-go-settings style="width:auto">${st.own ? "Change my account" : "Use my own account"}</button>
+          <span class="cz-proxy-msg"></span>
+        </div>
+      </div>`;
+    $(".cz-proxy-title", card).onclick = () => { open = !open; render(); };
+    const sw = $(".cz-switch input", card);
+    if (sw) sw.onchange = async () => {
+      try {
+        st = await api("/api/settings/proxy", { enabled: sw.checked });
+        if (st.enabled) why = "";
+        toast(st.enabled ? "proxy on — YouTube requests now go through it"
+                         : "proxy off — fetching directly from this computer");
+        render();
+      } catch (e) { toast(e.message, true); sw.checked = !sw.checked; }
+    };
+    $$("[data-go-settings]", card).forEach(a => a.onclick = e => {
+      e.preventDefault(); go("settings", { section: "proxy" }); });
+    const t = $("[data-test]", card);
+    if (t) t.onclick = async () => {
+      const msg = $(".cz-proxy-msg", card);
+      t.disabled = true; msg.textContent = "testing…"; msg.className = "cz-proxy-msg";
+      try {
+        const r = await api("/api/settings/proxy/test", {});
+        msg.textContent = r.ok ? `✓ working — exit address ${r.ip}` : `✗ ${r.error}`;
+        msg.className = "cz-proxy-msg " + (r.ok ? "ok" : "err");
+      } catch (e) { msg.textContent = e.message; msg.className = "cz-proxy-msg err"; }
+      t.disabled = false;
+    };
+  }
+  refresh();
+  return {
+    refresh,
+    /* a fetch just failed the way the proxy fixes: open and say so */
+    nudge(reason) {
+      why = String(reason || "YouTube refused this computer");
+      open = true;
+      render();
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    },
+    enabled: () => !!(st && st.enabled),
+  };
+}
+
+/* ---------- the wire: Send to Next App ----------
+   A meeting travels the line — Grabber fetches it, Highlighter finds the
+   moments, Publisher makes the posts, the Record keeps it — and the
+   access chain carries it across: captions → languages → description.
+   Every page that holds a meeting offers the next stop with the meeting
+   in hand, plus a ▾ for any other stop that can take it. */
+const WIRE = {
+  grabber:     { next: "highlighter", verb: "find the moments" },
+  highlighter: { next: "publisher",   verb: "make the posts" },
+  publisher:   { next: "memory",      verb: "file it in the record" },
+  scribe:      { next: "interpreter", verb: "translate the captions" },
+  interpreter: { next: "narrator",    verb: "describe the picture" },
+  narrator:    { next: "publisher",   verb: "make the posts" },
+};
+/* who can open what: sessions (a read URL meeting folder) only go where
+   sidecars are enough; the workbench tools need a local file */
+const WIRE_TAKES = {
+  highlighter: "any", publisher: "any", interpreter: "any", narrator: "any",
+  memory: "any", scribe: "file", clear: "file", pivot: "file",
+};
+
+function czNextHTML(from, source, { isFile } = {}) {
+  const w = WIRE[from];
+  if (!w || !source) return "";
+  const t = toolById(w.next);
+  return `<span class="cz-next" data-from="${esc(from)}" data-src="${esc(source)}"
+      data-file="${isFile ? 1 : 0}" style="--acc:${t.acc}">
+    <button class="cz-next-go" type="button"
+      title="open this in ${esc(t.long || t.name)} — ${esc(w.verb)}">
+      Send to next app <b>→ ${esc(t.name)}</b></button>
+    <button class="cz-next-more" type="button" aria-label="send somewhere else"
+      title="send it to another app">▾</button>
+  </span>`;
+}
+
+async function czSendTo(dest, source) {
+  if (dest === "memory") {
+    const ok = await sendToRecord({ path: source });
+    if (ok) go("memory");
+    return;
+  }
+  go(dest, { openPath: source });
+}
+
+document.addEventListener("click", e => {
+  const go1 = e.target.closest && e.target.closest(".cz-next-go");
+  const more = e.target.closest && e.target.closest(".cz-next-more");
+  $$(".cz-next-menu").forEach(m => { if (!m.contains(e.target)) m.remove(); });
+  if (!go1 && !more) return;
+  const box = e.target.closest(".cz-next");
+  const from = box.dataset.from, src = box.dataset.src;
+  const isFile = box.dataset.file === "1";
+  if (go1) { czSendTo(WIRE[from].next, src); return; }
+  const menu = document.createElement("div");
+  menu.className = "cz-next-menu";
+  const dests = Object.keys(WIRE_TAKES).filter(d => d !== from
+    && (WIRE_TAKES[d] === "any" || isFile) && toolById(d) && toolById(d).ready);
+  menu.innerHTML = `<div class="cz-next-menu-h">send it to…</div>` + dests.map(d => {
+    const t = toolById(d);
+    return `<button type="button" data-dest="${d}" style="--acc:${t.acc}">
+      <span class="dot"></span>${esc(t.long || t.name)}
+      <i>${esc(d === "memory" ? "file it in the record" : t.one || "")}</i></button>`;
+  }).join("");
+  document.body.appendChild(menu);
+  const r = more.getBoundingClientRect();
+  menu.style.top = `${Math.min(innerHeight - menu.offsetHeight - 8, r.bottom + 4)}px`;
+  menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth))}px`;
+  $$("button[data-dest]", menu).forEach(b => b.onclick = () => {
+    menu.remove(); czSendTo(b.dataset.dest, src); });
+}, true);

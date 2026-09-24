@@ -428,6 +428,22 @@ const ClearPage = (() => {
     if (arg && arg.openPath) open(arg.openPath);
   }
 
-  registerPage("clear", el, onshow);
+  /* reset: no audio open, no rescue pass on screen (the processed files
+     stay on disk; reopening the clip loads the last pass back) */
+  function reset() {
+    if (!inited) return;
+    audio.pause(); audio.removeAttribute("src");
+    Object.assign(C, { path: null, ov: null, result: null, monitor: "original", playing: false });
+    $("#cl-path", el).value = ""; $("#cl-meta", el).innerHTML = "";
+    $("#cl-empty", el).style.display = "";
+    $("#cl-specwrap", el).style.display = "none";
+    ["#cl-play", "#cl-process", "#cl-roomtone"].forEach(s => $(s, el).disabled = true);
+    $("#cl-bar", el).style.width = "0";
+    $("#cl-msg", el).textContent = "";
+    const rep = $("#cl-report", el); if (rep) { rep.innerHTML = ""; rep.classList.remove("show"); }
+    try { drawWaves(); drawLoudness(); drawBands(); } catch (e) {}
+  }
+
+  registerPage("clear", el, onshow, { reset });
   return { onshow, stop };
 })();

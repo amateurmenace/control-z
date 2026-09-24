@@ -36,13 +36,39 @@ def register_publisher(app, jobs, frames):
     from fastapi import Body
     from fastapi.responses import JSONResponse
 
-    out_dir = media_dir("publisher")
+    def dest() -> Path:
+        """Where kit folders land: the person's pick, else the outputs
+        root's publisher/ folder (Queue → outputs). A pick that can't be
+        used right now (an unplugged drive) falls back to the default
+        rather than breaking the page."""
+        chosen = str(brandmod.get_brand().get("out_dir") or "")
+        if chosen:
+            d = Path(chosen).expanduser()
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+                return d
+            except OSError:
+                pass
+        return media_dir("publisher")
 
     @app.get("/api/publisher/status")
     def api_status():
         from czcore import llm
-        return {"brand": brandmod.get_brand(), "out": str(out_dir),
+        return {"brand": brandmod.get_brand(), "out": str(dest()),
+                "out_default": str(media_dir("publisher")),
                 "ai": llm.status(), "voices": list(brandmod.VOICES)}
+
+    @app.post("/api/publisher/destination")
+    def api_destination(body: dict = Body(...)):
+        """Choose where kit folders land ("" = back to the default)."""
+        from .settings import usable_folder
+        root = str(body.get("path", "")).strip()
+        if root:
+            err = usable_folder(root)
+            if err:
+                return JSONResponse({"error": err}, status_code=422)
+        brandmod.set_brand({"out_dir": root})      # saved once known good
+        return {"out": str(dest())}
 
     @app.post("/api/publisher/brand")
     def api_brand(body: dict = Body(...)):
@@ -62,8 +88,22 @@ def register_publisher(app, jobs, frames):
             kit = kitmod.new_kit(src)
             kitmod.save_kit(src, kit)
         app.state.session.add_recent(src, "publisher")
+        from .highlighter import _info_for
         return {"source": src, "meta": kitmod.meeting_meta(src), "has": has,
-                "video": str(video) if video else None, "kit": kit}
+                "video": str(video) if video else None, "kit": kit,
+                "session": p.is_dir(),
+                # where the recording lives online — Publisher can fetch the
+                # video itself when a read meeting has no local copy yet
+                "url": _info_for(src).get("webpage_url"),
+                "kit_dir": str(bundlemod.kit_dir(
+                    kit or {"meta": kitmod.meeting_meta(src)}, str(dest()),
+                    src))}
+
+    @app.get("/api/publisher/library")
+    def api_library():
+        """Meetings with words — the ones a kit can be built from."""
+        from interpreter import sources as sourcesmod
+        return {"rows": sourcesmod.list_sources()}
 
     @app.post("/api/publisher/kit")
     def api_kit(body: dict = Body(...)):
@@ -88,11 +128,18 @@ def register_publisher(app, jobs, frames):
 
     @app.post("/api/publisher/copy-ai")
     def api_copy_ai(body: dict = Body(...)):
+        from czcore import llm
+
+        from .keyneed import need_key
         src = str(body.get("source", ""))
         kit = kitmod.load_kit(src)
         if not kit:
             return JSONResponse({"error": "open a source first"},
                                 status_code=422)
+        if not llm.enabled():
+            return need_key("Rewriting the posts with AI",
+                            alt="the drafted words above are already yours "
+                                "to edit — no key needed")
         brand = brandmod.get_brand()
         try:
             gen = kitmod.copy_generative(
@@ -129,10 +176,18 @@ def register_publisher(app, jobs, frames):
                                 status_code=422)
         brand = brandmod.get_brand()
         l1, l2 = _lt_lines(kit, brand)
-        name = bundlemod.slug(kit.get("meta", {}).get("title", ""))[:40]
+        name = bundlemod.kit_name(kit)[:60]
         segs = kitmod.segments(src) if brand.get("captions", True) else []
+        kdir = bundlemod.kit_dir(kit, str(dest()), src)
 
         def work(job):
+            import shutil
+            bundlemod.claim(kdir, src)       # this folder is this meeting's
+            # a fresh render is a fresh kit: last time's cuts leave first,
+            # so the folder (and the zip made from it) holds only this pass
+            for sub in ("clips", "thumbs"):
+                shutil.rmtree(kdir / sub, ignore_errors=True)
+                (kdir / sub).mkdir(parents=True, exist_ok=True)
             total = len(tasks) + len(kept)
             written, files = [], []
             for i, (ci, clip, ratio) in enumerate(tasks):
@@ -145,7 +200,7 @@ def register_publisher(app, jobs, frames):
                     job.progress = (base + frac) / total
                 r = rendermod.render_clip(
                     str(video), float(clip["start"]), float(clip["end"]),
-                    str(out_dir / f"{name}-c{ci + 1:02d}"), ratio=ratio,
+                    str(kdir / "clips" / f"{name}-clip{ci + 1:02d}"), ratio=ratio,
                     cues=cues, brand=brand, lt_line1=l1, lt_line2=l2,
                     offset=float(clip.get("offset") or 0), progress=prog,
                     cancelled=lambda: job.cancel_requested)
@@ -159,14 +214,15 @@ def register_publisher(app, jobs, frames):
                 mid = (float(clip["start"]) + float(clip["end"])) / 2
                 t = rendermod.thumbnail(
                     str(video), mid, str(clip.get("label", ""))[:80], brand,
-                    str(out_dir / f"{name}-c{ci + 1:02d}-thumb.png"))
+                    str(kdir / "thumbs" / f"{name}-clip{ci + 1:02d}-thumb.png"))
                 written.append(t["out"])
                 files.append({"kind": "thumb", "path": t["out"],
                               "ratio": t["ratio"], "clip": ci})
             kit["files"] = files
             kitmod.save_kit(src, kit)
-            job.message = f"{len(tasks)} cuts + {len(kept)} thumbs rendered"
-            return {"written": written, "files": files}
+            job.message = (f"{len(tasks)} cuts + {len(kept)} thumbs → "
+                           f"{kdir.name}")
+            return {"written": written, "files": files, "out": str(kdir)}
 
         label = f"publish kit — {len(tasks)} cuts"
         return jobs.start("pubkit", work, tool="publisher", label=label).to_dict()
@@ -185,9 +241,11 @@ def register_publisher(app, jobs, frames):
             return JSONResponse({"error": "nothing rendered yet — render the "
                                           "kit first"}, status_code=422)
 
+        root = str(dest())
+
         def work(job):
             job.message = "assembling the bundle…"
-            out = bundlemod.assemble(src, kit, clips, thumbs)
+            out = bundlemod.assemble(src, kit, clips, thumbs, out_root=root)
             job.message = (f"{out['clips']} clips + {out['thumbs']} thumbs, "
                            f"copy.md, zip")
             return {"out": out["dir"], "written": [out["zip"]],

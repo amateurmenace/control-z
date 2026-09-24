@@ -72,6 +72,11 @@ def video_path(source: str) -> Optional[Path]:
     if vids:
         return max(vids, key=lambda f: f.stat().st_size)
     try:
+        # every folder a download can land in — Highlighter's own, and the
+        # Downloads folder the Grabber (and full-video downloads) use now
+        from suite.tools.highlighter import full_video_for
+        return full_video_for(p.name)
+    except ImportError:          # the package without the suite around it
         from czcore.paths import media_dir
         pool = [f for f in media_dir("highlighter").iterdir()
                 if f.suffix.lower() in VIDEO_EXTS and f"[{p.name}]" in f.name

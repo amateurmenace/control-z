@@ -20,6 +20,8 @@ DEFAULTS = {
     "lt_seconds": 4.5,            # how long the lower-third holds on a clip
     "captions": True,             # burn captions on every cut
     "voice": "station",           # copy voice preset: station|casual|series
+    "out_dir": "",                # where kit folders land ("" = the outputs
+                                  # root's publisher/ folder)
 }
 
 VOICES = {

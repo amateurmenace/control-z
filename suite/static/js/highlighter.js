@@ -14,6 +14,17 @@ const HighlighterPage = (() => {
   el.className = "page";
   el.id = "page-highlighter";
 
+  // meeting time, not frame time: 2:05:41 and 4:12 — a five-hour meeting's
+  // clock never reads "125:41.7" (the suite's fmtTime is built for clips)
+  const fmtTime = s => {
+    if (s == null || isNaN(s)) return "";
+    s = Math.max(0, Math.floor(s));
+    const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    const p2 = n => String(n).padStart(2, "0");
+    return h ? `${h}:${p2(m)}:${p2(x)}` : `${m}:${p2(x)}`;
+  };
+  const REEL_LENGTHS = [["60", "1 min"], ["90", "90 s"], ["180", "3 min"], ["300", "5 min"]];
+
   const REEL_STYLES = [
     ["decisions", "Decisions", "motion,vote,approved,carries,unanimous,adopted,resolution"],
     ["comments", "Public comment", "public comment,resident,neighbor,petition,speak"],
@@ -26,8 +37,9 @@ const HighlighterPage = (() => {
   el.innerHTML = `
   <div class="ws" style="--acc:${T.acc}">
     <div class="mediabar">
-      <span class="toolname"><i>Community Highlighter</i> · finds the moments</span>
+      <span class="toolname"><i>Community Highlighter</i><span class="tn-sub"> · finds the moments</span></span>
       <span class="clipmeta" id="hl-title" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <span id="hl-nextslot" title="hand this meeting to the next app — Publisher turns it into ready-to-post clips and words"></span>
       <button class="btn" style="width:auto;display:none" id="hl-back">← meetings</button>
       <span class="ytdlp-chip" id="hl-ytdlp" title="the fetch engine — nightly build, checked on every open">yt-dlp —</span>
     </div>
@@ -57,6 +69,7 @@ const HighlighterPage = (() => {
             <button class="btn cta" id="hl-load">Load Meeting</button>
           </div>
           <div class="hl-term" id="hl-term" style="display:none"></div>
+          <div id="hl-proxy" style="margin-top:12px"></div>
           <div style="display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap">
             <div id="hl-drop" style="flex:1;min-width:260px;border:2px dashed var(--line);border-radius:10px;
                  padding:13px 16px;text-align:center;color:var(--cream-dim);font-size:12.5px">
@@ -82,34 +95,81 @@ const HighlighterPage = (() => {
           <span class="tag">your meetings</span>
           <div id="hl-library"><div class="hint">nothing yet — load a URL above, and it lands here readable</div></div>
         </div>
+
+        <div class="hl-panel" style="margin-top:14px">
+          <span class="tag">from your downloads — anything the Grabber fetched</span>
+          <div class="hint" id="hl-dlwhere" style="margin:2px 0 6px"></div>
+          <div id="hl-downloads"><div class="hint">nothing downloaded yet — fetch a meeting in the Grabber and it shows up here</div></div>
+        </div>
       </div>
     </div>
 
     <!-- ================= LOADED ================= -->
     <div id="hl-loaded" style="display:none;flex-direction:column;flex:1;min-height:0;overflow-y:auto">
-      <div style="display:flex;gap:14px;padding:14px 20px 0;align-items:stretch;flex-wrap:wrap">
-        <div style="flex:1.3;min-width:380px">
-          <div id="hl-viewer" style="height:300px;position:relative;display:none;border-radius:10px;overflow:hidden"></div>
-          <div class="hl-yt" id="hl-ytbox" style="display:none"><iframe id="hl-ytframe" allow="autoplay"></iframe></div>
-          <div class="lane" style="padding:7px 10px;display:flex;align-items:center;gap:10px;background:none">
-            <button class="btn" style="width:auto;padding:5px 15px" id="hl-play">▶</button>
-            <span class="clipmeta" id="hl-time">0:00.0</span>
-            <span class="clipmeta" id="hl-srcmode" style="margin-left:auto"></span>
+
+      <!-- the flow: three steps, always in reach — and the reel, one click away -->
+      <div class="hl-flow" id="hl-flow">
+        <nav class="hl-steps" id="hl-pills" aria-label="the workflow">
+          <button class="hl-step on" data-sec="highlight" type="button"><b>1</b>
+            <span><em>Find the moments</em><i id="hl-st1">search · read · keep</i></span></button>
+          <span class="hl-stepsep" aria-hidden="true"></span>
+          <button class="hl-step" data-sec="edit" type="button"><b>2</b>
+            <span><em>Build the reel</em><i id="hl-st2">empty so far</i></span></button>
+          <span class="hl-stepsep" aria-hidden="true"></span>
+          <button class="hl-step" data-sec="analyze" type="button"><b>3</b>
+            <span><em>Analyze</em><i id="hl-st3">people · topics · votes</i></span></button>
+        </nav>
+        <span class="hl-flowgap"></span>
+        <div class="hl-makebox">
+          <button class="btn hl-make" id="hl-maketop" type="button"
+            title="the reel maker scores every line and puts the best moments on the timeline — each one says why">✨ Make a highlight reel</button>
+          <button class="btn hl-makeopts" id="hl-makeopts" type="button" aria-haspopup="dialog"
+            aria-expanded="false" title="what kind of moments, how long, and who picks them"></button>
+          <div class="hl-pop" id="hl-makepop" role="dialog" aria-label="reel maker settings" hidden></div>
+        </div>
+      </div>
+
+      <div class="hl-top">
+        <!-- the monitor: docked here, lifted into the corner when you play
+             from further down the page (hl-monwrap keeps its place) -->
+        <div class="hl-monwrap" id="hl-monwrap">
+          <div class="hl-mon" id="hl-mon">
+            <div class="hl-monbar">
+              <span class="hl-monnow" id="hl-monnow"></span>
+              <button type="button" class="hl-monbtn" id="hl-mon-prev" title="previous clip">⏮</button>
+              <button type="button" class="hl-monbtn" id="hl-mon-next" title="next clip">⏭</button>
+              <button type="button" class="hl-monbtn" id="hl-mon-home" title="back up to the player's place">↑</button>
+              <button type="button" class="hl-monbtn" id="hl-mon-close" title="stop, and put the player back">✕</button>
+            </div>
+            <div id="hl-viewer" style="position:relative;display:none;border-radius:10px;overflow:hidden"></div>
+            <div class="hl-yt" id="hl-ytbox" style="display:none"><iframe id="hl-ytframe" allow="autoplay"></iframe></div>
+            <div class="lane hl-montransport">
+              <button class="btn" style="width:auto;padding:5px 15px" id="hl-play">▶</button>
+              <span class="clipmeta" id="hl-time">0:00</span>
+              <span class="clipmeta" id="hl-srcmode" style="margin-left:auto"></span>
+            </div>
           </div>
         </div>
-        <div style="flex:1;min-width:320px" class="hl-panel">
-          <div class="hl-sumhead"><span class="mark">AI-Powered Summary</span></div>
+        <div class="hl-panel hl-sum">
+          <div class="hl-sumhead">
+            <span class="mark">Executive summary</span>
+            <span class="hl-prov" id="hl-sumprov"></span>
+            <button class="hl-iconbtn" id="hl-aibrief" type="button" style="display:none"
+              title="write the summary again">↻</button>
+          </div>
           <div class="hl-brief" id="hl-brief"><div class="hint">reading…</div></div>
-          <div id="hl-briefrow" style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;align-items:center">
-            <button class="btn cta" id="hl-report" style="width:auto">Generate Full Report</button>
-            <button class="btn" id="hl-aibrief" style="width:auto;display:none">↻ Regenerate</button>
-            <select id="hl-lang" style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px">
-              ${["Spanish", "Portuguese", "Haitian Creole", "French", "Chinese (Simplified)",
-                 "Russian", "Vietnamese", "Arabic", "Korean", "Hindi"].map(l =>
-                `<option value="${l}">${l}</option>`).join("")}
-            </select>
-            <button class="btn" id="hl-trsum" style="width:auto"
-              title="translate this summary — your key; lands as a .txt too">Translate summary</button>
+          <div class="hl-sumtools" id="hl-briefrow">
+            <button class="btn" id="hl-report" type="button"
+              title="the long read — every decision and discussion, sourced to its moment; markdown + PDF beside the meeting">📄 Full report</button>
+            <span class="hl-trgroup">
+              <select id="hl-lang" aria-label="translate into">
+                ${["Spanish", "Portuguese", "Haitian Creole", "French", "Chinese (Simplified)",
+                   "Russian", "Vietnamese", "Arabic", "Korean", "Hindi"].map(l =>
+                  `<option value="${l}">${l}</option>`).join("")}
+              </select>
+              <button class="btn" id="hl-trsum" data-needs-key type="button"
+                title="translate this summary — your key; lands as a .txt too">Translate</button>
+            </span>
             <span id="hl-recordslot"></span>
           </div>
           <div class="hl-prior" id="hl-priorline"></div>
@@ -117,17 +177,10 @@ const HighlighterPage = (() => {
         </div>
       </div>
 
-      <div class="hl-pills" id="hl-pills">
-        <button class="hl-pill on" data-sec="highlight">Meeting Highlighter</button>
-        <button class="hl-pill" data-sec="edit">Highlight Video Editor</button>
-        <button class="hl-pill" data-sec="analyze">Meeting Analyzer</button>
-        <button class="hl-pill" id="hl-topub" style="border-color:var(--publisher);color:var(--publisher)"
-          title="hand this meeting to Community Publisher — clips in three frames, copy, bundle">→ Publish kit</button>
-        <span class="hl-meta-line" id="hl-metaline"></span>
-      </div>
-
-      <!-- HIGHLIGHT -->
-      <div id="hl-sec-highlight">
+      <!-- 1 · FIND -->
+      <section id="hl-sec-highlight" class="hl-sec">
+        <header class="hl-sechead"><b>1</b><div><h2>Find the moments</h2>
+          <p>Search every word, read along, keep what matters (✓) — or let the reel maker pick for you.</p></div></header>
         <div class="hl-grid">
           <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
             <div class="hl-panel" id="hl-agendabox" style="display:none">
@@ -143,95 +196,103 @@ const HighlighterPage = (() => {
               <div class="hl-results" id="hl-qout"></div>
             </div>
             <div class="hl-panel">
-              <span class="tag">transcript — click ✓ to keep a moment for the reel
-                <button id="hl-follow" class="chip" style="margin-left:8px;text-transform:none;letter-spacing:0"
-                  title="scroll the transcript along with playback">follow</button></span>
+              <div class="hl-panelhead">
+                <span class="tag">transcript — ✓ keeps a moment for the reel</span>
+                <button id="hl-follow" class="chip" type="button"
+                  title="scroll the transcript along with playback">follow along</button>
+              </div>
               <div class="hl-transcript" id="hl-transcript">
                 <div class="empty-grain" style="padding:30px 8px;color:var(--cream-faint);text-align:center">no words yet</div>
               </div>
-              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-                <button class="btn" id="hl-transcribe" style="width:auto">Upgrade words with Scribe</button>
-                <select id="hl-model" style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px">
-                  <option value="base">base — quick</option>
-                  <option value="small">small — better</option>
-                  <option value="large-v3-turbo" selected>large-v3-turbo — best balance</option>
-                  <option value="large-v3">large-v3 — most accurate (names)</option>
-                </select>
-                <button class="btn" id="hl-txt" style="width:auto">Transcript .txt</button>
-                <button class="btn" id="hl-srt" style="width:auto">.srt</button>
-                <button class="btn" id="hl-trtxt" style="width:auto"
-                  title="AI-translate the whole transcript into the language chosen up in the summary card — .srt + .txt land beside the meeting">Translate transcript…</button>
-                <button class="btn" id="hl-invsel" style="width:auto"
+              <div class="hl-trtools">
+                <button class="btn" id="hl-txt" type="button" title="the transcript as plain text">⬇ .txt</button>
+                <button class="btn" id="hl-srt" type="button" title="captions for any editor or player">⬇ .srt</button>
+                <button class="btn" id="hl-trtxt" data-needs-key type="button"
+                  title="AI-translate the whole transcript into the language chosen in the summary card — .srt + .txt land beside the meeting">Translate…</button>
+                <button class="btn" id="hl-invsel" type="button"
                   title="select a name in the transcript, then look it up — news, Wikipedia, maps, and your own library">🔍 Investigate selection</button>
               </div>
-              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+              <details class="hl-scribe">
+                <summary>Words wrong? Let Scribe listen — on this computer</summary>
+                <div class="hl-scriberow">
+                  <select id="hl-model" aria-label="Scribe model">
+                    <option value="base">base — quick</option>
+                    <option value="small">small — better</option>
+                    <option value="large-v3-turbo" selected>large-v3-turbo — best balance</option>
+                    <option value="large-v3">large-v3 — most accurate (names)</option>
+                  </select>
+                  <button class="btn" id="hl-transcribe" type="button">Upgrade the words with Scribe</button>
+                </div>
                 <input type="text" id="hl-hotwords" spellcheck="false" placeholder="names to teach Whisper — auto-filled from this meeting; edit freely"
-                  title="people, places and boards from this meeting's own captions/title — Whisper's decoder is biased toward them so proper names land right"
-                  style="flex:1;background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px">
-              </div>
+                  title="people, places and boards from this meeting's own captions/title — Whisper's decoder is biased toward them so proper names land right">
+              </details>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
-            <div class="hl-panel">
-              <span class="tag">the moments <span id="hl-origin" style="text-transform:none;letter-spacing:0"></span></span>
-              <div class="hl-styles" id="hl-stylerow" style="margin-bottom:8px"></div>
-              <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-                <select id="hl-target" style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12px">
-                  <option value="60">~1 minute</option>
-                  <option value="90" selected>~90 seconds</option>
-                  <option value="180">~3 minutes</option>
-                  <option value="300">~5 minutes</option>
-                </select>
-                <button class="btn cta bright" id="hl-detect" style="flex:1"
-                  title="local scoring — every pick says why, no key needed">✨ Make Highlight Reel</button>
-              </div>
-              <div style="display:none;margin-bottom:8px" id="hl-aireel-row">
-                <button class="btn" id="hl-aireel" style="width:100%"
-                  title="generative — the model reads the timestamped transcript with YOUR key and proposes moments; each is validated against the clock">🤖 Make AI Highlight Reel — your key</button>
+            <div class="hl-panel hl-maker" id="hl-maker">
+              <span class="tag">✨ the reel maker</span>
+              <p class="hl-makerlede">Tell it what matters. It scores every line and puts the best moments on the
+                timeline — each one says why it was chosen.</p>
+              <div class="hl-makerrow"><span class="hl-makerlabel">moments about</span>
+                <div class="hl-styles" id="hl-stylerow"></div></div>
+              <div class="hl-makerrow"><span class="hl-makerlabel">reel length</span>
+                <select id="hl-target" aria-label="reel length">
+                  <option value="60">about 1 minute</option>
+                  <option value="90" selected>about 90 seconds</option>
+                  <option value="180">about 3 minutes</option>
+                  <option value="300">about 5 minutes</option>
+                </select></div>
+              <button class="btn cta bright hl-makego" id="hl-detect" type="button"
+                title="local scoring — instant, no key; every pick says why">✨ Make Highlight Reel</button>
+              <div id="hl-aireel-row" style="display:none">
+                <button class="btn hl-aireel" id="hl-aireel" data-needs-key type="button"
+                  title="generative — the model reads the timestamped transcript with YOUR key and proposes moments; each is validated against the clock">🤖 Or let AI read the whole meeting and pick — your key</button>
               </div>
               <div class="progmsg" id="hl-detectmsg"></div>
-              <div class="hl-hilist" id="hl-hilist"><div class="hint">pick a style and Make Highlights —
-                every pick will say why it was chosen</div></div>
+              <div class="hl-momhead"><span class="tag">the moments</span> <span class="hint" id="hl-origin"></span></div>
+              <div class="hl-hilist" id="hl-hilist"><div class="hint">make a reel and the chosen moments list here —
+                play any, add or drop it, or fetch just that clip</div></div>
             </div>
             <div class="hl-panel">
-              <span class="tag">word cloud</span>
+              <span class="tag">word cloud — tap a word to search it</span>
               <div class="hl-cloud" id="hl-cloud"><div class="hint">reading…</div></div>
             </div>
             <div class="hl-panel">
-              <span class="tag">ask the meeting — retrieval, points at what was said</span>
+              <span class="tag">ask the meeting — answers point at what was said</span>
               <div class="hl-chat">
                 <div class="hl-chatlog" id="hl-chatlog"></div>
                 <div class="hl-suggest" id="hl-suggest"></div>
                 <div class="hl-searchrow">
                   <input type="text" id="hl-askq" placeholder="What happened with the crosswalk?" spellcheck="false">
-                  <button class="btn cta" id="hl-askgo" style="padding:8px 14px">Ask</button>
-                  <button class="btn" id="hl-askai" style="padding:8px 10px;display:none"
+                  <button class="btn cta" id="hl-askgo" style="padding:8px 14px" type="button">Ask</button>
+                  <button class="btn" id="hl-askai" data-needs-key style="padding:8px 10px;display:none" type="button"
                     title="generative answer grounded in the retrieved passages — your Anthropic key (Settings → AI)">✨ AI</button>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- EDIT -->
-      <div id="hl-sec-edit">
+      <!-- 2 · BUILD -->
+      <section id="hl-sec-edit" class="hl-sec">
+        <header class="hl-sechead"><b>2</b><div><h2>Build the reel</h2>
+          <p>Drag clips to reorder, nudge the in and out points, then play it through — the player comes along
+            with you. Export when it's right.</p></div></header>
         <div class="hl-nle">
           <div class="hl-toolrow">
-            <span class="tag">the reel</span>
+            <button class="btn hl-playreel" id="hl-playreel" type="button">▶ Play reel</button>
+            <button class="btn" id="hl-prev" type="button" title="previous clip">⏮</button>
+            <button class="btn" id="hl-next" type="button" title="next clip">⏭</button>
             <span class="clipcount" id="hl-clipcount">0 clips</span>
             <span style="flex:1"></span>
-            <button class="btn" id="hl-prev">⏮</button>
-            <button class="btn" id="hl-playreel">▶ Play reel</button>
-            <button class="btn" id="hl-next">⏭</button>
-            <button class="btn" id="hl-clear">Clear</button>
-            <button class="btn" id="hl-edl">Selects EDL</button>
-            <button class="btn cta bright" id="hl-export" style="padding:8px 22px;font-weight:700">Export Video</button>
+            <button class="btn" id="hl-makenle" type="button"
+              title="the reel maker — replaces the timeline with its best moments">✨ Auto-make reel</button>
+            <button class="btn" id="hl-clear" type="button">Clear</button>
+            <button class="btn" id="hl-edl" type="button" title="an edit decision list for Resolve or Premiere">Selects EDL</button>
+            <button class="btn cta bright" id="hl-export" type="button" style="padding:8px 22px;font-weight:700">Export Video</button>
           </div>
-          <div class="hl-timeline" id="hl-timeline">
-            <div class="hint" style="padding:20px;color:#8C9086">nothing on the timeline —
-              Make Highlights, keep transcript moments, or + Add from the highlights list</div>
-          </div>
+          <div class="hl-timeline" id="hl-timeline"></div>
           <div class="progmsg" id="hl-reelmsg" style="color:#B9BDB2"></div>
         </div>
         <div class="hl-grid" style="padding-top:0">
@@ -241,18 +302,18 @@ const HighlighterPage = (() => {
               <select id="hl-quality" title="applies to every download on this page"
                 style="background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px">
                 <option value="best">best available</option>
-                <option value="2160">4K (2160p)</option>
-                <option value="1440">1440p</option>
-                <option value="1080" selected>1080p</option>
-                <option value="720">720p</option>
-                <option value="480">480p</option>
+                <option value="2160">up to 4K</option>
+                <option value="1440">up to 1440p</option>
+                <option value="1080" selected>up to 1080p</option>
+                <option value="720">up to 720p</option>
+                <option value="480">up to 480p</option>
                 <option value="audio">audio only</option>
               </select>
-              <button class="btn cta bright" id="hl-dlsections" style="flex:1;min-width:200px">⬇ Download highlight clips</button>
+              <button class="btn cta bright" id="hl-dlsections" style="flex:1;min-width:200px" type="button">⬇ Download highlight clips</button>
             </div>
             <div class="hint" id="hl-dlhint" style="margin-top:6px"></div>
             <div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)">
-              <button class="btn" id="hl-dlfull" style="width:auto">Download full video</button>
+              <button class="btn" id="hl-dlfull" style="width:auto" type="button">Download full video</button>
               <span class="hint" id="hl-dlfullhint" style="flex:1">the whole recording — only if you really want all of it</span>
             </div>
             <div class="progmsg" id="hl-dlmsg"></div>
@@ -273,15 +334,17 @@ const HighlighterPage = (() => {
             </div>
             <div class="hint">local file → the reel renders straight from it. URL session →
               download the kept sections first; they stitch into one reel.</div>
-            <div class="report" id="hl-report"></div>
+            <div class="report" id="hl-exportlog"></div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- ANALYZE -->
-      <div id="hl-sec-analyze">
+      <!-- 3 · ANALYZE -->
+      <section id="hl-sec-analyze" class="hl-sec">
+        <header class="hl-sechead"><b>3</b><div><h2>Analyze the meeting</h2>
+          <p>Who spoke, what was decided, where the money went — every row opens its moment.</p></div></header>
         <div class="hl-ana" id="hl-ana"></div>
-      </div>
+      </section>
     </div>
 
     <!-- CLIPS modal: any viz, opened into its moments -->
@@ -370,7 +433,7 @@ const HighlighterPage = (() => {
     playTimer: null, words: [], curWord: -1,
   };
   const audio = new Audio();
-  let viewer = null, raf = null;
+  let viewer = null, raf = null, proxyCard = null;
 
   const ytId = () => (S.meta && S.meta.id) || (S.source || "").split("/").pop();
 
@@ -387,13 +450,14 @@ const HighlighterPage = (() => {
       }
       const ok = st.phase === "ok" || st.present;
       const viaProxy = st.proxy && st.proxy.enabled;
-      chip.textContent = "yt-dlp " + (st.installed ? `nightly ${st.installed}` : "missing")
-        + (viaProxy ? " · webshare" : "");
+      // the date is what matters at a glance; the full nightly build is in the tooltip
+      chip.textContent = "yt-dlp " + (st.installed ? st.installed.split(".").slice(0, 3).join(".") : "missing")
+        + (viaProxy ? " · proxy on" : "");
       chip.classList.toggle("ok", ok);
       chip.classList.toggle("err", !ok);
-      chip.title = (st.detail || "") + (viaProxy
-        ? ` — fetches ride your Webshare residential proxy (${st.proxy.username_masked})`
-        : " — no proxy configured (Settings → fetch network, if YouTube gates captions)");
+      chip.title = (st.installed ? `nightly ${st.installed} — ` : "") + (st.detail || "") + (viaProxy
+        ? " — YouTube requests ride the proxy"
+        : " — fetching directly from this computer (the proxy switch is below the link box)");
     } catch (e) { chip.textContent = "yt-dlp ?"; }
   }
 
@@ -472,7 +536,75 @@ const HighlighterPage = (() => {
         e.stopPropagation();
         go("publisher", { openPath: a.dataset.pub });
       });
+      renderDownloads(r);
     } catch (e) { box.innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
+  }
+
+  /* everything the Grabber (or a full download) brought home — any of it
+     opens here; one with no words yet can fetch YouTube's captions first */
+  function renderDownloads(r) {
+    const box = $("#hl-downloads", el);
+    const rows = r.downloads || [];
+    const home = (CZ.appInfo && CZ.appInfo.home) || "";
+    const where = r.downloads_folder || "";
+    $("#hl-dlwhere", el).innerHTML = where ? `in <a href="#" id="hl-dlshow">${esc(
+      home && where.startsWith(home) ? "~" + where.slice(home.length) : where)}</a>` : "";
+    const sh = $("#hl-dlshow", el);
+    if (sh) sh.onclick = e => { e.preventDefault(); showFolder(where); };
+    if (!rows.length) {
+      box.innerHTML = `<div class="hint">nothing downloaded yet — fetch a meeting in the
+        Grabber and it shows up here</div>`;
+      return;
+    }
+    box.innerHTML = rows.map(v => `
+      <div class="lib-row hl-dlrow" data-src="${esc(v.path)}" role="button" tabindex="0" title="${esc(v.path)}">
+        <span class="lname">${esc(v.title || v.name)}</span>
+        <span class="lmeta">${v.duration ? fmtTime(v.duration) + " · " : ""}${v.transcript ? "words ✓"
+          : v.captions ? "captions ✓" : "no words yet"}${v.highlights ? " · ★" : ""}</span>
+        ${!v.transcript && !v.captions && v.url
+          ? `<span class="lib-act" data-caps="${esc(v.path)}" title="fetch YouTube's captions, then open">get captions + open</span>` : ""}
+        <span class="lib-act" data-openfile="${esc(v.path)}">open →</span>
+      </div>`).join("");
+    $$(".hl-dlrow", box).forEach(row => {
+      row.onclick = e => {
+        const cap = e.target.closest("[data-caps]");
+        if (cap) { e.stopPropagation(); captionsForFile(cap.dataset.caps, cap, true); return; }
+        open(row.dataset.src);
+      };
+      row.onkeydown = e => { if (e.key === "Enter") open(row.dataset.src); };
+    });
+  }
+
+  /* YouTube's captions for a downloaded file, written beside it — then
+     the words load (the file stays; nothing re-downloads) */
+  const capsBusy = new Set();   // one caption job per file, however many clicks
+  async function captionsForFile(path, btn, thenOpen) {
+    if (capsBusy.has(path)) return;
+    capsBusy.add(path);
+    if (btn) { btn.disabled = true; btn.textContent = "fetching captions…"; }
+    try {
+      const job = await api("/api/grabber/captions", { path });
+      const done = await jobDone(job.id);
+      if (done.status !== "done") {
+        if (done.status === "error") {
+          toast(done.error, true);
+          if (czBlocked(done.error) && proxyCard) proxyCard.nudge(done.error);
+        }
+        if (btn) { btn.disabled = false; btn.textContent = "try again"; }
+        return;
+      }
+      toast(done.message || "captions ✓");
+      if (thenOpen || S.source === path) {
+        if (S.source === path) {
+          const tr = await api("/api/highlighter/transcript", { path });
+          applyTranscript(tr);
+          loadInsight();
+        } else open(path);
+      } else loadLibrary();
+    } catch (e) {
+      toast(e.message, true);
+      if (btn) { btn.disabled = false; btn.textContent = "try again"; }
+    } finally { capsBusy.delete(path); }
   }
 
   /* ---------------- ingest / open ---------------- */
@@ -485,18 +617,20 @@ const HighlighterPage = (() => {
     t.scrollTop = t.scrollHeight;
   }
 
-  async function ingest(url) {
+  async function ingest(url, fresh) {
     if (!url) return;
+    if (S.source) backToLanding();          // the terminal lives on the landing
     const btn = $("#hl-load", el);
     btn.disabled = true;
     btn.textContent = "Reading…";
     const t = $("#hl-term", el);
     t.innerHTML = "";
     termLine(`<b>$</b> highlighter read ${esc(url.slice(0, 70))}`);
-    termLine(`<b>$</b> yt-dlp --skip-download --write-subs · watch-page timedtext · racing…`);
+    termLine(`<b>$</b> captions: YouTube's player → yt-dlp → the community service, first one that answers`
+      + (proxyCard && proxyCard.enabled() ? " · through the proxy" : ""));
     let lastMsg = "";
     try {
-      const job = await api("/api/highlighter/ingest", { url });
+      const job = await api("/api/highlighter/ingest", { url, fresh: !!fresh });
       const off = watchJob(job.id, j => {
         if (j.message && j.message !== lastMsg) {
           lastMsg = j.message;
@@ -514,25 +648,42 @@ const HighlighterPage = (() => {
       }
       if (done.status !== "done") return;
       const nseg = done.result.transcript?.segments?.length || 0;
-      termLine(`✓ ${nseg} segments · brief, entities, agenda computing locally`, "ok");
-      termLine(`✓ opening the meeting…`, "ok");
+      if (nseg) {
+        termLine(`✓ ${nseg} segments · brief, entities, agenda computing locally`, "ok");
+        termLine(`✓ opening the meeting…`, "ok");
+      } else {
+        termLine(`✗ no words came: ${esc(done.result.captions_note || "no captions")}`, "err");
+        if (done.result.captions_blocked) {
+          termLine(`→ YouTube is limiting this computer. Turn the proxy on (below) and press Load again.`, "err");
+          if (proxyCard) proxyCard.nudge(done.result.captions_note);
+        } else {
+          termLine(`→ opening it anyway — download the video and let Scribe transcribe it`, "");
+        }
+      }
       $("#hl-url", el).value = "";
-      if (done.result.captions_note) toast(done.result.captions_note, true);
-      setTimeout(() => { t.style.display = "none"; }, 400);
-      open(done.result.source);
+      if (nseg) setTimeout(() => { t.style.display = "none"; }, 400);
+      if (nseg || !done.result.captions_blocked) open(done.result.source);
     } catch (e) {
       btn.disabled = false; btn.textContent = "Load Meeting";
       termLine(`✗ ${esc(e.message)}`, "err");
       toast(e.message, true);
+      if (czBlocked(e.message) && proxyCard) proxyCard.nudge(e.message);
     }
   }
 
   async function open(source) {
+    // a link is read, not opened — the Grabber's "Read in Highlighter"
+    // and any pasted URL land here
+    if (/^https?:\/\//i.test(source || "")) return ingest(source);
     try {
       S.source = source;
       S.keep = new Set(); S.timeline = []; S.picks = []; S.lane = [];
       S.insight = null; S.curClip = -1; S.sectionFiles = [];
       S.docs = null; S.docsBusy = false; S.xrPos = null;
+      // the last meeting's search hits, answers and messages don't belong here
+      ["#hl-qout", "#hl-chatlog", "#hl-detectmsg", "#hl-dlmsg", "#hl-findout"]
+        .forEach(id => { const x = $(id, el); if (x) x.innerHTML = ""; });
+      ["#hl-q", "#hl-askq"].forEach(id => { const x = $(id, el); if (x) x.value = ""; });
       renderDlFiles();
       $("#hl-reportout", el).style.display = "none";
       $("#hl-reportout", el).innerHTML = "";
@@ -541,6 +692,9 @@ const HighlighterPage = (() => {
       const tr = await api("/api/highlighter/transcript", { path: source });
       S.session = tr.session;
       S.meta = tr.meta;
+      S.fileUrl = tr.file_url || null;
+      $("#hl-nextslot", el).innerHTML = czNextHTML("highlighter", source,
+        { isFile: !tr.session });
       $("#hl-landing", el).style.display = "none";
       $("#hl-loaded", el).style.display = "flex";
       $("#hl-back", el).style.display = "";
@@ -576,6 +730,7 @@ const HighlighterPage = (() => {
     $("#hl-loaded", el).style.display = "none";
     $("#hl-back", el).style.display = "none";
     $("#hl-title", el).textContent = "";
+    $("#hl-nextslot", el).innerHTML = "";
     S.source = null;
     loadLibrary();
   }
@@ -605,14 +760,18 @@ const HighlighterPage = (() => {
       try { d = JSON.parse(e.data); } catch (err) { return; }
       if (d.event === "onReady") hello();
       const info = d.info || {};
+      if (typeof info.playerState === "number") {
+        const was = S.ytPlaying;
+        S.ytPlaying = info.playerState === 1;
+        if (was !== S.ytPlaying) syncMonitor();
+      }
       if (typeof info.currentTime === "number") {
         S.sessionTime = info.currentTime;
-        if (typeof info.playerState === "number")
-          S.ytPlaying = info.playerState === 1;
         if (S.session && CZ.current === "highlighter") {
           $("#hl-time", el).textContent = fmtTime(S.sessionTime);
           drawSpark();
           followTranscript();
+          reelTick(S.sessionTime);
         }
       }
     });
@@ -641,7 +800,12 @@ const HighlighterPage = (() => {
       if (followOn) rowEl.scrollIntoView({ block: "center", behavior: "smooth" });
     }
   }
-  function seek(t, play) {
+  function seek(t, play, fromReel) {
+    S.seekAt = performance.now();
+    // a jump from anywhere else ends a reel in progress — the reel must
+    // never yank you on to its next clip after you went somewhere else
+    if (!fromReel && S.curClip >= 0) endReel(false);
+    if (play) monClosed = false;
     if (S.session) {
       const f = $("#hl-ytframe", el);
       f.contentWindow.postMessage(JSON.stringify(
@@ -656,6 +820,7 @@ const HighlighterPage = (() => {
       if (play) audio.play();
       syncFrame(true);
     }
+    syncMonitor();
   }
   function pause() {
     if (S.session) {
@@ -663,6 +828,18 @@ const HighlighterPage = (() => {
         { event: "command", func: "pauseVideo", args: [] }), "*");
       S.ytPlaying = false;
     } else audio.pause();
+  }
+  // ▶ under the player and the space bar: one toggle, both players
+  function togglePlay() {
+    if (!S.source) return;
+    monClosed = false;
+    if (S.session) {
+      // the embed owns its clock; we track only our last command
+      $("#hl-ytframe", el).contentWindow.postMessage(JSON.stringify({ event: "command",
+        func: S.ytPlaying ? "pauseVideo" : "playVideo", args: [] }), "*");
+      S.ytPlaying = !S.ytPlaying;
+      syncMonitor();
+    } else audio.paused ? audio.play() : audio.pause();
   }
   function syncFrame(force) {
     if (!S.clip || !viewer) return;
@@ -674,7 +851,44 @@ const HighlighterPage = (() => {
     syncFrame(false);
     drawSpark();
     followTranscript();
+    reelTick(audio.currentTime);
     if (!audio.paused) raf = requestAnimationFrame(tick);
+  }
+
+  /* ---------------- the monitor follows you ----------------
+     Play from anywhere down the page — the reel, a moment, an analyzer
+     row — and the player lifts into the corner instead of playing out of
+     sight up top; scroll back up and it settles into its place. Only the
+     box is re-pinned (position: fixed): the iframe never leaves the DOM,
+     because a moved iframe reloads and loses its place. */
+  let monSeen = true, monClosed = false;
+  const isPlaying = () => S.session ? !!S.ytPlaying : !audio.paused;
+  function syncMonitor() {
+    const mon = $("#hl-mon", el), wrap = $("#hl-monwrap", el);
+    if (!mon) return;
+    const reeling = S.curClip >= 0;
+    const want = !!S.source && CZ.current === "highlighter" && !monSeen
+      && !monClosed && (isPlaying() || reeling);
+    if (want && !mon.classList.contains("floating")) {
+      wrap.style.height = `${mon.offsetHeight}px`;   // hold its place: no jump
+      mon.classList.add("floating");
+    } else if (!want && mon.classList.contains("floating")) {
+      mon.classList.remove("floating");
+      wrap.style.height = "";
+    }
+    mon.classList.toggle("reeling", reeling);
+    paintMonBar();
+    $("#hl-playreel", el).textContent = S.reelOn && reeling ? "■ Stop reel" : "▶ Play reel";
+    if (S.session) $("#hl-play", el).textContent = S.ytPlaying ? "⏸" : "▶";
+  }
+  function paintMonBar() {
+    const mon = $("#hl-mon", el);
+    if (!mon || !(mon.classList.contains("floating") || mon.classList.contains("reeling"))) return;
+    const c = S.curClip >= 0 ? S.timeline[S.curClip] : null;
+    $("#hl-monnow", el).innerHTML = c
+      ? `<b>clip ${S.curClip + 1} of ${S.timeline.length}</b> <span>${esc((c.label || "").slice(0, 70))}</span>`
+      : `<b>${isPlaying() ? "▶ playing" : "paused"}</b> <span>${esc(fmtTime(nowTime()))} · ${esc((S.meta?.title || "").slice(0, 50))}</span>`;
+    $("#hl-mon-prev", el).hidden = $("#hl-mon-next", el).hidden = !c;
   }
 
   /* ---------------- transcript ---------------- */
@@ -699,9 +913,31 @@ const HighlighterPage = (() => {
     const box = $("#hl-transcript", el);
     const job = ++transcriptJob;
     if (!S.t || !S.t.segments.length) {
-      box.innerHTML = `<div class="empty-grain" style="padding:30px 8px;color:var(--cream-faint);text-align:center">
-        no words yet — ${S.session ? "this URL had no captions; download it, then run Scribe"
-                                   : "run the Scribe pass below"}</div>`;
+      /* no words: say how to get them, with the buttons right here */
+      const url = S.meta?.url || S.fileUrl;
+      box.innerHTML = `<div class="hl-nowords">
+        <b>No words yet.</b>
+        ${S.session
+          ? `YouTube's captions didn't come for this meeting.
+             <div class="cz-row" style="justify-content:center">
+               <button class="btn cta" id="hl-reread" style="width:auto">↻ Try the captions again</button>
+             </div>
+             <div class="hint" style="margin-top:6px">If YouTube is limiting this computer, turn on the
+               proxy here first. Or download the video and let Scribe transcribe it.</div>
+             <div id="hl-nwproxy" style="max-width:560px;margin:10px auto 0;text-align:left"></div>`
+          : `${url ? `This file came from YouTube — its captions can come straight from there.
+             <div class="cz-row" style="justify-content:center">
+               <button class="btn cta" id="hl-getcaps" style="width:auto">Get YouTube's captions</button>
+               <span class="hint">or transcribe it here with Scribe (below — slower, but hears names better)</span>
+             </div>`
+             : `Transcribe it with Scribe (the button below the transcript) — it runs on this computer.`}`}
+        </div>`;
+      const rr = $("#hl-reread", box);
+      if (rr) rr.onclick = () => S.meta?.url && ingest(S.meta.url, true);
+      const np = $("#hl-nwproxy", box);
+      if (np) czProxyCard(np);
+      const gc = $("#hl-getcaps", box);
+      if (gc) gc.onclick = () => captionsForFile(S.source, gc);
       return;
     }
     const reasons = new Map();
@@ -756,12 +992,26 @@ const HighlighterPage = (() => {
     updateMetaLine();
   }
 
+  // the three steps say where you are: lines read, clips cut, the reading
+  function updateFlow() {
+    const n = S.t?.segments?.length || 0, kept = S.keep ? S.keep.size : 0;
+    $("#hl-st1", el).textContent = n
+      ? `${n.toLocaleString()} lines${kept ? ` · ${kept} kept` : ""}` : "search · read · keep";
+    const total = S.timeline.reduce((a, c) => a + (c.end - c.start), 0);
+    $("#hl-st2", el).textContent = S.timeline.length
+      ? `${S.timeline.length} clip${S.timeline.length === 1 ? "" : "s"} · ${fmtTime(total)}`
+      : "empty so far";
+    const I = S.insight, ppl = I?.entities?.people?.length || 0;
+    $("#hl-st3", el).textContent = I
+      ? `${ppl} ${ppl === 1 ? "person" : "people"} · ${(I.decisions || []).length} decisions`
+      : "reading…";
+  }
+
   function updateMetaLine() {
     const total = S.timeline.reduce((a, c) => a + (c.end - c.start), 0);
-    $("#hl-metaline", el).textContent = S.timeline.length
-      ? `reel: ${S.timeline.length} clip${S.timeline.length === 1 ? "" : "s"} · ${total.toFixed(0)}s` : "";
-    $("#hl-clipcount", el).textContent =
-      `${S.timeline.length} clip${S.timeline.length === 1 ? "" : "s"} · ${total.toFixed(0)}s`;
+    updateFlow();
+    $("#hl-clipcount", el).textContent = S.timeline.length
+      ? `${S.timeline.length} clip${S.timeline.length === 1 ? "" : "s"} · ${fmtTime(total)}` : "";
     const spans = mergedSections();
     const dl = $("#hl-dlsections", el);
     dl.textContent = spans.length
@@ -842,14 +1092,23 @@ const HighlighterPage = (() => {
       return;
     }
     renderPrior();
-    const b = S.insight.brief || [];
+    const b = (S.insight.brief || []).slice(0, 5);
+    // without a key: the meeting's own key lines, labeled as exactly that,
+    // and one button that writes the real summary (the key popup if needed)
+    $("#hl-sumprov", el).textContent = b.length ? "key lines from the transcript" : "";
     $("#hl-brief", el).innerHTML = b.length
-      ? b.map(x => `<p><span class="tpill" data-t="${x.t}">${fmtTime(x.t)}</span>${esc(x.text)}</p>`).join("")
-      : `<div class="hint">not enough words for a brief yet</div>`;
+      ? `<ul class="hl-keylines">${b.map(x =>
+          `<li><span class="tpill" data-t="${x.t}">${fmtTime(x.t)}</span>${esc(x.text)}</li>`).join("")}</ul>`
+        + (S.llm?.enabled ? "" : `<button class="btn hl-writesum" id="hl-writesum" type="button" data-needs-key
+            title="five plain sentences: what happened, what was decided, what's next — your AI key">✍ Write the executive summary</button>`)
+      : `<div class="hint">not enough words for a summary yet</div>`;
     $$("#hl-brief .tpill", el).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+    const ws = $("#hl-writesum", el);
+    if (ws) { markKeyButtons(el, !!S.llm?.enabled); ws.onclick = () => aiBrief(false); }
     // with a key, the executive summary writes itself — the web app's way;
-    // the extractive read above stands in until it lands (and without a key)
+    // the key lines above stand in until it lands
     if (S.llm?.enabled && b.length) aiBrief(true);
+    updateFlow();
     const wf = S.insight.wordfreq || [];
     const maxc = Math.max(...wf.map(w => w.count), 1);
     $("#hl-cloud", el).innerHTML = wf.length ? wf.map((w, i) =>
@@ -1309,10 +1568,20 @@ const HighlighterPage = (() => {
     return $(".hl-styles .chip.on", el)?.dataset.k || "";
   }
 
+  // the reel maker is busy: every ✨ door says so (top, timeline, card)
+  function setMaking(on) {
+    S.making = on;
+    ["#hl-detect", "#hl-aireel", "#hl-maketop", "#hl-makenle"].forEach(id => {
+      const b = $(id, el);
+      if (b) { b.disabled = on; b.classList.toggle("busy", on); }
+    });
+    $("#hl-maketop", el).textContent = on ? "✨ Making your reel…" : "✨ Make a highlight reel";
+    $$("#hl-timeline [data-make]", el).forEach(b => { b.disabled = on; });
+  }
+
   async function detect() {
-    if (!S.source) return;
-    const btn = $("#hl-detect", el);
-    btn.disabled = true;
+    if (!S.source || S.making) return 0;
+    setMaking(true);
     try {
       const job = await api("/api/highlighter/detect", {
         path: S.source, target: parseFloat($("#hl-target", el).value),
@@ -1320,28 +1589,114 @@ const HighlighterPage = (() => {
       });
       watchJob(job.id, j => { $("#hl-detectmsg", el).textContent = j.message || j.status; });
       const done = await jobDone(job.id);
-      btn.disabled = false;
-      if (done.status === "error") { $("#hl-detectmsg", el).textContent = done.error; return; }
-      if (done.status !== "done") return;
+      if (done.status === "error") {
+        $("#hl-detectmsg", el).textContent = done.error;
+        toast(done.error, true);
+        return 0;
+      }
+      if (done.status !== "done") return 0;
       S.lane = done.result.lane || [];
       applyPicks(done.result.picks || [], true);
+      $("#hl-origin", el).textContent = "· scored on this computer — tap “why” on any";
       renderTranscript();
       renderHighlights();
       drawSpark();
-      toast(`${done.result.picks.length} moments — top 5 are on the timeline, each says why`);
-    } catch (e) { btn.disabled = false; toast(e.message, true); }
+      return S.picks.length;
+    } catch (e) { toast(e.message, true); return 0; }
+    finally { setMaking(false); }
   }
 
+  // the cut list IS the reel: build_reel already sized it to the length
+  // you chose, in story order (the first five used to be all that landed)
   function applyPicks(picks, autoload) {
     S.picks = picks;
     if (autoload) {
+      endReel(false);
       S.timeline = [];
       S.keep = new Set();
-      picks.slice(0, 5).forEach(p => addToTimeline({
+      picks.forEach(p => addToTimeline({
         start: p.start, end: p.end,
         label: (p.text || p.reasons?.[0] || "moment").slice(0, 60) }, true));
     }
     renderTimeline();
+  }
+
+  /* ---------------- the reel maker, from anywhere ----------------
+     One engine, three doors: ✨ at the top of the page, ✨ in the
+     timeline, and the maker card in step 1 — whose controls hold the
+     settings (the popover edits those same controls). */
+  function makerSummary() {
+    const st = $(".hl-styles .chip.on", el);
+    const len = REEL_LENGTHS.find(([v]) => v === $("#hl-target", el).value);
+    return `${st ? st.textContent : "Decisions"} · ${len ? len[1] : "90 s"}`
+      + (S.reelEngine === "ai" ? " · AI picks" : "");
+  }
+  function paintMaker() {
+    $("#hl-makeopts", el).innerHTML = `<span class="hl-makesum">${esc(makerSummary())}</span> ▾`;
+    // the chip can fold to ▾ alone — its name still says the settings
+    $("#hl-makeopts", el).setAttribute("aria-label", `reel maker settings: ${makerSummary()}`);
+    const hint = $("#hl-timeline .hl-tlempty-go span", el);
+    if (hint) hint.textContent = makerSummary();
+  }
+  async function makeReel(from) {
+    if (!S.source) return;
+    closeMakePop();
+    const n = await (S.reelEngine === "ai" ? aiReel() : detect());
+    if (!n || !S.timeline.length) return;
+    const total = S.timeline.reduce((a, c) => a + (c.end - c.start), 0);
+    toast(`your reel: ${S.timeline.length} moment${S.timeline.length === 1 ? "" : "s"}, `
+      + `${fmtTime(total)} — press ▶ Play reel`);
+    if (from !== "card") showSec("edit");
+    const tl = $("#hl-timeline", el);
+    tl.classList.remove("fresh");
+    void tl.offsetWidth;                  // restart the arrival flash
+    tl.classList.add("fresh");
+  }
+  function closeMakePop() {
+    const pop = $("#hl-makepop", el);
+    if (!pop || pop.hidden) return;
+    pop.hidden = true;
+    $("#hl-makeopts", el).setAttribute("aria-expanded", "false");
+  }
+  function openMakePop() {
+    const pop = $("#hl-makepop", el);
+    const cur = $(".hl-styles .chip.on", el)?.dataset.id;
+    const len = $("#hl-target", el).value;
+    pop.innerHTML = `
+      <div class="hl-poprow"><span class="hl-poplabel">moments about</span>
+        <div class="hl-popchips">${REEL_STYLES.map(([id, label]) =>
+          `<button type="button" class="chip${id === cur ? " on" : ""}" data-style="${id}">${label}</button>`).join("")}</div></div>
+      <div class="hl-poprow"><span class="hl-poplabel">reel length</span>
+        <div class="hl-segctl">${REEL_LENGTHS.map(([v, l]) =>
+          `<button type="button" class="${v === len ? "on" : ""}" data-len="${v}">${l}</button>`).join("")}</div></div>
+      <div class="hl-poprow"><span class="hl-poplabel">who picks</span>
+        <div class="hl-segctl">
+          <button type="button" class="${S.reelEngine !== "ai" ? "on" : ""}" data-eng="local"
+            title="instant, on this computer — every pick says why">This computer</button>
+          <button type="button" class="${S.reelEngine === "ai" ? "on" : ""}" data-eng="ai"
+            title="the model reads the whole transcript with your key">AI · your key</button></div></div>
+      <button type="button" class="btn cta bright hl-popgo">✨ Make it</button>`;
+    $$("[data-style]", pop).forEach(b => b.onclick = () => {
+      $$(".hl-styles .chip", el).forEach(c => c.classList.toggle("on", c.dataset.id === b.dataset.style));
+      $$("[data-style]", pop).forEach(x => x.classList.toggle("on", x === b));
+      paintMaker();
+    });
+    $$("[data-len]", pop).forEach(b => b.onclick = () => {
+      $("#hl-target", el).value = b.dataset.len;
+      $$("[data-len]", pop).forEach(x => x.classList.toggle("on", x === b));
+      paintMaker();
+    });
+    $$("[data-eng]", pop).forEach(b => b.onclick = () => {
+      S.reelEngine = b.dataset.eng;
+      try { localStorage.setItem("cz-hl-engine", S.reelEngine); } catch (e) {}
+      $$("[data-eng]", pop).forEach(x => x.classList.toggle("on", x === b));
+      paintMaker();
+    });
+    $(".hl-popgo", pop).onclick = () => makeReel("top");
+    pop.hidden = false;
+    $("#hl-makeopts", el).setAttribute("aria-expanded", "true");
+    const first = $(".chip.on", pop) || $("button", pop);
+    if (first) first.focus();
   }
 
   function renderHighlights() {
@@ -1392,15 +1747,24 @@ const HighlighterPage = (() => {
   function renderTimeline() {
     const box = $("#hl-timeline", el);
     if (!S.timeline.length) {
-      box.innerHTML = `<div class="hint" style="padding:20px;color:#8C9086">nothing on the timeline —
-        Make Highlights, keep transcript moments, or + Add from the highlights list</div>`;
+      box.innerHTML = `<div class="hl-tlempty">
+        <div class="hl-tlempty-big">Your reel is empty.</div>
+        <div>Let the reel maker pick the moments — or keep your own: ✓ a transcript
+          line, or + Add from the moments list in step 1.</div>
+        <div class="hl-tlempty-go">
+          <button class="btn cta bright" type="button" data-make>✨ Make a highlight reel</button>
+          <span>${esc(makerSummary())}</span></div>
+      </div>`;
+      $("[data-make]", box).onclick = () => makeReel("timeline");
       updateMetaLine();
       return;
     }
     const vid = S.session ? ytId() : null;
     box.innerHTML = S.timeline.map((c, k) => `
-      <div class="hl-clip${k === S.curClip ? " playing" : ""}" draggable="true" data-k="${k}">
-        <button class="rm" data-k="${k}">×</button>
+      <div class="hl-clip${k === S.curClip ? " playing" : ""}" draggable="true" data-k="${k}"
+        title="click to play this clip — drag to reorder">
+        <i class="cprog"></i>
+        <button class="rm" data-k="${k}" title="drop this clip">×</button>
         <img src="${S.session
           ? `https://i.ytimg.com/vi/${encodeURIComponent(vid)}/mqdefault.jpg`
           : frameURL(S.source, Math.round(c.start * (S.clip?.fps || 30)), 120)}"
@@ -1474,17 +1838,48 @@ const HighlighterPage = (() => {
     updateMetaLine();
   }
 
+  /* the reel plays on the meeting's own clock: a clip ends when the
+     player's time passes its out point (a timer used to cut clips short
+     whenever YouTube buffered, and let the reel run on into the meeting
+     after its last clip) */
   function playClip(k, thenNext) {
-    if (k < 0 || k >= S.timeline.length) { S.curClip = -1; renderTimeline(); return; }
+    clearTimeout(S.playTimer);
+    if (k < 0 || k >= S.timeline.length) { endReel(true); return; }
     S.curClip = k;
+    S.reelOn = !!thenNext;
+    S.clipTicked = false;
     const c = S.timeline[k];
     renderTimeline();
-    seek(c.start, true);
+    seek(c.start, true, true);
+    // backstop only: an embed that never reports its clock still moves on
+    S.playTimer = setTimeout(() => { if (!S.clipTicked) endClip(k); },
+                             Math.max(200, (c.end - c.start) * 1000) + 4000);
+  }
+  function endClip(k) {
+    if (S.curClip !== k) return;                 // already moved on
+    if (S.reelOn) playClip(k + 1, true);
+    else endReel(true);
+  }
+  function endReel(stopPlayback) {
     clearTimeout(S.playTimer);
-    S.playTimer = setTimeout(() => {
-      if (thenNext) playClip(k + 1, true);
-      else pause();
-    }, Math.max(200, (c.end - c.start) * 1000));
+    const was = S.curClip >= 0;
+    S.curClip = -1;
+    S.reelOn = false;
+    if (was && stopPlayback) pause();
+    if (was) renderTimeline();
+    syncMonitor();
+  }
+  // every clock tick: the playing clip's progress, and its out point
+  function reelTick(t) {
+    if (S.curClip < 0) return;
+    const c = S.timeline[S.curClip];
+    if (!c || performance.now() - (S.seekAt || 0) < 700) return;  // seek not landed
+    if (t < c.start - 1) return;                 // the clock hasn't arrived yet
+    S.clipTicked = true;
+    const bar = $(`.hl-clip[data-k="${S.curClip}"] .cprog`, el);
+    if (bar) bar.style.width =
+      `${Math.max(0, Math.min(1, (t - c.start) / Math.max(0.1, c.end - c.start))) * 100}%`;
+    if (t >= c.end - 0.08) endClip(S.curClip);
   }
 
   /* ---------------- downloads + render ---------------- */
@@ -1525,12 +1920,18 @@ const HighlighterPage = (() => {
     try {
       const job = await api("/api/highlighter/fetch", {
         url, quality: $("#hl-quality", el).value, sections });
-      watchJob(job.id, j => {
-        $("#hl-dlmsg", el).textContent = j.status === "running"
-          ? `${Math.round(Math.max(0, j.progress) * 100)}% ${j.message || ""}` : (j.message || j.status);
-      });
+      $("#hl-dlmsg", el).textContent = "";
+      const p = czProgress($("#hl-dlmsg", el).parentElement, {
+        label: sectionsOnly ? `downloading ${sections.length} kept moment${sections.length === 1 ? "" : "s"}`
+          : "downloading the full video", acc: "var(--highlighter)" });
+      watchJob(job.id, j => p.update(j));
       const done = await jobDone(job.id);
-      if (done.status === "error") { toast(done.error, true); return; }
+      p.finish(done);
+      if (done.status === "error") {
+        toast(done.error, true);
+        if (czBlocked(done.error) && proxyCard) proxyCard.nudge(done.error);
+        return;
+      }
       if (done.status !== "done") return;
       loadLibrary();
       if (sectionsOnly) {
@@ -1539,10 +1940,16 @@ const HighlighterPage = (() => {
         renderDlFiles();
         toast(`${landed.length} clip${landed.length === 1 ? "" : "s"} landed — Export reel stitches them`);
       } else {
-        toast("full video downloaded — opening the local copy");
+        const home = (CZ.appInfo && CZ.appInfo.home) || "";
+        const f = done.result.folder || "";
+        toast(`full video saved in ${home && f.startsWith(home) ? "~" + f.slice(home.length) : f}` +
+              " — opening the local copy");
         open(done.result.path);
       }
-    } catch (e) { toast(e.message, true); }
+    } catch (e) {
+      toast(e.message, true);
+      if (czBlocked(e.message) && proxyCard) proxyCard.nudge(e.message);
+    }
   }
 
   /* ---------------- Export Video: two doors out ---------------- */
@@ -1659,7 +2066,7 @@ const HighlighterPage = (() => {
       $("#hl-exp-stages", el).insertAdjacentHTML("beforeend",
         `<button class="btn" id="hl-exp-reveal" style="width:auto;margin-top:6px">Reveal in Finder</button>`);
       $("#hl-exp-reveal", el).onclick = () => api("/api/media/reveal", { path: r.out }).catch(e => toast(e.message, true));
-      const rep = $("#hl-report", el);
+      const rep = $("#hl-exportlog", el);
       rep.classList.add("show");
       rep.innerHTML += `<b>→</b> ${esc(r.out)}\n   ${r.clips} cuts · ${r.duration}s · ${esc(r.encoder)}\n`;
       toast("video exported");
@@ -1674,7 +2081,7 @@ const HighlighterPage = (() => {
       const r = await api("/api/scribe/selects", {
         path: S.source, handles: 0.5,
         selects: S.timeline.map(c => ({ start: c.start, end: c.end, label: c.label || "" })) });
-      const rep = $("#hl-report", el);
+      const rep = $("#hl-exportlog", el);
       rep.classList.add("show");
       rep.innerHTML += `<b>→</b> ${esc(r.out)}\n   ${r.selects} events · ${esc(r.note)}\n`;
       toast("selects EDL written");
@@ -1685,40 +2092,50 @@ const HighlighterPage = (() => {
   async function llmCheck() {
     try { S.llm = await api("/api/settings/llm"); } catch (e) { S.llm = null; }
     const on = !!(S.llm && S.llm.enabled);
-    $("#hl-trsum", el).style.display = on ? "" : "none";
-    $("#hl-trtxt", el).style.display = on ? "" : "none";
-    $("#hl-askai", el).style.display = on ? "" : "none";
-    $("#hl-aireel-row", el).style.display = on ? "" : "none";
+    // always visible now: without a key they wear 🔑 and a click opens the
+    // add-a-key popup (then carries on) instead of the feature hiding
+    $("#hl-trsum", el).style.display = "";
+    $("#hl-trtxt", el).style.display = "";
+    $("#hl-askai", el).style.display = "";
+    $("#hl-aireel-row", el).style.display = "";
+    markKeyButtons(el, on);
   }
 
   async function aiReel() {
-    const btn = $("#hl-aireel", el);
-    btn.disabled = true;
+    if (!S.source || S.making) return 0;
+    setMaking(true);
     try {
       const job = await api("/api/highlighter/ai-reel", {
         path: S.source, target: parseFloat($("#hl-target", el).value) });
       watchJob(job.id, j => { $("#hl-detectmsg", el).textContent = j.message || j.status; });
       const done = await jobDone(job.id);
-      btn.disabled = false;
-      if (done.status === "error") { $("#hl-detectmsg", el).textContent = done.error; toast(done.error, true); return; }
-      if (done.status !== "done") return;
+      if (done.status === "error") {
+        $("#hl-detectmsg", el).textContent = done.error;
+        toast(done.error, true);
+        return 0;
+      }
+      if (done.status !== "done") return 0;
       S.lane = [];
       applyPicks(done.result.picks || [], true);
       renderTranscript();
       renderHighlights();
       drawSpark();
-      $("#hl-origin", el).textContent = `· picks are generative (${esc((done.result.origin || "").replace("ai:", ""))}, your key) — timestamps validated locally`;
-      toast(`${done.result.picks.length} AI moments — top 5 are on the timeline`);
-    } catch (e) { btn.disabled = false; toast(e.message, true); }
+      $("#hl-origin", el).textContent = `· picked by ${(done.result.origin || "").replace("ai:", "") || "AI"}`
+        + " with your key — every timestamp checked against the clock";
+      return S.picks.length;
+    } catch (e) { toast(e.message, true); return 0; }
+    finally { setMaking(false); }
   }
 
   // [MM:SS] / [H:MM:SS] in generated prose become the same clickable pills
   // the extractive brief wears — every AI claim stays checkable
+  // [1:05:41] and [65:41] (a long meeting's minutes run past 99 too) —
+  // shown the meeting's way, whichever the model wrote
   function linkifyTimes(text) {
-    return esc(text).replace(/\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g,
+    return esc(text).replace(/\[(\d{1,3}):(\d{2})(?::(\d{2}))?\]/g,
       (m, a, b, c) => {
         const t = c ? (+a * 3600 + +b * 60 + +c) : (+a * 60 + +b);
-        return `<span class="tpill" data-t="${t}">${c ? a + ":" + b + ":" + c : a + ":" + b}</span>`;
+        return `<span class="tpill" data-t="${t}">${fmtTime(t)}</span>`;
       });
   }
 
@@ -1740,15 +2157,20 @@ const HighlighterPage = (() => {
       $("#hl-briefwip", el)?.remove();
       if (done.status !== "done") {
         box.insertAdjacentHTML("afterbegin",
-          `<div class="hint">${esc(done.error || "stopped")} — the extractive read below stands</div>`);
+          `<div class="hint">${esc(done.error || "stopped")} — the key lines below stand</div>`);
         return;
       }
-      box.innerHTML = done.result.text.split(/\n+/).map(p =>
-        `<p>${linkifyTimes(p.replace(/^#+\s*/, "").replace(/\*\*/g, ""))}</p>`).join("");
+      // one paragraph, about five sentences; any stray heading or bullet
+      // the model adds is folded back into the prose
+      const paras = done.result.text.split(/\n+/)
+        .map(p => p.replace(/^#+\s*|^[-*•]\s+/, "").replace(/\*\*/g, "").trim())
+        .filter(p => p && !/^(executive summary|summary)[:.]?$/i.test(p));
+      box.innerHTML = paras.map(p => `<p class="hl-exec">${linkifyTimes(p)}</p>`).join("");
       if (done.result.usage) box.insertAdjacentHTML("beforeend",
-        `<div class="hint" style="margin-top:6px">🪙 ${esc(done.result.usage)}
+        `<div class="hint hl-usage">🪙 ${esc(done.result.usage)}
          — the session total lives in Settings → AI audit</div>`);
       $$(".tpill", box).forEach(p => p.onclick = () => seek(+p.dataset.t, true));
+      $("#hl-sumprov", el).textContent = `written by ${done.result.model || "AI"} · your key`;
       $("#hl-aibrief", el).style.display = "";
     } catch (e) {
       btn.disabled = false;
@@ -2025,18 +2447,41 @@ const HighlighterPage = (() => {
 
   /* ---------------- sections nav ---------------- */
   function showSec(name) {
-    // all three sections live on one page now — the pills are anchors
-    // ([data-sec] only: the → Publish kit pill is a door, not an anchor)
-    $$("#hl-pills .hl-pill[data-sec]", el).forEach(p =>
-      p.classList.toggle("on", p.dataset.sec === name));
+    // all three steps live on one page — the step buttons are anchors, and
+    // a jump lands the step's heading just under the sticky flow bar
+    setStep(name);
+    const L = $("#hl-loaded", el);
     if (name === "highlight") {
-      $("#hl-loaded", el).scrollTo({ top: 0, behavior: "smooth" });
+      L.scrollTo({ top: 0, behavior: "smooth" });
     } else {
-      $(`#hl-sec-${name}`, el).scrollIntoView({ behavior: "smooth",
-                                                block: "start" });
+      const sec = $(`#hl-sec-${name}`, el);
+      const top = L.scrollTop + sec.getBoundingClientRect().top
+        - L.getBoundingClientRect().top - $("#hl-flow", el).offsetHeight - 8;
+      L.scrollTo({ top, behavior: "smooth" });
     }
     drawSpark();
     drawCharts();
+  }
+  function setStep(name) {
+    $$("#hl-pills .hl-step[data-sec]", el).forEach(p => {
+      const on = p.dataset.sec === name;
+      p.classList.toggle("on", on);
+      if (on) p.setAttribute("aria-current", "step"); else p.removeAttribute("aria-current");
+    });
+  }
+  // scrolling says which step you're in
+  let spyRaf = 0;
+  function spyStep() {
+    spyRaf = 0;
+    const L = $("#hl-loaded", el);
+    if (L.style.display === "none") return;
+    const line = L.getBoundingClientRect().top + $("#hl-flow", el).offsetHeight + 90;
+    let cur = "highlight";
+    for (const n of ["edit", "analyze"]) {
+      if ($(`#hl-sec-${n}`, el).getBoundingClientRect().top <= line) cur = n;
+    }
+    if (L.scrollTop + L.clientHeight >= L.scrollHeight - 4) cur = "analyze";
+    setStep(cur);
   }
 
   /* ---------------- wire up ---------------- */
@@ -2052,9 +2497,7 @@ const HighlighterPage = (() => {
       else toast("paste a URL first", true);
     };
     $("#hl-url", el).addEventListener("keydown", e => { if (e.key === "Enter") $("#hl-load", el).click(); });
-    $("#hl-topub", el).onclick = () => {
-      if (S.source) go("publisher", { openPath: S.source });
-    };
+    proxyCard = czProxyCard($("#hl-proxy", el));
     $("#hl-browse", el).onclick = e => { e.stopPropagation(); browseForPath(p => open(p)); };
     wireDropZone($("#hl-drop", el), p => open(p));
     wireDropZone($("#hl-landing", el), p => open(p));
@@ -2062,22 +2505,58 @@ const HighlighterPage = (() => {
     $("#hl-findgo", el).onclick = finder;
     $("#hl-findq", el).addEventListener("keydown", e => { if (e.key === "Enter") finder(); });
 
-    $("#hl-play", el).onclick = () => {
-      if (S.session) { seek(0, true); return; }
-      audio.paused ? audio.play() : audio.pause();
-    };
-    audio.addEventListener("play", () => { $("#hl-play", el).textContent = "⏸"; raf = requestAnimationFrame(tick); });
-    audio.addEventListener("pause", () => { $("#hl-play", el).textContent = "▶"; if (raf) cancelAnimationFrame(raf); tick(); });
+    $("#hl-play", el).onclick = togglePlay;
+    audio.addEventListener("play", () => { $("#hl-play", el).textContent = "⏸"; raf = requestAnimationFrame(tick); syncMonitor(); });
+    audio.addEventListener("pause", () => { $("#hl-play", el).textContent = "▶"; if (raf) cancelAnimationFrame(raf); tick(); syncMonitor(); });
 
-    $$("#hl-pills .hl-pill[data-sec]", el).forEach(p => p.onclick = () => showSec(p.dataset.sec));
+    $$("#hl-pills .hl-step[data-sec]", el).forEach(p => p.onclick = () => showSec(p.dataset.sec));
+    $("#hl-loaded", el).addEventListener("scroll", () => {
+      if (!spyRaf) spyRaf = requestAnimationFrame(spyStep);
+    }, { passive: true });
+
+    // the monitor: watch its place; lift it when playback leaves it behind
+    new IntersectionObserver(([e]) => {
+      monSeen = e.isIntersecting && e.intersectionRatio >= 0.3;
+      if (monSeen) monClosed = false;
+      syncMonitor();
+    }, { root: $("#hl-loaded", el), threshold: [0, 0.3, 0.6, 1] })
+      .observe($("#hl-monwrap", el));
+    $("#hl-mon-prev", el).onclick = () => playClip(Math.max(0, S.curClip - 1), S.reelOn);
+    $("#hl-mon-next", el).onclick = () => playClip(S.curClip + 1, S.reelOn);
+    $("#hl-mon-home", el).onclick = () => showSec("highlight");
+    $("#hl-mon-close", el).onclick = () => {
+      monClosed = true;
+      endReel(true);
+      pause();
+      syncMonitor();
+    };
+
+    // the reel maker's three doors
+    try { S.reelEngine = localStorage.getItem("cz-hl-engine") || "local"; } catch (e) { S.reelEngine = "local"; }
+    $("#hl-maketop", el).onclick = () => makeReel("top");
+    $("#hl-makenle", el).onclick = () => makeReel("timeline");
+    $("#hl-detect", el).onclick = () => { S.reelEngine = "local"; paintMaker(); makeReel("card"); };
+    $("#hl-makeopts", el).onclick = e => {
+      e.stopPropagation();
+      $("#hl-makepop", el).hidden ? openMakePop() : closeMakePop();
+    };
+    document.addEventListener("mousedown", e => {
+      if (!e.target.closest || !e.target.closest(".hl-makebox")) closeMakePop();
+    });
+    $("#hl-makepop", el).addEventListener("keydown", e => {
+      if (e.key === "Escape") { e.stopPropagation(); closeMakePop(); $("#hl-makeopts", el).focus(); }
+    });
+    $("#hl-target", el).addEventListener("change", paintMaker);
 
     const styleRow = $("#hl-stylerow", el);
     styleRow.innerHTML = REEL_STYLES.map(([id, label, kw], i) =>
-      `<span class="chip${i === 0 ? " on" : ""}" data-id="${id}" data-k="${esc(kw)}">${label}</span>`).join("");
+      `<button type="button" class="chip${i === 0 ? " on" : ""}" data-id="${id}" data-k="${esc(kw)}">${label}</button>`).join("");
     $$(".chip", styleRow).forEach(c => c.onclick = () => {
       $$(".chip", styleRow).forEach(x => x.classList.remove("on"));
       c.classList.add("on");
+      paintMaker();
     });
+    paintMaker();
 
     // one listener owns every transcript row — 8k rows never mean 8k handlers
     $("#hl-transcript", el).addEventListener("click", e => {
@@ -2093,7 +2572,6 @@ const HighlighterPage = (() => {
     };
     wireSessionClock();
 
-    $("#hl-detect", el).onclick = detect;
     $("#hl-q", el).addEventListener("input", searchTranscript);
     $("#hl-transcribe", el).onclick = transcribe;
     $("#hl-txt", el).onclick = exportTxt;
@@ -2127,13 +2605,7 @@ const HighlighterPage = (() => {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
       if (e.code === "Space") {
         e.preventDefault();
-        if (S.session) {
-          // the embed owns its clock; we track only our last command
-          const f = $("#hl-ytframe", el);
-          f.contentWindow.postMessage(JSON.stringify({ event: "command",
-            func: S.ytPlaying ? "pauseVideo" : "playVideo", args: [] }), "*");
-          S.ytPlaying = !S.ytPlaying;
-        } else audio.paused ? audio.play() : audio.pause();
+        togglePlay();
       } else if (!S.session && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         e.preventDefault();
         seek(Math.max(0, audio.currentTime + (e.key === "ArrowLeft" ? -5 : 5)),
@@ -2141,13 +2613,16 @@ const HighlighterPage = (() => {
       }
     });
 
-    $("#hl-prev", el).onclick = () => playClip(Math.max(0, S.curClip - 1), false);
-    $("#hl-next", el).onclick = () => playClip(Math.min(S.timeline.length - 1, S.curClip + 1), false);
-    $("#hl-playreel", el).onclick = () => playClip(0, true);
-    $("#hl-clear", el).onclick = () => { S.timeline = []; S.keep = new Set(); renderTimeline(); renderTranscript(); renderHighlights(); };
+    $("#hl-prev", el).onclick = () => playClip(Math.max(0, S.curClip - 1), S.reelOn);
+    $("#hl-next", el).onclick = () => playClip(Math.min(S.timeline.length - 1, S.curClip + 1), S.reelOn);
+    $("#hl-playreel", el).onclick = () => {
+      if (!S.timeline.length) { toast("the reel is empty — ✨ Make a highlight reel first", true); return; }
+      S.curClip >= 0 && S.reelOn ? endReel(true) : playClip(0, true);
+    };
+    $("#hl-clear", el).onclick = () => { endReel(true); S.timeline = []; S.keep = new Set(); renderTimeline(); renderTranscript(); renderHighlights(); };
     $("#hl-export", el).onclick = openExportModal;
     $("#hl-edl", el).onclick = exportEDL;
-    $("#hl-aireel", el).onclick = aiReel;
+    $("#hl-aireel", el).onclick = () => { S.reelEngine = "ai"; paintMaker(); makeReel("card"); };
 
     // the export modal's own wiring
     $("#hl-exp-close", el).onclick = () => { $("#hl-exportmodal", el).style.display = "none"; };
@@ -2180,15 +2655,22 @@ const HighlighterPage = (() => {
 
   function stop() {
     audio.pause();
+    // a reel runs on this page's clock — leaving ends it (a YouTube
+    // session's audio may keep playing, as it always has)
+    endReel(false);
+    closeMakePop();
     clearTimeout(S.playTimer);
     if (raf) { cancelAnimationFrame(raf); raf = null; }
   }
 
   function onshow(arg) {
+    const first = !inited;
     if (!inited) { init(); inited = true; }
     Viewer.active = null;
     ytdlpCheck();      // every open — that's the deal, and the chip shows it
     loadLibrary();
+    llmCheck();
+    if (!first && proxyCard) proxyCard.refresh();
     if (arg && arg.openPath) {
       // already looking at it? just land on the second — no reload flash
       const same = S.source === arg.openPath;
@@ -2199,6 +2681,28 @@ const HighlighterPage = (() => {
     }
   }
 
-  registerPage("highlighter", el, onshow);
+  /* a fresh landing: nothing open, nothing typed, no results. The
+     meetings you read stay (they're on disk, in "your meetings"). */
+  function reset() {
+    if (S.source) backToLanding();
+    ["#hl-url", "#hl-findq", "#hl-q", "#hl-askq"].forEach(id => { const x = $(id, el); if (x) x.value = ""; });
+    ["#hl-findout", "#hl-qout", "#hl-chatlog", "#hl-detectmsg", "#hl-dlmsg"]
+      .forEach(id => { const x = $(id, el); if (x) x.innerHTML = ""; });
+    const t = $("#hl-term", el);
+    t.innerHTML = ""; t.style.display = "none";
+    const log = $("#hl-exportlog", el);
+    if (log) { log.innerHTML = ""; log.classList.remove("show"); }
+    Object.assign(S, { source: null, session: false, meta: null, clip: null, t: null,
+      origin: null, lane: [], picks: [], keep: new Set(), timeline: [], curClip: -1,
+      insight: null, sectionFiles: [], docs: null, fileUrl: null });
+    $("#hl-exportmodal", el).style.display = "none";
+    monClosed = false;
+    $("#hl-mon", el).classList.remove("floating", "reeling");
+    $("#hl-monwrap", el).style.height = "";
+    closeMakePop();
+    if (inited) { loadLibrary(); proxyCard && proxyCard.refresh(); }
+  }
+
+  registerPage("highlighter", el, onshow, { reset });
   return { onshow };
 })();

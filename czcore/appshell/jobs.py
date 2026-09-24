@@ -120,7 +120,28 @@ CREATE TABLE IF NOT EXISTS jobs (
     started_at REAL,
     finished_at REAL
 );
+CREATE TABLE IF NOT EXISTS history (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    tool TEXT NOT NULL DEFAULT '',
+    label TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT '',
+    result TEXT,
+    error TEXT,
+    created_at REAL NOT NULL,
+    started_at REAL,
+    finished_at REAL
+);
+CREATE INDEX IF NOT EXISTS history_created ON history (created_at);
 """
+
+# The permanent log: every job that ever FINISHED, one row each, written the
+# moment it lands (done / error / cancelled) and never deleted by the app —
+# "clear finished" tidies the live queue, the history keeps the record.
+_TERMINAL = ("done", "error", "cancelled")
+_COLS = ("id, kind, tool, label, status, message, result, error, "
+         "created_at, started_at, finished_at")
 
 
 class JobManager:
@@ -143,6 +164,12 @@ class JobManager:
                     "error='interrupted — the app quit while this was running', "
                     "finished_at=? WHERE status IN ('running','queued')",
                     (time.time(),))
+                # the log starts with everything the queue already remembers
+                # (a no-op after the first launch: OR IGNORE on the id)
+                con.execute(
+                    f"INSERT OR IGNORE INTO history ({_COLS}) "
+                    f"SELECT {_COLS} FROM jobs WHERE status IN "
+                    "('done','error','cancelled')")
         if queued:
             self._worker = threading.Thread(target=self._work_loop, daemon=True)
             self._worker.start()
@@ -208,6 +235,57 @@ class JobManager:
         out.sort(key=lambda d: d["created_at"] or 0, reverse=True)
         return out[:limit]
 
+    def history(self, limit: int = 100, offset: int = 0, q: str = "",
+                tool: str = "", status: str = "") -> dict:
+        """The permanent log, newest first: {rows, total}. Filters: q (a
+        substring of the label, message, error or result paths), tool,
+        status. In-memory managers answer from what they hold."""
+        limit = max(1, min(1000, int(limit)))
+        offset = max(0, int(offset))
+        if not self._db_path:
+            with self._lock:
+                rows = [j.to_dict() for j in self._jobs.values()
+                        if j.status in _TERMINAL]
+            rows = [r for r in rows
+                    if (not tool or r["tool"] == tool)
+                    and (not status or r["status"] == status)
+                    and (not q or q.lower() in json.dumps(
+                        [r["label"], r["message"], r["error"], r["result"]],
+                        default=str).lower())]
+            rows.sort(key=lambda r: r["created_at"] or 0, reverse=True)
+            return {"rows": rows[offset:offset + limit], "total": len(rows)}
+        where, args = [], []
+        if tool:
+            where.append("tool = ?")
+            args.append(tool)
+        if status:
+            where.append("status = ?")
+            args.append(status)
+        if q:
+            where.append("(label LIKE ? OR message LIKE ? OR error LIKE ? "
+                         "OR result LIKE ?)")
+            args += [f"%{q}%"] * 4
+        sql_where = (" WHERE " + " AND ".join(where)) if where else ""
+        with self._db() as con:
+            total = con.execute(f"SELECT COUNT(*) FROM history{sql_where}",
+                                args).fetchone()[0]
+            cur = con.execute(
+                f"SELECT {_COLS} FROM history{sql_where} "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                args + [limit, offset])
+            rows = []
+            for r in cur.fetchall():
+                try:
+                    res = json.loads(r[6]) if r[6] else None
+                except ValueError:
+                    res = None
+                rows.append({"id": r[0], "kind": r[1], "tool": r[2],
+                             "label": r[3], "status": r[4], "message": r[5],
+                             "result": res, "error": r[7],
+                             "created_at": r[8], "started_at": r[9],
+                             "finished_at": r[10]})
+        return {"rows": rows, "total": total}
+
     def on_update(self, cb: Callable[[dict], None]):
         """cb(job_dict) fires on state transitions and throttled progress."""
         self._listeners.append(cb)
@@ -269,9 +347,16 @@ class JobManager:
             job.status = "cancelled"
             job.message = "cancelled"
         except Exception as e:  # surfaced to the UI, never swallowed
-            job.status = "error"
-            job.error = _sentence(e)
-            traceback.print_exc()
+            if job.cancel_requested and str(e).strip().lower() in (
+                    "cancelled", "canceled"):
+                # older render loops stop with RuntimeError("cancelled") —
+                # asked-for and honored is a cancel, not a red error row
+                job.status = "cancelled"
+                job.message = "cancelled"
+            else:
+                job.status = "error"
+                job.error = _sentence(e)
+                traceback.print_exc()
         if _llm is not None:
             _llm.set_tool("")
         job.finished_at = time.time()
@@ -317,6 +402,13 @@ class JobManager:
                     (d["id"], d["kind"], d["tool"], d["label"], d["status"],
                      d["progress"], d["message"], result, d["error"],
                      d["created_at"], d["started_at"], d["finished_at"]))
+                if d["status"] in _TERMINAL:
+                    con.execute(
+                        f"INSERT OR REPLACE INTO history ({_COLS}) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        (d["id"], d["kind"], d["tool"], d["label"],
+                         d["status"], d["message"], result, d["error"],
+                         d["created_at"], d["started_at"], d["finished_at"]))
         payload = job.to_dict()
         for cb in list(self._listeners):
             try:

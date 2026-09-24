@@ -330,6 +330,19 @@ const DepthPage = (() => {
     if (viewer) viewer.resize();
   }
 
-  registerPage("depth", el, onshow);
+  /* reset: no clip, no preview — the page as it opens */
+  function reset() {
+    if (!viewer) return;
+    clearTimeout(D.reqTimer);
+    Object.assign(D, { clip: null, prev: null, probe: null, fcImg: null, reqId: 0, reqTimer: null });
+    viewer.setClip(null); strip.setClip(null);
+    $("#dp-path", el).value = ""; $("#dp-meta", el).innerHTML = "";
+    $("#dp-render", el).disabled = true;
+    $("#dp-bar", el).style.width = "0";
+    $("#dp-msg", el).textContent = "";
+    const rep = $("#dp-report", el); if (rep) { rep.innerHTML = ""; rep.classList.remove("show"); }
+  }
+
+  registerPage("depth", el, onshow, { reset });
   return { onshow };
 })();

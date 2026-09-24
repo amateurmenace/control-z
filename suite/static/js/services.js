@@ -200,9 +200,13 @@ const ModelsPage = (() => {
           <div class="qact"><button data-delw="${esc(w.path)}">remove</button></div></div>`).join("")
         : `<div class="hint">none yet — the first transcribe downloads the size you pick</div>`) +
       `<div class="tag" style="margin:16px 0 6px">stencil runtime</div>
-       <div class="hint">${rt.torch
+       <div class="hint">${rt.mode === "helper"
+         ? "✓ installed as its own runtime (Settings → optional runtimes) — Stencil drives it as a helper"
+         : rt.torch
          ? `torch ${esc(rt.torch)} (${rt.mps ? "MPS" : "CPU"}) + sam2 ${rt.sam2 ? "✓" : "missing"} — installed in the suite's venv`
-         : "not installed — pip install torch sam2 (~1 GB); the Stencil page says the same"}</div>`;
+         : `not installed — <a href="#" id="md-getrt">Settings → optional runtimes → Stencil click-to-matte</a> (one click, ~1 GB)`}</div>`;
+    const grt = $("#md-getrt", el);
+    if (grt) grt.onclick = e => { e.preventDefault(); go("settings", { section: "runtimes", runtime: "stencil-sam2" }); };
 
     $$("button[data-dl]", el).forEach(b => b.onclick = async () => {
       b.disabled = true;
@@ -236,10 +240,11 @@ const SettingsPage = (() => {
   const el = document.createElement("div");
   el.className = "page";
   el.id = "page-settings";
-  el.innerHTML = `<div class="page-pad" style="max-width:720px">
+  el.innerHTML = `<div class="page-pad" style="max-width:760px">
     <div class="tag">suite</div>
     <h1 style="margin-top:6px">Settings</h1>
-    <div id="se-proxy" style="margin-top:16px"></div>
+    <div id="se-downloads" style="margin-top:16px"></div>
+    <div id="se-proxy" style="margin-top:22px"></div>
     <div id="se-runtimes" style="margin-top:22px"></div>
     <div id="se-llm" style="margin-top:22px"></div>
     <div id="se-llmaudit" style="margin-top:22px"></div>
@@ -257,14 +262,15 @@ const SettingsPage = (() => {
       <div class="tag" style="margin-bottom:6px">AI — your own key, optional</div>
       <div class="hint" style="margin-bottom:8px;line-height:1.6">
         Every reading in the suite works locally and says what it is — the brief is
-        extractive, ask is retrieval. If you have your own key from
+        extractive, ask is retrieval. A few buttons marked ✨ <i>write new text</i> with an AI
+        model — summaries, translations, audio descriptions, post drafts — and those run on
+        your own key from
         <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic</a>,
         <a href="https://platform.openai.com/" target="_blank" rel="noopener">OpenAI</a>, or
-        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google Gemini</a>,
-        Highlighter adds two <i>generative</i> buttons (narrative brief, AI answers), labeled
-        as such, sending only the transcript you're looking at, only when you click. The
-        provider is read from the key's own shape. No key ships with the app; nothing
-        here requires one.
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google Gemini</a>
+        (free tier). Only the meeting you're working on is sent, only when you click. The
+        provider is read from the key's own shape. No key ships with the app.
+        <a href="#" id="se-llmhow">How do I get a key?</a><br>
         Status: <b style="color:${s.enabled ? "var(--ok)" : "var(--cream-dim)"}">${
           s.enabled ? `active — ${esc(s.provider || "key")} (${esc(s.key_masked || "set")} · ${esc(s.model)}${envLocked ? ", via environment" : ""})`
                     : "not configured"}</b></div>
@@ -277,6 +283,10 @@ const SettingsPage = (() => {
         <button class="btn" id="se-llmsave" style="width:auto">Save</button>
         ${s.enabled ? `<button class="btn" id="se-llmclear" style="width:auto">Remove</button>` : ""}
       </div>`}`;
+    $("#se-llmhow", box).onclick = async e => {
+      e.preventDefault();
+      if (await czKeyModal({ feature: "" })) refreshLLM();
+    };
     const save = $("#se-llmsave", box);
     if (save) save.onclick = async () => {
       const key = $("#se-llmkey", box).value.trim();
@@ -440,100 +450,198 @@ const SettingsPage = (() => {
     $("#se-auditrefresh", box).onclick = refreshAudit;
   }
 
+  /* where fetched videos land — shown, choosable (czcore.paths) */
+  let dlRow = null;
+  function refreshDownloads() {
+    const box = $("#se-downloads", el);
+    if (!dlRow) {
+      box.innerHTML = `<div class="tag" style="margin-bottom:6px">downloads — where fetched videos land</div>
+        <div class="hint" style="margin-bottom:8px">The Grabber and Highlighter's “download full video”
+          save here. Renders and kits go to the outputs folder (Queue page).</div>`;
+      dlRow = czLocRow(box, {
+        label: "Downloads go to",
+        load: async () => (await api("/api/settings/downloads")).path,
+        save: async p => (await api("/api/settings/downloads", { path: p })).path,
+      });
+      box.insertAdjacentHTML("beforeend", `<button class="btn" id="se-dldefault"
+        style="width:auto;margin-top:8px;padding:4px 12px;font-size:11.5px">Back to Downloads/Civic Media Studio</button>`);
+      $("#se-dldefault", box).onclick = async () => {
+        await api("/api/settings/downloads", { path: "" });
+        dlRow.refresh();
+        toast("downloads go to your Downloads folder again");
+      };
+    } else dlRow.refresh();
+  }
+
+  /* the fetch network: the proxy switch, your own account, the relay */
+  let proxyCard = null;
   async function refreshProxy() {
     const box = $("#se-proxy", el);
-    let p = { enabled: false, source: null, host: "", username_masked: "" };
+    let p = { enabled: false, source: null, host: "", username_masked: "", own: false };
     try { p = await api("/api/settings/proxy"); } catch (e) {}
     const envLocked = p.source === "env";
     box.innerHTML = `
-      <div class="tag" style="margin-bottom:6px">fetch network — webshare residential proxy</div>
-      <div class="hint" style="margin-bottom:8px;line-height:1.6">
-        YouTube gates caption delivery by IP reputation; the community-highlighter web
-        app routes those fetches through a
-        <a href="https://www.webshare.io/" target="_blank" rel="noopener">Webshare</a>
-        rotating residential proxy, and the same account works here. Your credentials
-        stay in app support on this machine and are used only for the fetches you ask
-        for. Status: <b style="color:${p.enabled ? "var(--ok)" : "var(--cream-dim)"}">${
-          p.enabled ? `active (${esc(p.username_masked)} @ ${esc(p.host)}${envLocked ? ", via environment" : ""})`
-                    : "not configured"}</b></div>
-      ${envLocked ? "" : `
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input type="text" id="se-pxuser" placeholder="proxy username" spellcheck="false"
-          style="flex:1;min-width:150px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
-        <input type="password" id="se-pxpass" placeholder="proxy password"
-          style="flex:1;min-width:150px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
-        <input type="text" id="se-pxhost" placeholder="p.webshare.io:80" spellcheck="false"
-          style="flex:0 1 150px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
-        <button class="btn" id="se-pxsave" style="width:auto">Save</button>
-        ${p.enabled ? `<button class="btn" id="se-pxclear" style="width:auto">Remove</button>` : ""}
-      </div>`}`;
+      <div class="tag" style="margin-bottom:6px">fetch network — the YouTube proxy</div>
+      <div id="se-pxcard"></div>
+      ${envLocked ? `<div class="hint" style="margin-top:8px">The proxy account is set by environment variables
+        (WEBSHARE_PROXY_USERNAME / PASSWORD) — change it there.</div>` : `
+      <details class="se-own" ${p.own ? "open" : ""}>
+        <summary>${p.own ? "Your own Webshare account (in use)" : "Use your own Webshare account instead"}</summary>
+        <ol class="cz-steps" style="margin-top:8px">
+          <li>Sign up at <a href="https://www.webshare.io/" target="_blank" rel="noopener">webshare.io</a> —
+            the <b>Residential</b> plan is the one YouTube trusts (a small monthly plan is plenty).</li>
+          <li>In the Webshare dashboard open <b>Proxy → Proxy List</b> (Residential).</li>
+          <li>Copy the <b>Username</b> and <b>Password</b> shown there. (A username ending in
+            <code>-rotate</code> or <code>-1</code> is fine — paste it as shown.)</li>
+          <li>Paste them below, press <b>Save</b>, then <b>Test the connection</b> above.</li>
+        </ol>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <input type="text" id="se-pxuser" placeholder="Webshare username" spellcheck="false" autocomplete="off"
+            style="flex:1;min-width:160px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+          <input type="password" id="se-pxpass" placeholder="Webshare password" autocomplete="off"
+            style="flex:1;min-width:160px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+          <button class="btn" id="se-pxsave" style="width:auto">Save</button>
+          ${p.own ? `<button class="btn" id="se-pxclear" style="width:auto">Remove mine</button>` : ""}
+        </div>
+        <details style="margin-top:8px"><summary class="hint">Advanced — proxy address</summary>
+          <div class="hint" style="margin:6px 0">Leave this alone unless Webshare's dashboard shows a
+            different <b>Domain Name</b> and <b>Port</b>. The normal value is <code>p.webshare.io:80</code>.</div>
+          <input type="text" id="se-pxhost" placeholder="p.webshare.io:80" spellcheck="false"
+            value="${p.own && p.host && p.host !== "built-in" ? esc(p.host) : ""}"
+            style="width:220px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px">
+        </details>
+      </details>`}`;
+    proxyCard = czProxyCard($("#se-pxcard", box), { compact: false });
     const save = $("#se-pxsave", box);
     if (save) save.onclick = async () => {
+      const username = $("#se-pxuser", box).value.trim();
+      const password = $("#se-pxpass", box).value;
+      if (!username || !password) { toast("paste both the username and the password", true); return; }
       try {
-        await api("/api/settings/proxy", {
-          username: $("#se-pxuser", box).value,
-          password: $("#se-pxpass", box).value,
-          host: $("#se-pxhost", box).value,
-        });
-        toast("proxy saved — fetches now ride your Webshare pool");
+        await api("/api/settings/proxy", { username, password,
+          host: $("#se-pxhost", box).value.trim() });
+        toast("your account is saved and the proxy is on — press Test the connection to check it");
         refreshProxy();
       } catch (e) { toast(e.message, true); }
     };
     const clear = $("#se-pxclear", box);
     if (clear) clear.onclick = async () => {
       await api("/api/settings/proxy", { username: "", password: "" });
-      toast("proxy removed — fetches go direct again");
+      toast("your account is removed");
       refreshProxy();
     };
     box.insertAdjacentHTML("beforeend", `
-      <div class="checkrow" style="margin-top:10px"><input type="checkbox" id="se-pxrelay" ${p.relay ? "checked" : ""}>
-        <span>community caption service
-          <div class="hint">when YouTube gates this machine and no proxy is set, captions may be
-          fetched through the community-highlighter web app's own public transcript engine
-          (run by BIG, residential proxy behind it). Only the public video URL is sent —
+      <div class="checkrow" style="margin-top:12px"><input type="checkbox" id="se-pxrelay" ${p.relay ? "checked" : ""}>
+        <span>community caption service — a last resort for captions
+          <div class="hint">when YouTube's captions don't come any other way, ask the community-highlighter
+          web app's public transcript service (run by BIG). Only the public video link is sent —
           no account, no tracking. Turn off for full independence.</div></span></div>`);
     $("#se-pxrelay", box).onchange = async e => {
       await api("/api/settings/proxy", { relay: e.target.checked });
       toast(e.target.checked ? "community caption service on"
-                             : "community caption service off — this machine fetches alone");
+                             : "community caption service off — this computer fetches alone");
     };
   }
 
-  async function refreshRuntimes() {
+  /* optional runtimes: one-click install, the manual road, check again.
+     rtInstalling (id -> job id) outlives a re-render: coming back to the
+     page, or "Check again" on another row, re-attaches the running
+     install's progress instead of offering a second Install. */
+  const rtInstalling = new Map();
+  async function refreshRuntimes(focusId) {
     const box = $("#se-runtimes", el);
-    let rows = [];
-    try { rows = (await api("/api/settings/runtimes")).runtimes; } catch (e) { return; }
-    box.innerHTML = `<div class="tag" style="margin-bottom:6px">optional runtimes — the heavies, installable here</div>`
-      + rows.map(r => `
-      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--line)">
-        <b style="flex:0 0 190px">${esc(r.label)}</b>
-        <span class="hint" style="flex:1;min-width:220px">${esc(r.what)} · ${esc(r.size)}</span>
-        ${r.installed
-          ? `<span style="color:var(--ok);font-size:12px">✓ installed</span>`
-          : `<button class="btn cta" data-rt="${esc(r.id)}" style="width:auto;padding:4px 14px">Install</button>
-             <button class="btn" data-cp="${esc(r.command)}" style="width:auto;padding:4px 10px"
-               title="copy the terminal command instead">⌘ copy</button>`}
-        <span class="hint" data-rtmsg="${esc(r.id)}"></span>
+    let d = null;
+    try { d = await api("/api/settings/runtimes"); } catch (e) { return; }
+    const home = (CZ.appInfo && CZ.appInfo.home) || "";
+    const tilde = s => home && s.startsWith(home) ? "~" + s.slice(home.length) : s;
+    box.innerHTML = `<div class="tag" style="margin-bottom:6px">optional runtimes — the heavies, installable here</div>
+      <div class="hint" style="margin-bottom:6px">Big optional pieces that most people never need. Install
+        with one click, or follow the manual steps — then <b>Check again</b>.</div>`
+      + d.runtimes.map(r => `
+      <div class="se-rt${r.installed ? " ok" : ""}" data-rtrow="${esc(r.id)}">
+        <div class="se-rt-head">
+          <b>${esc(r.label)}</b>
+          <span class="se-rt-state">${r.installed ? "✓ installed" : "not installed"} · ${esc(r.size)}</span>
+        </div>
+        <div class="hint">${esc(r.what)}</div>
+        ${r.detail ? `<div class="se-rt-detail${r.installed ? "" : " err"}">${esc(r.detail)}</div>` : ""}
+        <div class="cz-row">
+          ${!r.installed && r.installable ? `<button class="btn primary" data-rt="${esc(r.id)}"
+              style="width:auto;--acc:var(--ok);color:#fff" ${rtInstalling.has(r.id) ? "disabled" : ""}>${
+              rtInstalling.has(r.id) ? "Installing…" : "Install"}</button>` : ""}
+          ${!r.installable && r.why_not ? `<span class="hint">${esc(r.why_not)}</span>` : ""}
+          <button class="btn" data-rtcheck="${esc(r.id)}" style="width:auto">Check again</button>
+          ${r.removable ? `<button class="btn" data-rtrm="${esc(r.id)}" style="width:auto">Remove</button>` : ""}
+          <span class="hint" data-rtmsg="${esc(r.id)}"></span>
+        </div>
+        <div data-rtprog="${esc(r.id)}"></div>
+        <details class="se-manual"${focusId === r.id ? " open" : ""}>
+          <summary>Install manually instead</summary>
+          <div class="hint" style="margin:6px 0">${esc(r.manual.intro)}</div>
+          <pre class="se-code">${r.manual.lines.map(esc).join("\n")}</pre>
+          <div class="cz-row" style="margin-top:6px">
+            <button class="btn" data-cp="${esc(r.manual.lines.filter(l => !l.startsWith("#")).join("\n"))}"
+              style="width:auto;padding:4px 12px;font-size:11.5px">⧉ Copy commands</button>
+            <span class="hint">the app looks here: <code>${esc(tilde(r.location))}</code></span>
+          </div>
+          <div class="hint" style="margin-top:6px">${esc(r.manual.outro)}</div>
+        </details>
       </div>`).join("");
+    const follow = (id, jobId, label) => {
+      const slot = $(`[data-rtprog="${id}"]`, box);
+      if (!slot) return;
+      const p = czProgress(slot, { label, acc: "var(--ok)" });
+      watchJob(jobId, j => p.update(j));
+      jobDone(jobId).then(done => {
+        p.finish(done);
+        if (rtInstalling.get(id) !== jobId) return;   // someone else finished it
+        rtInstalling.delete(id);
+        if (done.status === "done") toast(done.message || "installed");
+        else if (done.status === "error") toast(done.error, true);
+        refreshRuntimes();
+      });
+    };
+    for (const [id, jobId] of rtInstalling) {          // re-attach after a re-render
+      const row = d.runtimes.find(r => r.id === id);
+      if (row) follow(id, jobId, `installing ${row.label}`);
+    }
     $$("button[data-rt]", box).forEach(b => b.onclick = async () => {
-      b.disabled = true;
-      const msg = $(`[data-rtmsg="${b.dataset.rt}"]`, box);
+      const id = b.dataset.rt;
+      if (rtInstalling.has(id)) return;
+      b.disabled = true; b.textContent = "Installing…";
+      const msg = $(`[data-rtmsg="${id}"]`, box);
+      msg.textContent = "";
       try {
-        const job = await api("/api/settings/runtimes/install", { id: b.dataset.rt });
-        watchJob(job.id, j => { msg.textContent = j.status === "running"
-          ? `${Math.round(Math.max(0, j.progress) * 100)}% ${j.message || ""}` : (j.message || j.status); });
-        const done = await jobDone(job.id);
-        if (done.status === "done") { msg.textContent = "installed — reloading…"; setTimeout(() => location.reload(), 900); }
-        else { b.disabled = false; msg.textContent = done.error || "stopped"; }
-      } catch (e) { b.disabled = false; msg.textContent = e.message; }
+        const job = await api("/api/settings/runtimes/install", { id });
+        rtInstalling.set(id, job.id);
+        follow(id, job.id, `installing ${b.closest(".se-rt").querySelector("b").textContent}`);
+      } catch (e) { b.disabled = false; b.textContent = "Install"; msg.textContent = e.message; }
+    });
+    $$("button[data-rtcheck]", box).forEach(b => b.onclick = async () => {
+      b.disabled = true; b.textContent = "checking…";
+      try {
+        const r = await api("/api/settings/runtimes/check", { id: b.dataset.rtcheck });
+        toast(r.row && r.row.installed ? `✓ ${r.row.label} — ready`
+          : `${r.row ? r.row.label : "it"} isn't there yet${r.row && r.row.detail ? " — " + r.row.detail : ""}`,
+          !(r.row && r.row.installed));
+      } catch (e) { toast(e.message, true); }
+      refreshRuntimes();
+    });
+    $$("button[data-rtrm]", box).forEach(b => b.onclick = async () => {
+      if (!confirm("Remove this runtime? You can install it again any time.")) return;
+      try { await api("/api/settings/runtimes/remove", { id: b.dataset.rtrm }); toast("removed"); }
+      catch (e) { toast(e.message, true); }
+      refreshRuntimes();
     });
     $$("button[data-cp]", box).forEach(b => b.onclick = async () => {
-      try { await navigator.clipboard.writeText(b.dataset.cp); toast("command copied"); } catch (e) {}
+      try { await navigator.clipboard.writeText(b.dataset.cp); toast("commands copied — paste them into Terminal"); }
+      catch (e) { toast("the clipboard is blocked — select the commands and copy them", true); }
     });
   }
 
   async function refresh(arg) {
-    const sections = Promise.all([refreshProxy(), refreshRuntimes(),
+    refreshDownloads();
+    const sections = Promise.all([refreshProxy(), refreshRuntimes(arg && arg.runtime),
                                   refreshLLM(), refreshAudit(), refreshDrain()]);
     /* another page can land here on a specific card: go("settings",
        {section:"runtimes"}) — wait for the cards to exist, then walk there */

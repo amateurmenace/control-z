@@ -78,8 +78,10 @@ def register_interpreter(app, jobs, frames):
                 "stale": bool(entry) and t is not None
                 and entry.get("n_source_segments") != len(t["segments"]),
             }
+        from .highlighter import _info_for
         return {"source": src, "meta": meta,
                 "session": Path(src).is_dir(),
+                "url": _info_for(src).get("webpage_url"),
                 "video": sourcesmod.video_for(src),
                 "n_segments": len(t["segments"]) if t else 0,
                 "origin": origin, "languages": langs}
@@ -113,8 +115,15 @@ def register_interpreter(app, jobs, frames):
         # at least one requested language must have an engine that can carry it
         # ('simple' needs the key even when a local model is installed)
         if all(mt.engine_for(c)["engine"] is None for c in codes):
-            return JSONResponse({"error": mt.engine_for(codes[0])["sentence"]},
-                                status_code=409)
+            from .keyneed import need_key
+            # Simple English is a rewrite the local model can't do — only
+            # name the keyless road when it would actually carry a language
+            local_ok = any(c != "simple" for c in codes)
+            return need_key("Translating captions",
+                            alt=("an on-device translation model can be "
+                                 "installed by hand instead (no key) — the "
+                                 "Models page says how")
+                            if local_ok else "")
         t, _ = sourcesmod.transcript(src)
         if not t or not t.get("segments"):
             return JSONResponse({"error": "no words to carry across — read "

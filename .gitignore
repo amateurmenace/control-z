@@ -29,3 +29,7 @@ models/
 
 # NOTE: no *.setting rule — depth/templates/*.setting is shipped package data.
 out_*.ppm
+
+# the built-in Webshare account (czcore/proxy.py set_house) — baked into the
+# frozen app by packaging/suite.spec, NEVER committed: this repo is public
+czcore/house_proxy.json

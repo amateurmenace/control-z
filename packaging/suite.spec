@@ -43,6 +43,22 @@ datas = [
 # 2026.6 has NO hook for it; without this Scribe dies on the FIRST transcribe
 # (vad_filter=True -> get_assets_path()) — measured, specs/09 §5.
 datas += collect_data_files("faster_whisper")
+# Stencil's SAM 2 engine as a plain FILE: the signed app can't load torch, so
+# it runs this script in the managed runtime's own Python (suite/tools/
+# stencil.py _engine_script resolves Path(stencil.__file__).parent) — a .pyc
+# inside the PYZ is useless to that other interpreter.
+datas.append((str(REPO / "stencil" / "sam2_engine.py"), "stencil"))
+# The built-in Webshare account (czcore/proxy.py set_house) — gitignored,
+# present only on a builder's machine that wrote it. Baked in when there;
+# a build without it simply ships no built-in account (the proxy switch
+# then asks for the person's own).
+_HOUSE = REPO / "czcore" / "house_proxy.json"
+if _HOUSE.exists():
+    datas.append((str(_HOUSE), "czcore"))
+    print(f"[suite.spec] built-in proxy account: baked in ({_HOUSE.name})")
+else:
+    print("[suite.spec] built-in proxy account: NONE (czcore/house_proxy.json "
+          "absent — `python -m czcore.proxy set-house USER PASS` to add one)")
 
 binaries = [
     # The LGPL ffmpeg/ffprobe from packaging/build_ffmpeg.sh. czcore/tools.py
@@ -75,6 +91,9 @@ a = Analysis(
                    # the local-model engines import their runtimes on demand.
                    "czcore.mt", "czcore.tts", "czcore.vision", "czcore.mt_local",
                    "pypdf",
+                   # the 2026-09 fetch/runtime fixes, all imported lazily
+                   "czcore.pyruntime", "czcore.proxy", "czcore.captions",
+                   "stencil.sam2_engine", "suite.tools.keyneed",
                    "PIL.Image", "PIL.ImageDraw", "PIL.ImageFont",
                    "PIL.ImageFilter"],
     excludes=[

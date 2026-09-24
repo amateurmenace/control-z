@@ -17,6 +17,7 @@ const ScribePage = (() => {
       <button class="btn" style="width:auto" id="sc-open">Open</button>
       <button class="btn" style="width:auto" id="sc-browse">Browse…</button>
       <span class="clipmeta" id="sc-meta"></span>
+      <span id="sc-nextslot" title="once the words are here: carry them into other languages"></span>
     </div>
     <div class="ws-body">
       <div class="ws-center">
@@ -412,6 +413,7 @@ const ScribePage = (() => {
       const r = await api("/api/media/open", { path, tool: "scribe" });
       S.path = r.path;
       $("#sc-path", el).value = r.path;
+      $("#sc-nextslot", el).innerHTML = "";
       // a fresh clip starts clean — no prior clip's sections, pull rows,
       // report, tighten list or filled bar bleeding onto this one
       ["#sc-exportsec", "#sc-pullsec", "#sc-tightensec"].forEach(
@@ -457,6 +459,8 @@ const ScribePage = (() => {
 
   function applyTranscript(t) {
     S.t = t;
+    // words exist → the access chain can carry them on (Interpreter next)
+    if (S.path) $("#sc-nextslot", el).innerHTML = czNextHTML("scribe", S.path, { isFile: true });
     $("#sc-exportsec", el).style.display = "";
     $("#sc-pullsec", el).style.display = "";
     $("#sc-tightensec", el).style.display = "";
@@ -653,6 +657,30 @@ const ScribePage = (() => {
     if (viewer) viewer.resize();
   }
 
-  registerPage("scribe", el, onshow);
+  /* reset: no clip, no transcript on screen — the page as it opens (the
+     .scribe.json sidecar stays; reopening the clip brings the words back) */
+  function reset() {
+    if (!viewer) return;
+    audio.pause(); audio.removeAttribute("src");
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    Object.assign(S, { path: null, clip: null, t: null, words: [], curWord: -1, pulls: [] });
+    viewer.setClip(null);
+    $("#sc-viewer", el).style.display = "";
+    $("#sc-path", el).value = ""; $("#sc-meta", el).innerHTML = "";
+    $("#sc-nextslot", el).innerHTML = "";
+    ["#sc-exportsec", "#sc-pullsec", "#sc-tightensec"].forEach(s => $(s, el).style.display = "none");
+    $("#sc-pulls", el).innerHTML = ""; $("#sc-ttlist", el).innerHTML = "";
+    $("#sc-ttwrite", el).style.display = "none";
+    const rep = $("#sc-report", el); rep.classList.remove("show"); rep.innerHTML = "";
+    $("#sc-bar", el).style.width = "0%";
+    $("#sc-msg", el).textContent = ""; $("#sc-msg", el).classList.remove("err");
+    $("#sc-play", el).disabled = true; $("#sc-transcribe", el).disabled = true;
+    $("#sc-time", el).textContent = "0:00.0";
+    $("#sc-speakernow", el).innerHTML = "";
+    $("#sc-transcript", el).innerHTML = `<div class="empty-grain" style="padding:36px 8px;color:var(--cream-faint);text-align:center">
+      open a clip and transcribe — the transcript becomes the edit surface</div>`;
+  }
+
+  registerPage("scribe", el, onshow, { reset });
   return { onshow, stop };
 })();

@@ -478,6 +478,19 @@ const RisePage = (() => {
     viewer.resize();
   }
 
-  registerPage("rise", el, onshow);
+  /* reset: no clip, empty batch, no A/B — the page as it opens */
+  function reset() {
+    if (!viewer) return;
+    Object.assign(R, { clip: null, probe: null, cx: 0.5, cy: 0.5, preview: null, batch: [] });
+    viewer.setClip(null); strip.setClip(null);
+    hideAB();
+    $("#rs-path", el).value = ""; $("#rs-meta", el).innerHTML = "";
+    $("#rs-preview", el).disabled = true;
+    const rep = $("#rs-report", el); if (rep) { rep.innerHTML = ""; rep.classList.remove("show"); }
+    renderProbe(); renderModels(); renderBatch();
+    try { drawBackendScope(); drawHeatScope(); } catch (e) {}
+  }
+
+  registerPage("rise", el, onshow, { reset });
   return { onshow };
 })();

@@ -22,9 +22,47 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from czcore import ytdlp
-from czcore.paths import media_dir, support_dir
+from czcore.paths import downloads_dir, downloads_root, media_dir, support_dir
 
 VIDEO_EXTS = (".mp4", ".mkv", ".mov", ".webm", ".m4v", ".mpg", ".m4a")
+
+
+def bin_dirs() -> list:
+    """Where the bin lists from: the Downloads folder fetches land in now,
+    plus the old ~/Movies/control-z/grabber so nothing fetched before the
+    move goes missing."""
+    out = []
+    try:
+        out.append(downloads_dir())
+    except OSError:
+        pass            # a chosen folder on an unplugged drive: list the rest
+    legacy = media_dir("grabber")
+    if all(legacy.resolve() != d.resolve() for d in out):
+        out.append(legacy)
+    return out
+
+
+def bin_videos() -> list:
+    """Every fetched recording, newest first — [Path]. Section clips and
+    conform outputs are the same bin's citizens; half-downloads aren't."""
+    seen, rows = set(), []
+    for d in bin_dirs():
+        try:
+            entries = list(d.iterdir())
+        except OSError:
+            continue
+        for p in entries:
+            if p.suffix.lower() not in VIDEO_EXTS or not p.is_file():
+                continue
+            if ".temp." in p.name or re.search(r"\.f\d+\.\w+$", p.name):
+                continue
+            key = str(p.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(p)
+    rows.sort(key=lambda p: -p.stat().st_mtime)
+    return rows
 
 _SCHED_LOCK = threading.Lock()
 
@@ -110,12 +148,13 @@ def register_grabber(app, jobs, frames):
     from grabber.civicclerk import DEFAULT_TENANT, search_events
     from grabber.convert import CONFORM_PRESETS
 
-    lib = media_dir("grabber")
-
     @app.get("/api/grabber/status")
     def api_status():
+        from czcore.paths import downloads_chosen
         presets = [p for p in presets_report() if p["id"] in CONFORM_PRESETS]
-        return {"ytdlp": ytdlp.status(), "library": str(lib),
+        return {"ytdlp": ytdlp.status(), "library": str(downloads_root()),
+                "downloads": {"path": str(downloads_root()),
+                              "confirmed": downloads_chosen()},
                 "default_tenant": DEFAULT_TENANT, "presets": presets,
                 "schedules": _load_schedules()}
 
@@ -184,19 +223,51 @@ def register_grabber(app, jobs, frames):
                 job.message = m or job.message
 
             from grabber import zoomshare
+            dest = downloads_dir()   # read now: the folder may have changed
             if zoomshare.is_zoom_share(url):
-                got = zoomshare.download(url, lib, progress=prog,
+                got = zoomshare.download(url, dest, progress=prog,
                                          cancelled=lambda: job.cancel_requested,
                                          name=name)
             else:
-                got = ytdlp.download(url, lib, quality=quality, progress=prog,
+                got = ytdlp.download(url, dest, quality=quality, progress=prog,
                                      cancelled=lambda: job.cancel_requested)
-            job.message = f"fetched {Path(got['path']).name}" + (
+            note = f"fetched {Path(got['path']).name}" + (
                 f" (+{got['clips'] - 1} more clips)" if got.get("clips", 1) > 1 else "")
+            if not zoomshare.is_zoom_share(url) and quality != "audio":
+                # the video is safe on disk; the words are a best effort
+                # that can never cost it (ytdlp.sidecar_captions says why)
+                job.message = note + " · fetching captions…"
+                job.progress = -1
+                cap = ytdlp.sidecar_captions(url, Path(got["path"]))
+                got["captions"] = cap
+                note += {"fetched": " · captions ✓",
+                         "none": " · no captions on YouTube (Scribe can "
+                                 "transcribe it)",
+                         }.get(cap["captions"],
+                               " · captions didn't come (" + cap["note"][:90]
+                               + ")")
+            job.message = note
             return got
 
         label = f"fetch — {name or url[:70]}"
         return jobs.start("fetch", work, tool="grabber", label=label)
+
+    @app.post("/api/grabber/probe")
+    def api_probe(body: dict = Body(...)):
+        """What a link offers before a byte moves — the quality chooser's
+        list, each rung resolved to the file the fetch would really take."""
+        url = str(body.get("url", "")).strip()
+        if not url.lower().startswith(("http://", "https://")):
+            return JSONResponse({"error": "that link isn't a URL"},
+                                status_code=422)
+        from grabber import zoomshare
+        if zoomshare.is_zoom_share(url):
+            # a Zoom share page serves the recording as recorded — one version
+            return {"kind": "zoom", "url": url, "options": []}
+        try:
+            return {"kind": "video", **ytdlp.probe_url(url)}
+        except RuntimeError as e:
+            return JSONResponse({"error": str(e)}, status_code=502)
 
     @app.post("/api/grabber/fetch")
     def api_fetch(body: dict = Body(...)):
@@ -210,12 +281,63 @@ def register_grabber(app, jobs, frames):
 
     @app.get("/api/grabber/library")
     def api_library():
-        rows = [{"path": str(p), "name": p.name, "size": p.stat().st_size,
-                 "mtime": p.stat().st_mtime}
-                for p in sorted(lib.iterdir())
-                if p.suffix.lower() in VIDEO_EXTS]
-        rows.sort(key=lambda r: -r["mtime"])
+        rows = []
+        for p in bin_videos():
+            info = {}
+            try:
+                raw = json.loads(p.with_suffix(".info.json").read_text())
+                info = {"title": raw.get("title"), "url": raw.get("webpage_url"),
+                        "duration": raw.get("duration"),
+                        "uploader": raw.get("uploader") or raw.get("channel")}
+            except (OSError, ValueError):
+                pass
+            words = p.with_suffix(".scribe.json").exists()
+            # the names yt-dlp and sidecar_captions write — probed directly;
+            # a listing per row would crawl a Downloads folder n² times
+            caps = words or any(
+                p.with_name(p.stem + tail).exists()
+                for tail in (".en.vtt", ".en-orig.vtt", ".en.srt", ".vtt",
+                             ".srt"))
+            rows.append({"path": str(p), "name": p.name,
+                         "size": p.stat().st_size, "mtime": p.stat().st_mtime,
+                         "folder": str(p.parent), **info,
+                         "captions": caps, "transcript": words,
+                         "highlights": p.with_suffix(".highlights.json").exists(),
+                         "section": bool(re.search(r"\[\d+-\d+\]$", p.stem))})
         return rows
+
+    @app.post("/api/grabber/captions")
+    def api_captions(body: dict = Body(...)):
+        """Fetch (or re-fetch) the captions for a video already in the bin —
+        the words a fetch couldn't bring (a 429, the proxy off) come later,
+        without re-downloading a byte of video."""
+        p = Path(str(body.get("path", ""))).expanduser()
+        if not p.is_file():
+            return JSONResponse({"error": f"no such file: {p}"}, status_code=404)
+        url = str(body.get("url") or "")
+        if not url:
+            try:
+                url = json.loads(p.with_suffix(".info.json").read_text()) \
+                    .get("webpage_url") or ""
+            except (OSError, ValueError):
+                url = ""
+        if not url:
+            return JSONResponse({"error": "this file doesn't say where it came "
+                                          "from — transcribe it with Scribe "
+                                          "instead"}, status_code=422)
+
+        def work(job):
+            job.message = "fetching captions…"
+            cap = ytdlp.sidecar_captions(url, p)
+            job.message = {"fetched": "captions ✓ — beside the video",
+                           "none": "YouTube has no captions for this one"}.get(
+                cap["captions"], f"captions didn't come — {cap['note'][:160]}")
+            if cap["captions"] == "failed":
+                raise RuntimeError(job.message)
+            return cap
+
+        return jobs.start("captions", work, tool="grabber",
+                          label=f"captions — {p.name[:60]}").to_dict()
 
     @app.post("/api/grabber/convert")
     def api_convert(body: dict = Body(...)):

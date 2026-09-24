@@ -14,6 +14,30 @@ from memory import detect, embed, ingest, issues
 from memory.store import Corpus
 
 
+def _session_to_url(body: dict) -> dict:
+    """A Highlighter URL-session FOLDER handed over as a `path` (the "Send to
+    next app" wire, Publisher's button) is a link, not a media file — name it
+    by its URL, or ingest takes the local-file road and finds no media."""
+    import json
+    from pathlib import Path
+
+    p = Path(str(body.get("path") or "")).expanduser()
+    if body.get("url") or not p.is_dir():
+        return body
+    url = ""
+    try:
+        url = json.loads((p / "meeting.info.json").read_text()).get("webpage_url") or ""
+    except (OSError, ValueError):
+        pass
+    if not url and re.fullmatch(r"[\w-]{11}", p.name):
+        url = f"https://www.youtube.com/watch?v={p.name}"
+    if not url:
+        return body
+    out = {k: v for k, v in body.items() if k != "path"}
+    out["url"] = url
+    return out
+
+
 def register_memory(app, jobs, frames):
     from fastapi import Body
     from fastapi.responses import JSONResponse
@@ -42,6 +66,7 @@ def register_memory(app, jobs, frames):
             return JSONResponse(
                 {"error": "give me a meeting URL or a local file path"},
                 status_code=422)
+        body = _session_to_url(body)
         plan = ingest.resolve_input(body)
         dup = ingest.submit_dedupe(corpus, plan)
         if dup:

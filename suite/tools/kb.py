@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .highlighter import (VIDEO_EXTS, _info_for, _is_session, _lib,
                           _meetings_dir, _session_meta, _sidecars,
-                          insight_payload)
+                          fetched_videos, insight_payload)
 
 # a library file named "…[3923-3927].mp4" is a downloaded SPAN of a
 # meeting, and "reel-…"/"montage-…" (or "….reel.mp4") is something the
@@ -40,6 +40,12 @@ def kb_sources(cap: int = 60) -> list:
         out += sorted(p for p in _lib().iterdir()
                       if p.suffix.lower() in VIDEO_EXTS
                       and not is_span_clip(p))
+    # fetched recordings elsewhere (the Downloads folder) join once they've
+    # been READ — an unread download isn't a meeting in the library yet
+    own = _lib().resolve() if _lib().exists() else None
+    out += sorted(p for p in fetched_videos()
+                  if p.parent.resolve() != own and not is_span_clip(p)
+                  and _sidecars(str(p))[0].exists())
     return out[:cap]
 
 
@@ -187,8 +193,8 @@ def register_kb(app, jobs, frames):
         from czcore import llm
 
         if not llm.enabled():
-            return JSONResponse({"error": "no API key configured — "
-                                          "Settings → AI"}, status_code=409)
+            from .keyneed import need_key
+            return need_key("The AI comparison across meetings")
         rows, skipped = [], []
         for meta in library_rows():
             try:
@@ -297,18 +303,15 @@ def register_kb(app, jobs, frames):
             downloaded twin in the library (span clips don't count)."""
             if src.is_file():
                 return src
-            for f in _lib().iterdir():
-                if (f.suffix.lower() in VIDEO_EXTS
-                        and f"[{src.name}]" in f.name
-                        and not is_span_clip(f)):
+            for f in fetched_videos():
+                if f"[{src.name}]" in f.name and not is_span_clip(f):
                     return f
             return None
 
         def _span_on_disk(sid: str, a: float, b: float):
             tag = f"[{int(a)}-{int(b)}]"
-            for f in _lib().iterdir():
-                if (f.suffix.lower() in VIDEO_EXTS and tag in f.name
-                        and f"[{sid}]" in f.name):
+            for f in fetched_videos():
+                if tag in f.name and f"[{sid}]" in f.name:
                     return f
             return None
 

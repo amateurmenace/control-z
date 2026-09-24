@@ -45,8 +45,8 @@ def main(argv=None):
                 print(f"                  ▸ {u}")
         return
     if a.cmd == "fetch":
-        from czcore.paths import media_dir
-        out = Path(a.out) if a.out else media_dir("grabber")
+        from czcore.paths import downloads_dir
+        out = Path(a.out) if a.out else downloads_dir()
         prog = lambda p, m: print(f"\r{m or f'{p*100:5.1f}%'}", end="", flush=True)  # noqa: E731
         from . import zoomshare
         if zoomshare.is_zoom_share(a.url):

@@ -2,6 +2,152 @@
 
 ## unreleased
 
+### the desk, fixed where it hurt — fetches, words, runtimes, and pages that say what they're for — 2026-09-23 (Civic Media Studio 2.1.0)
+
+A field report of ten desk bugs, each traced to its root before it was
+touched.
+
+**Transcripts come back.** Highlighter's captions had quietly stopped
+arriving. The watch page's own caption links now carry `exp=xpe` — a
+proof-of-origin token wall — so they answer 200 with an EMPTY body from
+*any* address; the app read that empty body as "your IP is gated, set up
+a proxy", sent people to fix the wrong thing, and even abandoned the
+yt-dlp route that would have worked. `czcore.captions` now asks YouTube's
+player API as the ANDROID client (the route youtube-transcript-api runs
+on): a four-hour meeting's 18,104 segments in 2.3 s, no proxy. yt-dlp and
+the community relay stay behind it as the second and third roads, and
+`CaptionError.blocked` is true only when a proxy would actually help.
+Caption text is unescaped (`>>` speaker marks no longer read `&gt;&gt;`).
+
+**A caption 429 never costs the video again.** yt-dlp writes subtitles
+BEFORE the video and aborts the whole fetch when one 429s — the Grabber's
+"Unable to download video subtitles for 'en': HTTP Error 429" was a lost
+video. Downloads now fetch no subtitles; `ytdlp.sidecar_captions` brings
+the words afterwards, best effort, and can't fail the fetch. The same
+pass found two more: `--print` silently implies `--quiet`, so every fetch
+sat at "running" with no percentage (`--progress` brings it back), and a
+Finder-launched app never saw an installed Node/Deno, so YouTube handed
+out a thinner format list (the runtime is now found and named). Search
+drops channels and playlists (a town's name led with its station's
+channel, and Load crawled it for two minutes).
+
+**The proxy is a switch, off by default.** Built-in account (baked in at
+build time from a gitignored `czcore/house_proxy.json` — `python -m
+czcore.proxy set-house USER PASS`), your own account (Settings, with the
+host tucked under Advanced), or the environment. The Grabber and
+Highlighter carry the switch with a plain explanation, and open it
+themselves the moment YouTube refuses this computer. "Test the
+connection" answers with the exit address or the fix. A legacy
+proxy.json with an account counts as ON. When a residential exit drops
+mid-session, the gateway answers the tunnel with a 502 — seen live on the
+built-in account — so a caption request retries that once, quietly,
+before it counts as a network failure.
+
+**Runtimes install from the signed app.** The old gate blocked all three
+— even DeepFilterNet and Deno, standalone binaries we run like yt-dlp.
+Stencil's PyTorch can't load inside a signed app (library validation,
+zero entitlements, by design), so it now installs as a managed runtime —
+python-build-standalone (SHA256SUMS-checked), a venv, torch + Meta's SAM 2
+from a zip (no git needed) — and Stencil drives it as a helper process
+running `stencil/sam2_engine.py`, shipped as a plain file. Measured: 68 s
+install with a warm pip cache; the helper's mattes match the in-process
+engine's to the fifth decimal. Every runtime shows where the app looks,
+the exact Terminal lines, and "Check again".
+
+**Where things go, said out loud.** Fetched videos land in
+`~/Downloads/Civic Media Studio` (the first fetch asks once: here, or a
+folder you pick), shown with Show in Finder / Change on the Grabber and in
+Settings. Publisher kits live in ONE folder per meeting — renders land
+straight in its `clips/` and `thumbs/`, export adds the words and the zip
+in place — and the destination is choosable.
+
+**Fetch asks first.** The quality menu used to sit in the search row,
+out of sight of the link box, so a pasted link just downloaded at "best".
+Now a single Fetch reads what the video really offers (one probe, a few
+seconds) and lists each quality with its size — 1080p about 83 MB, 720p
+about 47 MB, audio only about 4 MB — resolved the way the download will
+take it: the ladder prefers h264 and YouTube serves h264 to 1080p at
+most, so "4K" collapses into 1080p instead of being promised (a note
+says when a VP9/AV1-only 4K exists). The estimate matched the real file
+to 0.05% (a known size outranks an unsized HLS twin, as in yt-dlp's own
+sort). Zoom shares say they come as recorded; your last pick is
+remembered; "Fetch all" keeps its own ceiling menu beside the button.
+The rungs now cap with `height<=?`, so a bare file link whose height
+yt-dlp can't read no longer fails every rung but "best".
+
+**The Highlighter, reshaped around its three steps.** A sticky flow bar
+(① Find the moments → ② Build the reel → ③ Analyze, each with its live
+count) replaces three tabs that read as three products, and carries **✨ Make
+a highlight reel** with a settings chip (what the moments are about, how
+long, and who picks — this computer or AI with your key); the timeline has
+its own ✨ and an empty state that says what to do. The cut list IS the reel
+now — every pick, sized to the length you chose (only the first five used
+to land), with each moment at least 12 s so nobody is cut off mid-thought.
+**The player follows you**: play from anywhere down the page and the monitor
+lifts into the corner (clip 3 of 8 · ⏮ ⏭ ↑ ✕), settling back into place
+when you scroll up — the iframe is never re-parented, so YouTube never
+reloads. The reel plays on the meeting's own clock (a timer used to cut
+clips short while YouTube buffered, and ran on into the meeting after the
+last clip); a jump anywhere else ends it. The AI summary is an executive
+summary — one paragraph, about five sentences, with its key moments as
+links (cached briefs in the old shape rewrite once). Times read 2:05:41,
+not 125:41.7. The Grabber got the same pass: one way in (search or paste a
+link, one card), one strip for where files go and the proxy, bin rows that
+show the title and one clear way onward.
+
+**Captions read once, not twice.** YouTube's auto-captions roll: a block's
+first cue opens with a one-space line, and 10 ms snapshot cues re-show each
+finished line. `parse_vtt` ended the cue at the one-space line and let the
+snapshots through — every line of every caption-read meeting appeared twice
+(a Select Board meeting: 13,496 lines → 6,897), each block's opening words
+landed 2–3 s late, and search, highlights and summaries all read the
+doubles. Transcripts cached by the old parse re-read their caption file once
+(`VTT_PARSE_V`); Scribe's words are never touched.
+
+**The wire.** "Send to next app" on every page that holds a meeting:
+Grabber → Highlighter → Publisher → the Record, Scribe → Interpreter →
+Narrator, with a ▾ for any other stop that can take it. The Grabber's
+"Read in Highlighter" (a URL handed to a file-only open — it 404'd) now
+reads the meeting; Highlighter lists everything in the Downloads folder;
+the rail reads in the order a meeting travels (Grabber, then Highlighter).
+
+**Publisher, Interpreter, Narrator say what they're for** — a hero that
+explains the job in plain words, the steps, what comes out, engine cards
+with one-click fixes, and numbered step cards once a meeting is open.
+
+**Every page resets; every job cancels; nothing is forgotten.** ↺ Reset
+on every tool page (the view, never the files). ✕ Cancel on every
+progress card and corner toast — yt-dlp's whole process group stops
+(the ffmpeg merge included) and this run's partial files are swept; the
+shared ffmpeg runner removes its half-written output; a cancel reads
+"cancelled", not a red error. The Queue's new History tab is permanent:
+every finished job, backfilled from the old queue, searchable, exportable
+as CSV — "clear finished" tidies the live list and nothing else.
+
+**Keys, asked for kindly.** Every key-gated route answers
+`need: "llm_key"`; the page opens an add-a-key popup — what a key is,
+what gets sent, step-by-step for Anthropic / OpenAI / Gemini — and retries
+the click once a key is saved. The ✨ buttons stay visible with a 🔑 mark
+instead of hiding.
+
+Also fixed on the way: a duplicated `hl-report` id appended export logs
+INTO the "Generate Full Report" button; the Queue crashed on any job whose
+`written` result is a map (Narrator's); kit folder names collapse
+" - " to one dash.
+
+Two review passes (backend + front end) folded 16 confirmed findings
+before this landed — the ones worth remembering: a link-read meeting sent
+to the Record went as a folder PATH and failed (the submission now names
+it by its URL); section clips and reels borrowed the whole meeting's
+transcript (only a name ending in `[id]` is the full recording now); an
+age gate or a private video was called "blocked" and offered a proxy that
+can't open it; Facebook's `watch?v=` minted fake YouTube ids; a bad
+Downloads/kit folder was saved before it was checked; two meetings with
+one title shared — and wiped — one kit folder (folders now remember their
+owner); and a cancel's cleanup is scoped to the video's own `[id]`-tagged
+files, so a Downloads folder shared with a browser keeps the browser's
+`.part` files.
+
 ### specs/21 P3 — templates, the featured papers, and the radiogroup — 2026-07-22 (v2.1.10) · the spec is DONE
 
 The studio's last owed phase, and the smallest: three ways in, no new

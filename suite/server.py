@@ -93,7 +93,7 @@ def create_suite_app():
     def api_app():
         import platform
         return {"version": __version__, "platform": platform.system(),
-                "presets": presets_report()}
+                "presets": presets_report(), "home": str(Path.home())}
 
     @app.get("/api/session")
     def api_session():
@@ -155,12 +155,21 @@ def create_suite_app():
         opening an empty window."""
         import subprocess
         p = Path(str(body.get("path", "")).strip()).expanduser()
+        if not p.exists() and body.get("mkdir") and p.parent.exists():
+            p.mkdir(exist_ok=True)     # a chosen folder nothing landed in yet
         if not p.exists():
             return JSONResponse({"error": f"nothing at {p} to reveal"},
                                 status_code=404)
         try:
             if sys.platform == "darwin":
-                subprocess.run(["open", "-R", str(p)], check=True, timeout=10)
+                # open: a FOLDER opens as a window (its contents); a file
+                # (or open=false) is revealed selected in its parent. A
+                # "folder" with an extension may be a package (.app launches
+                # on `open`) — those are revealed, never opened.
+                if body.get("open") and p.is_dir() and not p.suffix:
+                    subprocess.run(["open", str(p)], check=True, timeout=10)
+                else:
+                    subprocess.run(["open", "-R", str(p)], check=True, timeout=10)
             elif sys.platform.startswith("win"):
                 subprocess.run(["explorer", "/select,", str(p)], timeout=10)
             else:
@@ -208,6 +217,72 @@ def create_suite_app():
         return {"ok": ok} if ok else JSONResponse(
             {"error": "job already finished (or unknown)"}, status_code=409)
 
+    @app.get("/api/jobs/history")
+    def api_jobs_history(limit: int = 100, offset: int = 0, q: str = "",
+                         tool: str = "", status: str = ""):
+        """The permanent log — every finished job, newest first. "Clear
+        finished" never touches it."""
+        return jobs.history(limit=limit, offset=offset, q=q.strip(),
+                            tool=tool.strip(), status=status.strip())
+
+    @app.get("/api/jobs/history.csv")
+    def api_jobs_history_csv(q: str = "", tool: str = "", status: str = "",
+                             save: int = 0):
+        """The history as a spreadsheet. save=1 writes it into the outputs
+        folder and answers {path} — the app window can't take a download
+        link without navigating away from itself."""
+        import csv
+        import io
+        import time as _t
+
+        from fastapi.responses import Response
+
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["finished", "tool", "what", "status", "seconds",
+                    "outputs", "message", "error", "id"])
+        offset = 0
+        while True:
+            page = jobs.history(limit=1000, offset=offset, q=q, tool=tool,
+                                status=status)
+            def flat(v):
+                if isinstance(v, (list, tuple)):
+                    return list(v)
+                if isinstance(v, dict):
+                    return list(v.values())
+                return [v] if v else []
+
+            for r in page["rows"]:
+                res = r.get("result") if isinstance(r.get("result"), dict) else {}
+                outs = [res.get("out"), res.get("path"),
+                        *flat(res.get("paths")), *flat(res.get("written"))]
+                outs = [str(o) for i, o in enumerate(outs)
+                        if isinstance(o, str) and o and o not in outs[:i]]
+                took = ((r["finished_at"] or 0) - (r["started_at"] or 0)
+                        if r.get("started_at") and r.get("finished_at") else "")
+                w.writerow([
+                    _t.strftime("%Y-%m-%d %H:%M:%S",
+                                _t.localtime(r["finished_at"]
+                                             or r["created_at"] or 0)),
+                    r["tool"], r["label"] or r["kind"], r["status"],
+                    round(took, 1) if took != "" else "",
+                    " | ".join(outs), r["message"] or "", r["error"] or "",
+                    r["id"]])
+            offset += len(page["rows"])
+            if not page["rows"] or offset >= page["total"]:
+                break
+        stamp = _t.strftime("%Y%m%d-%H%M")
+        if save:
+            from czcore.paths import media_root
+            root = media_root()
+            root.mkdir(parents=True, exist_ok=True)
+            out = root / f"job-history-{stamp}.csv"
+            out.write_text(buf.getvalue())
+            return {"path": str(out)}
+        return Response(buf.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition":
+                                 f'attachment; filename="job-history-{stamp}.csv"'})
+
     # -- export presets ------------------------------------------------------------------
 
     @app.get("/api/export/presets")
@@ -229,6 +304,26 @@ def create_suite_app():
         return JSONResponse(
             {"error": "native file dialog needs the app window — "
                       "in a browser, paste a path instead"},
+            status_code=501)
+
+    @app.post("/api/dialog/open-folder")
+    def api_dialog_folder(body: dict = Body(default={})):
+        """Pick a folder (Downloads location, kit destination…). Returns
+        {"path": str|None} — None when the person cancelled the sheet."""
+        start = str(Path(str(body.get("start") or "~")).expanduser())
+        try:
+            import webview
+            if webview.windows:
+                result = webview.windows[0].create_file_dialog(
+                    webview.FOLDER_DIALOG,
+                    directory=start if Path(start).is_dir() else "")
+                paths = list(result or [])
+                return {"path": paths[0] if paths else None}
+        except ImportError:
+            pass
+        return JSONResponse(
+            {"error": "the folder picker needs the app window — "
+                      "in a browser, type the folder path instead"},
             status_code=501)
 
     # -- tools ----------------------------------------------------------------------------

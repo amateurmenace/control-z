@@ -135,7 +135,47 @@ the<00:00:03.000><c> motion</c><00:00:03.500><c> passes</c>
 """
 
 
+# YouTube's real auto-caption shape (from a Brookline Select Board VTT): a
+# block opens with a one-space line, 10 ms snapshot cues re-show each
+# finished line, and every cue carries the previous line above the new words
+YT_ROLLING = """WEBVTT
+Kind: captions
+Language: en
+
+00:10:52.160 --> 00:10:54.870 align:start position:0%
+⎵
+&gt;&gt; Good<00:10:52.399><c> evening</c><00:10:52.640><c> everyone.</c>
+
+00:10:54.870 --> 00:10:54.880 align:start position:0%
+&gt;&gt; Good evening everyone.
+⎵
+
+00:10:54.880 --> 00:10:58.470 align:start position:0%
+&gt;&gt; Good evening everyone.
+Welcome<00:10:56.640><c> to</c><00:10:57.120><c> the</c><00:10:58.079><c> board</c>
+
+00:10:58.470 --> 00:10:58.480 align:start position:0%
+Welcome to the board
+⎵
+
+00:10:58.480 --> 00:11:01.910 align:start position:0%
+Welcome to the board
+meeting.<00:10:59.680><c> To</c><00:11:00.079><c> open</c>
+""".replace("⎵", " ")   # ⎵ marks the one-space lines
+
+
 class TestVTT(unittest.TestCase):
+    def test_youtube_rolling_lines_come_once_at_their_real_start(self):
+        segs = parse_vtt(YT_ROLLING)
+        self.assertEqual([s["text"] for s in segs], [
+            "&gt;&gt; Good evening everyone.", "Welcome to the board",
+            "meeting. To open"])
+        # the opening line starts when it was SAID (the one-space line no
+        # longer hides it until its snapshot, 2.7 s later)
+        self.assertEqual(segs[0]["start"], 652.16)
+        self.assertEqual([w["w"] for w in segs[1]["words"]],
+                         ["Welcome", "to", "the", "board"])
+
     def test_rolling_repeats_deduped(self):
         segs = parse_vtt(VTT)
         texts = [s["text"] for s in segs]

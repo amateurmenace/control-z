@@ -43,17 +43,41 @@ def run(args: list, duration: Optional[float] = None,
         cancelled: Optional[Callable[[], bool]] = None) -> None:
     """ffmpeg with the given args (input→output section, no exe, no -y).
 
-    Raises RuntimeError carrying ffmpeg's last useful line on failure.
+    Raises RuntimeError carrying ffmpeg's last useful line on failure, and
+    JobCancelled on cancel — after removing the half-written output (the
+    queue's promise: "cancel is honest — partial files are removed").
     """
+    import time
+    from pathlib import Path
+
     cmd = [ffmpeg_path(), "-y", "-hide_banner", "-nostdin",
            "-progress", "pipe:1", "-v", "error"] + [str(a) for a in args]
+    t0 = time.time()
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True, bufsize=1)
     for line in proc.stdout:
         if cancelled and cancelled():
             proc.terminate()
-            proc.wait(timeout=10)
-            raise RuntimeError("cancelled")
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            # every file this run was writing: an argument that names a file
+            # touched since the run began and isn't an input (-i …) — inputs
+            # predate the run, so the time check keeps them safe regardless.
+            # (Narrator's mix writes up to three outputs, not just the last.)
+            strs = [str(a) for a in args]
+            for k, tok in enumerate(strs):
+                if tok.startswith("-") or (k and strs[k - 1] == "-i"):
+                    continue
+                try:
+                    f = Path(tok)
+                    if f.is_file() and f.stat().st_mtime >= t0 - 1:
+                        f.unlink()
+                except (OSError, ValueError):
+                    pass
+            from .appshell.jobs import JobCancelled
+            raise JobCancelled()
         if not (progress and duration):
             continue
         m = _OUT_TIME.search(line)

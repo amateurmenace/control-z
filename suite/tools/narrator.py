@@ -167,10 +167,11 @@ def register_narrator(app, jobs, frames):
         src = str(Path(str(body.get("path", "")).strip()).expanduser())
         only = body.get("only")
         if not vision.available()["ok"] and not llm.enabled():
-            return JSONResponse({"error": "descriptions need an on-device model "
-                                          "(Models page) or your API key "
-                                          "— Settings → AI"},
-                                status_code=409)
+            from .keyneed import need_key
+            return need_key("Drafting descriptions",
+                            alt="an on-device vision model can be installed "
+                                "by hand instead (no key) — the Models page "
+                                "says how")
         video = sourcesmod.video_for(src)
         script = scriptmod.load(src)
         if not video or not script or not script.get("cues"):

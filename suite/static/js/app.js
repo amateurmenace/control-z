@@ -76,22 +76,35 @@
       if (!card && !active) return;          // never resurrect finished jobs
       if (!card) {
         jt.insertAdjacentHTML("beforeend", `
-          <div class="jt-card" data-jid="${j.id}">
-            <div class="jt-label"></div>
+          <div class="jt-card" data-jid="${j.id}" title="open the Queue">
+            <div class="jt-top"><div class="jt-label"></div>
+              <button class="jt-cancel" type="button"
+                title="stop this job — partial files are removed">✕</button></div>
             <div class="jt-bar"><i></i></div>
             <div class="jt-msg"></div>
           </div>`);
         card = jt.querySelector(`[data-jid="${j.id}"]`);
-        card.onclick = () => go("queue");
+        card.onclick = e => { if (!e.target.closest(".jt-cancel")) go("queue"); };
+        $(".jt-cancel", card).onclick = e => {
+          e.stopPropagation();
+          cancelJob(j.id, e.currentTarget);
+        };
       }
+      $(".jt-cancel", card).style.display = active ? "" : "none";
       $(".jt-label", card).textContent = j.label || j.kind || "job";
       const pct = Math.round(Math.max(0, j.progress || 0) * 100);
-      $(".jt-bar i", card).style.width = (active ? pct : 100) + "%";
+      // only "done" fills the bar — a cancel or an error stops it where it
+      // was, in its own color (a full green bar read as success on a
+      // cancelled fetch)
+      if (active || j.status === "done")
+        $(".jt-bar i", card).style.width = (active ? pct : 100) + "%";
       $(".jt-msg", card).textContent = j.status === "queued" ? "queued"
         : j.status === "running" ? `${pct}% — ${j.message || "working"}`
+        : j.status === "cancelled" ? "cancelled — partial files removed"
         : (j.message || j.status);
       card.classList.toggle("done", j.status === "done");
-      card.classList.toggle("err", ["error", "cancelled"].includes(j.status));
+      card.classList.toggle("err", j.status === "error");
+      card.classList.toggle("cancelled", j.status === "cancelled");
       if (!active) setTimeout(() => card.remove(), 7000);
     },
   };
@@ -112,9 +125,9 @@
     { id: "home", label: "Home", hint: "the three doors" },
     { id: "davinci", label: "DaVinci Tools", hint: "grades · node tree · fusion templates" },
     { id: "ofx", label: "Install OpenFX", hint: "the plugins, into Resolve" },
-    { id: "queue", label: "Queue", hint: "every job, live" },
+    { id: "queue", label: "Queue", hint: "every job, live · the full history" },
     { id: "models", label: "Models", hint: "what's downloaded" },
-    { id: "settings", label: "Settings", hint: "proxy · AI · caches" },
+    { id: "settings", label: "Settings", hint: "proxy · AI key · downloads folder · runtimes" },
     { id: "about", label: "About", hint: "the covenant" },
   ];
   const pal = document.createElement("div");

@@ -258,16 +258,33 @@ def _secs(h, m, s, ms) -> float:
     return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000.0
 
 
+# bump when parse_vtt's output changes — caption-made transcripts cached
+# from an older parse re-read their caption file once (suite Highlighter)
+VTT_PARSE_V = 2   # 2: YouTube's rolling cues read right — no doubled lines
+
+
+def _clean_line(s: str) -> str:
+    return re.sub(r"\s+", " ", _TAG.sub("", s)).strip()
+
+
 def parse_vtt(text: str) -> List[dict]:
     """Caption file -> transcript-shaped segments (words carry timing when
     YouTube's word tags are present — karaoke without running a model).
 
-    YouTube auto-caption VTTs repeat each line as a rolling two-liner; cues
-    that only re-show the previous text are dropped.
+    YouTube's auto-captions ROLL. A cue shows the line before it above the
+    new words, a block's first cue opens with a one-space line, and between
+    cues a ~10 ms "snapshot" cue re-shows the finished line alone:
+
+        00:10:52.160 --> 00:10:54.870      ← " " then the new words
+        00:10:54.870 --> 00:10:54.880      ← snapshot: that line again
+        00:10:54.880 --> 00:10:58.470      ← that line (carried) + new words
+
+    Only new words are kept. (The one-space line once ended the cue early,
+    and the snapshots slipped through — every line of a meeting, twice.)
     """
     segments: List[dict] = []
     lines = text.replace("\r\n", "\n").split("\n")
-    i, last_text = 0, ""
+    i, last_text, prev_last = 0, "", ""
     while i < len(lines):
         m = _CUE.search(lines[i])
         if not m:
@@ -276,27 +293,37 @@ def parse_vtt(text: str) -> List[dict]:
         start, end = _secs(*m.groups()[:4]), _secs(*m.groups()[4:])
         i += 1
         raw = []
-        while i < len(lines) and lines[i].strip() and not _CUE.search(lines[i]):
+        # a cue ends at an EMPTY line — YouTube's one-space line is content
+        while i < len(lines) and lines[i] != "" and not _CUE.search(lines[i]):
             raw.append(lines[i])
             i += 1
-        body = "\n".join(raw)
+        kept = [ln for ln in raw if _clean_line(ln)]
+        if not kept:
+            continue
+        cleaned = [_clean_line(ln) for ln in kept]
+        full_last = cleaned[-1]
+        # the carried line (the previous cue's last line, shown again above
+        # the new words) and the snapshot (that line alone) are repeats
+        if prev_last and cleaned[0] == prev_last:
+            kept, cleaned = kept[1:], cleaned[1:]
+        if end - start <= 0.05 and not _WORDTAG.search("\n".join(kept)):
+            kept, cleaned = [], []            # a snapshot never carries news
+        prev_last = full_last
+        body = "\n".join(kept)
+        clean = " ".join(cleaned).strip()
         # tokens between YouTube's <t> marks start at the mark before them
         words: List[dict] = []
         if _WORDTAG.search(body):
             words = _words_from_tagged(body, start, end)
-        clean = _TAG.sub("", body).replace("\n", " ")
-        clean = re.sub(r"\s+", " ", clean).strip()
-        if not clean or clean == last_text or (last_text and clean.startswith(last_text)
-                                               and len(last_text) > 20):
-            # rolling repeat — keep only what's new
-            if clean.startswith(last_text) and len(clean) > len(last_text):
-                clean = clean[len(last_text):].strip()
-                words = [w for w in words if w["s"] >= start - 0.01] if words else []
-            else:
-                continue
-        if not clean:
+        if not clean or clean == last_text:
             continue
-        last_text = _TAG.sub("", body).replace("\n", " ").strip()
+        if last_text and len(last_text) > 20 and clean.startswith(last_text):
+            # another rolling shape: the whole previous text, then the news
+            clean = clean[len(last_text):].strip()
+            words = [w for w in words if w["s"] >= start - 0.01] if words else []
+            if not clean:
+                continue
+        last_text = " ".join(_clean_line(ln) for ln in raw if _clean_line(ln))
         segments.append({"start": round(start, 3), "end": round(end, 3),
                          "text": clean, "speaker": None,
                          "words": words or None})

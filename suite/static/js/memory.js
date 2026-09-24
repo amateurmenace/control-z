@@ -22,6 +22,7 @@ const MemoryPage = (() => {
           <span class="badge synth">beta</span>
           <button class="btn" id="mem-bell" title="resurfacings on your threads"
             style="margin-left:auto;display:none">🔔 <span id="mem-bell-n">0</span></button>
+          <span class="cz-resetslot" style="margin-left:auto;display:flex"></span>
         </div>
         <p class="why" style="margin-top:6px;max-width:70ch">
           The record across meetings and years — search every meeting, jump to the
@@ -1103,6 +1104,16 @@ cd - && git worktree remove /tmp/ghp --force && git branch -D gh-pages
     $("#mem-record", el).style.display = "";
   }
 
-  registerPage("memory", el, onshow);
+  /* reset: back to the record's front page — no search, no meeting open
+     (the record itself is untouched) */
+  function reset() {
+    if (!inited) return;
+    $("#mem-q", el).value = "";
+    const res = $("#mem-results", el);
+    res.innerHTML = ""; res.style.display = "none";
+    backToRecord();
+  }
+
+  registerPage("memory", el, onshow, { reset });
   return { onshow };
 })();

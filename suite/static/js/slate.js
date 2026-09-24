@@ -382,10 +382,27 @@ const SlatePage = (() => {
   }
 
   function onshow() {
-    if (!inited) { init(); inited = true; }
+    if (!inited) { init(); inited = true; snapForm(); }
     schedulePreview(true);
   }
 
-  registerPage("slate", el, onshow);
+  /* reset: every field back to how the page first drew it — the design
+     defaults, not a saved look (nothing on disk changes) */
+  let formSnap = null;
+  function snapForm() {
+    formSnap = $$("input, select, textarea", el).map(x => [x, x.type === "checkbox" ? x.checked : x.value]);
+    formSnap.chips = $$(".chips", el).map(g => [g, $$(".chip", g).map(c => c.classList.contains("on"))]);
+  }
+  function reset() {
+    if (!formSnap) return;
+    formSnap.forEach(([x, v]) => { if (x.type === "checkbox") x.checked = v; else x.value = v; });
+    formSnap.chips.forEach(([g, ons]) => $$(".chip", g).forEach((c, i) => c.classList.toggle("on", !!ons[i])));
+    $$("input, select", el).forEach(x => x.dispatchEvent(new Event("input", { bubbles: true })));
+    $("#sl-genmsg", el).textContent = "";
+    const rep = $("#sl-genreport", el); if (rep) { rep.innerHTML = ""; rep.classList.remove("show"); }
+    schedulePreview(true);
+  }
+
+  registerPage("slate", el, onshow, { reset });
   return { onshow };
 })();

@@ -15,9 +15,9 @@ import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from suite.tools.highlighter import (VIDEO_EXTS, _is_session, _lib,
-                                     _load_transcript, _meetings_dir,
-                                     _session_meta, _sidecars)
+from suite.tools.highlighter import (_is_session, _load_transcript,
+                                     _meetings_dir, _session_meta, _sidecars,
+                                     fetched_videos, full_video_for)
 
 # section clips carry a trailing [start-end] range yt-dlp stamps on them —
 # they are pieces of the meeting, not the meeting
@@ -41,8 +41,10 @@ def list_sources() -> List[dict]:
                          "duration": meta["duration"], "session": True,
                          "mtime": d.stat().st_mtime,
                          "video": video_for(str(d)) is not None})
-    for p in sorted(_lib().iterdir()):
-        if p.suffix.lower() not in VIDEO_EXTS or _SECTION.search(p.stem):
+    # every folder a recording can land in (Highlighter's, the Downloads
+    # folder the Grabber fetches into) — a read file is a read file
+    for p in sorted(fetched_videos()):
+        if _SECTION.search(p.stem):
             continue
         sc, _, _ = _sidecars(str(p))
         if not sc.exists():
@@ -77,8 +79,5 @@ def video_for(source: str) -> Optional[str]:
         return str(p)
     if not p.is_dir():
         return None
-    for f in sorted(_lib().iterdir()):
-        if f.suffix.lower() in VIDEO_EXTS and f"[{p.name}]" in f.name \
-                and not _SECTION.search(f.stem):
-            return str(f)
-    return None
+    f = full_video_for(p.name)
+    return str(f) if f else None

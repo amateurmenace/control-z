@@ -22,6 +22,7 @@ from .kit import segments as kit_segments
 def slug(text: str, limit: int = 60) -> str:
     s = re.sub(r"[^\w\s-]", "", str(text)).strip().lower()
     s = re.sub(r"[\s_]+", "-", s)
+    s = re.sub(r"-{2,}", "-", s)      # "Meeting - May 12" is one break, not three
     return (s[:limit].rstrip("-")) or "program"
 
 
@@ -76,25 +77,73 @@ def transcript_text(source: str, max_chars: int = 400_000) -> str:
     return "\n".join(out)
 
 
-def assemble(source: str, kit: dict, rendered: List[dict],
-             thumbs: Optional[List[dict]] = None,
-             out_root: Optional[str] = None) -> dict:
-    """Copy every produced asset into one named folder + zip it."""
+def kit_name(kit: dict) -> str:
+    """`<date>-<title-slug>` — the stem every file in a kit shares."""
     meta = kit.get("meta", {}) or {}
     name = slug(meta.get("title", "")) or "program"
     if meta.get("date"):
-        name = f"{meta['date']}-{name}"
+        # slugged too: a "/" in a date would nest folders
+        name = f"{slug(str(meta['date']), 20)}-{name}"
+    return name
+
+
+MARKER = ".kit-source"
+
+
+def kit_dir(kit: dict, out_root: Optional[str] = None,
+            source: Optional[str] = None) -> Path:
+    """The ONE folder a meeting's kit lives in: renders land straight in
+    its clips/ and thumbs/, the bundle adds the words and zips it.
+
+    Two meetings can share a title and a date (or both be untitled): the
+    folder remembers whose it is (MARKER), and a different meeting gets
+    `…-kit-2` rather than wiping the first one's clips."""
     root = Path(out_root) if out_root else media_dir("publisher")
-    kdir = root / f"{name}-kit"
-    if kdir.exists():
-        shutil.rmtree(kdir)
-    (kdir / "clips").mkdir(parents=True)
-    (kdir / "thumbs").mkdir()
+    base = f"{kit_name(kit)}-kit"
+    if not source:
+        return root / base
+    for k in range(1, 50):
+        cand = root / (base if k == 1 else f"{base}-{k}")
+        try:
+            owner = (cand / MARKER).read_text().strip()
+        except OSError:
+            owner = None
+        if owner is None or owner == str(source):
+            return cand          # free (or pre-marker, first come), or ours
+    return root / f"{base}-{abs(hash(str(source))) % 10**6}"
+
+
+def claim(kdir: Path, source: str):
+    """Mark the folder as this meeting's (the render job calls this)."""
+    kdir.mkdir(parents=True, exist_ok=True)
+    (kdir / MARKER).write_text(str(source))
+
+
+def assemble(source: str, kit: dict, rendered: List[dict],
+             thumbs: Optional[List[dict]] = None,
+             out_root: Optional[str] = None) -> dict:
+    """Finish the kit folder + zip it. Renders already inside the folder
+    (the render job writes there) stay put under their own names; anything
+    rendered elsewhere (an older kit) is copied in."""
+    name = kit_name(kit)
+    kdir = kit_dir(kit, out_root, source)
+    claim(kdir, source)
+    (kdir / "clips").mkdir(parents=True, exist_ok=True)
+    (kdir / "thumbs").mkdir(exist_ok=True)
+
+    def inside(p: Path, sub: str) -> bool:
+        try:
+            return p.parent.resolve() == (kdir / sub).resolve()
+        except OSError:
+            return False
 
     files = []
     for i, r in enumerate(rendered, 1):
         src = Path(r.get("out") or r.get("path", ""))
         if not src.is_file():
+            continue
+        if inside(src, "clips"):
+            files.append(str(src))
             continue
         dst = kdir / "clips" / f"{name}-clip{i:02d}-{r['ratio']}{src.suffix}"
         shutil.copy2(src, dst)
@@ -102,6 +151,9 @@ def assemble(source: str, kit: dict, rendered: List[dict],
     for i, r in enumerate(thumbs or [], 1):
         src = Path(r.get("out") or r.get("path", ""))
         if not src.is_file():
+            continue
+        if inside(src, "thumbs"):
+            files.append(str(src))
             continue
         dst = kdir / "thumbs" / f"{name}-thumb{i:02d}-{r['ratio']}.png"
         shutil.copy2(src, dst)
@@ -113,8 +165,15 @@ def assemble(source: str, kit: dict, rendered: List[dict],
     (kdir / "kit.json").write_text(json.dumps(kit, indent=1))
     files += [str(kdir / "copy.md"), str(kdir / "kit.json")]
 
-    zip_path = shutil.make_archive(str(kdir), "zip",
-                                   root_dir=kdir.parent, base_dir=kdir.name)
+    # the ownership marker is bookkeeping, not part of what's handed off
+    marker = (kdir / MARKER).read_text() if (kdir / MARKER).exists() else None
+    (kdir / MARKER).unlink(missing_ok=True)
+    try:
+        zip_path = shutil.make_archive(str(kdir), "zip",
+                                       root_dir=kdir.parent, base_dir=kdir.name)
+    finally:
+        if marker is not None:
+            (kdir / MARKER).write_text(marker)
     return {"dir": str(kdir), "zip": zip_path, "files": files,
             "clips": sum(1 for f in files if "/clips/" in f),
             "thumbs": sum(1 for f in files if "/thumbs/" in f)}

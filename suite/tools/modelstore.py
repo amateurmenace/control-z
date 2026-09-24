@@ -69,6 +69,15 @@ def register_modelstore(app, jobs, frames):
             stencil_rt["sam2"] = True
         except ImportError:
             pass
+        # the signed app's road: its own runtime, driven as a helper
+        try:
+            from .stencil import runtime_status
+            st = runtime_status()
+            stencil_rt["mode"] = st.get("mode")
+            stencil_rt["available"] = bool(st.get("available"))
+        except Exception:
+            stencil_rt["available"] = bool(stencil_rt["torch"] and
+                                           stencil_rt["sam2"])
 
         return {
             "store": str(store),

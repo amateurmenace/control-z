@@ -1,9 +1,13 @@
-/* Community Interpreter — every read meeting, carried across.
-   Open anything Highlighter has read: pick languages, one queue job lands
-   timed .srt/.vtt tracks beside the meeting in the seven panel languages
-   (Simple English first-class). Provenance is UI on every track; every
-   line takes one tap to flag into the review queue; corrections come back
-   through the queue and rewrite the track in place. */
+/* Community Interpreter — a meeting's captions, in the languages your
+   town speaks.
+
+   Open any meeting Highlighter has read. Pick languages (seven ride the
+   panel, Simple English first-class); one queue job writes timed subtitle
+   files (.srt + .vtt) beside the meeting. Every track says it's AI and
+   which engine made it; every line takes one tap to flag for a fluent
+   reviewer, and a correction rewrites the track in place. The page walks
+   it as three steps — choose, check, download — and says at the top what
+   it's for and what you get. */
 
 const InterpreterPage = (() => {
   const T = toolById("interpreter");
@@ -16,28 +20,26 @@ const InterpreterPage = (() => {
     <div class="mediabar">
       <span class="toolname"><i>Community Interpreter</i> · carries it across</span>
       <span class="beta-chip" title="beta — AI translation; every track says so, every line takes one tap to flag">beta</span>
-      <input type="text" id="itp-path" spellcheck="false"
-        placeholder="/path/to/program.mp4 — or a Highlighter session folder"
-        style="flex:1;min-width:200px;background:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12px;font-family:var(--mono);color:var(--cream)">
-      <button class="btn" id="itp-open" style="width:auto">Open</button>
-      <button class="btn" id="itp-browse" style="width:auto">Browse…</button>
+      <span class="clipmeta" id="itp-title" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <button class="btn" id="itp-back" style="width:auto;display:none">← meetings</button>
     </div>
     <div class="ws-body">
-      <div class="ws-center" id="itp-center" style="overflow-y:auto;padding:16px 20px"></div>
+      <div class="ws-center" id="itp-center" style="overflow-y:auto;padding:18px 22px 40px"></div>
       <div class="inspector">
         <div class="insp-head"><h2>Interpreter</h2></div>
         <div class="insp-sec">
-          <span class="tag">the engine</span>
-          <div class="hint" id="itp-engine">—</div>
+          <span class="tag">the translation engine</span>
+          <div class="hint" id="itp-engine" style="line-height:1.55">—</div>
         </div>
         <div class="insp-sec" id="itp-glossbox">
-          <span class="tag">glossary</span>
-          <div class="hint">do-not-translate names + vetted civic terms — applied on every pass</div>
+          <span class="tag">your town's word list</span>
+          <div class="hint">names that must never be translated, and the right words for civic
+            terms — used on every translation</div>
           <div id="itp-gloss"></div>
         </div>
         <div class="insp-sec">
-          <span class="tag">review queue <span id="itp-qcount"></span></span>
-          <div class="hint">flagged lines, every language, every meeting</div>
+          <span class="tag">lines waiting for a reviewer <span id="itp-qcount"></span></span>
+          <div class="hint">flagged lines from every language and meeting — a fluent speaker fixes them here</div>
           <div id="itp-queue"></div>
         </div>
         <div class="report" id="itp-report"></div>
@@ -48,7 +50,7 @@ const InterpreterPage = (() => {
   const S = { source: null, meta: null, video: null, langs: {}, nSeg: 0,
               origin: null, session: false, status: null, selected: new Set(),
               view: null, cues: [], glossary: null, glossLang: "es",
-              town: "brookline", queue: [] };
+              town: "brookline", queue: [], url: null };
 
   const fmtT = t => { t = Math.max(0, Math.floor(t)); return t >= 3600
     ? `${Math.floor(t / 3600)}:${String(Math.floor(t % 3600 / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`
@@ -57,64 +59,122 @@ const InterpreterPage = (() => {
   const trackURL = (code, fmt, dl) => `/api/interpreter/track?path=${encodeURIComponent(S.source)}` +
     `&lang=${code}&fmt=${fmt || "vtt"}${dl ? "&dl=1" : ""}&r=${(S.langs[code] || {}).created || 0}`;
 
-  /* ---------- open + the shelf ---------- */
+  /* the engine, in one sentence and one button */
+  function engineHTML() {
+    const eng = S.status && S.status.engine;
+    if (!eng) return "";
+    if (eng.engine) return `<div class="itp-eng ok">✓ ${esc(eng.sentence)}</div>`;
+    return `<div class="itp-eng need">
+      <b>Translation needs an engine.</b> The simplest is an AI key (Anthropic, OpenAI or Google
+      Gemini — Gemini has a free tier); only this meeting's words are sent, only when you press Translate.
+      <div class="cz-row"><button class="btn primary" id="itp-addkey" style="width:auto;color:#fff">🔑 Add an AI key</button>
+        <span class="hint">or install an on-device model by hand (Models page) — no key at all</span></div>
+    </div>`;
+  }
+  function wireEngine(box) {
+    const b = $("#itp-addkey", box);
+    if (b) b.onclick = async () => {
+      if (await czKeyModal({ feature: "Translating captions" })) { await loadStatus(); S.source ? renderMain() : shelf(); }
+    };
+  }
+
+  /* ---------- the landing: what this is, how it goes, what to open ---------- */
+  async function shelf() {
+    S.source = null;
+    $("#itp-title", el).textContent = "";
+    $("#itp-back", el).style.display = "none";
+    const box = $("#itp-center", el);
+    box.innerHTML = `
+      <div class="cz-hero" style="--acc:${T.acc}">
+        <div class="tag">community interpreter</div>
+        <h1>Your meeting's captions, <span class="mark">in the languages your town speaks</span>.</h1>
+        <p>Interpreter translates a meeting's captions into Spanish, Simple English, Chinese,
+          Portuguese, Haitian Creole, Vietnamese and Russian, and saves them as subtitle files —
+          upload them to YouTube, play them on your channel, or post them with the video. The
+          translations are AI and say so; any line can be flagged for a fluent neighbor to fix,
+          and the fix goes straight into the file.</p>
+        <div class="cz-how">
+          <div class="cz-how-step"><span class="cz-how-n">1</span><b>Pick a meeting</b>
+            one that has words — read it in Highlighter first</div>
+          <div class="cz-how-step"><span class="cz-how-n">2</span><b>Choose languages</b>
+            as many as you like — one job does them all</div>
+          <div class="cz-how-step"><span class="cz-how-n">3</span><b>Check the lines</b>
+            watch it with subtitles on; flag anything that reads wrong</div>
+          <div class="cz-how-step"><span class="cz-how-n">4</span><b>Download subtitles</b>
+            .srt for YouTube, .vtt for web players — timed to the video</div>
+        </div>
+        <div class="cz-outs">${(S.status ? S.status.languages : []).map(l =>
+          `<span class="cz-out" title="${esc(l.english)}">${esc(l.name)}</span>`).join("")}
+          <span class="cz-out">.srt</span><span class="cz-out">.vtt</span></div>
+      </div>
+      <div style="margin-top:14px">${engineHTML()}</div>
+      <div class="tag" style="margin-top:18px">meetings with words — newest first</div>
+      <div id="itp-shelf" class="cz-shelf"><div class="hint">looking…</div></div>
+      <div class="cz-pick">
+        <input type="text" id="itp-path" spellcheck="false"
+          placeholder="…or paste a path — a video file with its transcript, or a Highlighter meeting folder">
+        <button class="btn" id="itp-open" style="width:auto">Open</button>
+        <button class="btn" id="itp-browse" style="width:auto">Browse…</button>
+      </div>`;
+    wireEngine(box);
+    $("#itp-open", box).onclick = () => open($("#itp-path", box).value.trim());
+    $("#itp-path", box).addEventListener("keydown", e => {
+      if (e.key === "Enter") open($("#itp-path", box).value.trim()); });
+    $("#itp-browse", box).onclick = () => browseForPath(open);
+    let rows = [];
+    try { rows = (await api("/api/interpreter/library")).rows || []; } catch (e) {}
+    if (S.source) return;   // an open beat us here — never clobber it
+    const sh = $("#itp-shelf", box);
+    if (!sh) return;
+    sh.innerHTML = rows.length ? rows.slice(0, 24).map(r => `
+      <button class="cz-shelf-item" style="--acc:${T.acc}" data-open="${esc(r.source)}">
+        <b title="${esc(r.title)}">${esc(r.title)}</b>
+        <span>${r.duration ? fmtT(r.duration) + " · " : ""}${r.video ? "video on this computer" : "words only"}</span>
+      </button>`).join("")
+      : `<div class="hint">none yet — read a meeting in <a href="#" data-go="highlighter">Highlighter</a> and it appears here</div>`;
+    $$("[data-open]", sh).forEach(b => b.onclick = () => open(b.dataset.open));
+    $$("[data-go]", sh).forEach(a => a.onclick = e => { e.preventDefault(); go(a.dataset.go); });
+  }
+
+  /* ---------- open ---------- */
   async function open(path) {
     if (!path) return;
-    $("#itp-path", el).value = path;
     const box = $("#itp-center", el);
-    box.innerHTML = `<div class="hint" style="padding:16px 2px">reading the sidecars…</div>`;
+    box.innerHTML = `<div class="hint" style="padding:16px 2px">reading the meeting…</div>`;
     try {
       const r = await api("/api/interpreter/open", { path });
       S.source = r.source; S.meta = r.meta; S.video = r.video;
       S.langs = r.languages; S.nSeg = r.n_segments; S.origin = r.origin;
-      S.session = r.session;
+      S.session = r.session; S.url = r.url || null;
       S.view = Object.keys(S.langs).find(c => S.langs[c].has) || null;
       S.cues = [];
+      $("#itp-title", el).textContent = S.meta.title || "";
+      $("#itp-back", el).style.display = "";
       renderMain();
       if (S.view) loadCues(S.view);
     } catch (e) {
-      box.innerHTML = `<div class="progmsg err" style="padding:14px 2px">${esc(e.message)}</div>`;
+      box.innerHTML = `<div class="cz-step current" style="--acc:${T.acc};max-width:640px">
+        <div class="cz-step-head"><span class="cz-step-num">!</span><h2>Can't open this one yet</h2></div>
+        <div class="cz-step-sub">${esc(e.message)}</div>
+        <div class="cz-row"><button class="btn" id="itp-hl" style="width:auto">Open it in Highlighter</button>
+          <button class="btn" id="itp-back2" style="width:auto">← back</button></div></div>`;
+      $("#itp-hl", box).onclick = () => go("highlighter", { openPath: path });
+      $("#itp-back2", box).onclick = shelf;
     }
   }
 
-  async function shelf() {
-    const box = $("#itp-center", el);
-    let rows = [];
-    try { rows = (await api("/api/interpreter/library")).rows || []; } catch (e) {}
-    if (S.source) return;   // an open beat us here — never clobber it
-    const items = rows.slice(0, 24).map(r => `
-      <div class="batchrow" data-open="${esc(r.source)}" role="button" tabindex="0"
-        aria-label="open ${esc(r.title)}" style="cursor:pointer">
-        <span class="bname" title="${esc(r.source)}">${esc(r.title)}</span>
-        <span class="bstat">${r.video ? "▮ video" : "words only"}${r.duration ? ` · ${fmtT(r.duration)}` : ""}</span>
-      </div>`).join("");
-    box.innerHTML = `
-      <div class="empty-grain" style="padding:28px 8px;color:var(--cream-dim);max-width:620px">
-        <b>drop a read meeting here</b> — a file with sidecars, or a Highlighter session folder.<br>
-        seven languages ride the panel: Español · Simple English · 中文 · Português · Kreyòl · Tiếng Việt · Русский.
-        every track lands timed (.srt + .vtt), labeled AI, one tap to flag any line.<br><br>
-        <span class="hint">fresh meeting? read it first: Grabber fetches, Highlighter reads, then this desk carries it across.</span>
-      </div>
-      ${rows.length ? `<div class="tag" style="margin-top:10px">read meetings — newest first</div>${items}` : ""}`;
-    $$("[data-open]", box).forEach(b => {
-      b.onclick = () => open(b.dataset.open);
-      b.onkeydown = e => { if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault(); open(b.dataset.open); } };
-    });
-  }
-
-  /* ---------- the loaded view ---------- */
-  function chipHTML(l) {
+  /* ---------- the loaded view: three steps ---------- */
+  function langCard(l) {
     const st = S.langs[l.code] || {};
     const on = S.selected.has(l.code);
-    const dot = st.has ? (st.stale ? "⟳" : "✓") : "·";
-    const flags = st.n_flags ? ` ⚑${st.n_flags}` : "";
-    return `<button class="chip${on ? " on" : ""}" data-lang="${l.code}"
-      aria-pressed="${on}" aria-label="${esc(l.name)} — ${st.has
-        ? (st.stale ? "track stale" : "track ready") : "no track yet"}${on ? ", selected" : ""}"
-      style="${on ? `border-color:${T.acc};color:var(--cream)` : ""}"
-      title="${st.has ? (st.stale ? "track exists but the transcript changed — re-run" : "track ready") : "no track yet — select and carry across"}">
-      ${dot} ${esc(l.name)}${flags}</button>`;
+    const state = st.has ? (st.stale ? "out of date — the words changed" : "✓ done") : "not yet";
+    return `<button class="itp-lang${on ? " on" : ""}${st.has ? (st.stale ? " stale" : " has") : ""}"
+      data-lang="${l.code}" aria-pressed="${on}"
+      aria-label="${esc(l.english)} — ${state}${on ? ", selected" : ""}">
+      <span class="itp-lname">${esc(l.name)}</span>
+      <span class="itp-leng">${esc(l.english)}</span>
+      <span class="itp-lstate">${state}${st.n_flags ? ` · ⚑ ${st.n_flags}` : ""}</span>
+    </button>`;
   }
 
   function provenanceHTML(code) {
@@ -125,15 +185,13 @@ const InterpreterPage = (() => {
     const bits = [
       `<b>AI translation — beta</b>`,
       esc(st.model || "?") + where,
-      `glossary ${esc(g.town || "?")} v${g.version ?? "?"}`,
+      `word list ${esc(g.town || "?")} v${g.version ?? "?"}`,
       esc(st.review || "unreviewed"),
     ];
-    if (st.n_fallback) bits.push(`${st.n_fallback} lines kept English`);
-    if (st.n_miss) bits.push(`${st.n_miss} glossary misses`);
+    if (st.n_fallback) bits.push(`${st.n_fallback} lines kept in English`);
+    if (st.n_miss) bits.push(`${st.n_miss} word-list misses`);
     if (st.n_corrected) bits.push(`✓ ${st.n_corrected} corrected`);
-    return `<div style="border:1px solid var(--line);border-left:3px solid ${T.acc};
-      border-radius:7px;padding:7px 10px;margin:8px 0;font-size:12px;color:var(--cream-dim)">
-      ${bits.join(" · ")}</div>`;
+    return `<div class="itp-prov">${bits.join(" · ")}</div>`;
   }
 
   function renderMain() {
@@ -150,46 +208,70 @@ const InterpreterPage = (() => {
         <track kind="subtitles" label="English (original)" srclang="en" src="${trackURL("en")}">
         ${avail.map(l => `<track kind="subtitles" label="${esc(l.name)}" srclang="${esc(l.srclang)}"
           src="${trackURL(l.code)}">`).join("")}
-      </video>
-      <div class="hint">tracks ride the player — pick a language in its caption menu, or read the rail below</div>`
-      : `<div class="hint" style="margin-top:10px">no local recording — the tracks still write and export;
-         fetch the full video in Highlighter to watch them ride the player</div>`;
-
-    const rail = !avail.length ? "" : `
-      <div class="tag" style="margin-top:18px">the track — read it line by line</div>
-      <div class="chips" style="margin:6px 0">
-        ${avail.map(l => `<button class="chip${S.view === l.code ? " on" : ""}" data-view="${l.code}"
-          aria-pressed="${S.view === l.code}" aria-label="read the ${esc(l.name)} track"
-          style="${S.view === l.code ? `border-color:${T.acc};color:var(--cream)` : ""}">${esc(l.name)}</button>`).join("")}
-      </div>
-      <div id="itp-prov">${S.view ? provenanceHTML(S.view) : ""}</div>
-      <div id="itp-cues" style="flex:0 0 auto;max-height:420px;overflow-y:auto;border:1px solid var(--line);border-radius:9px"></div>
-      <div class="tag" style="margin-top:16px">exports — timed, labeled, ready for the player or the plant</div>
-      ${avail.map(l => `<div class="batchrow"><span class="bname">${esc(l.name)}</span>
-        <span class="bstat">
-          <a href="${trackURL(l.code, "srt", 1)}" style="color:var(--cream-dim)">SRT ⇩</a> ·
-          <a href="${trackURL(l.code, "vtt", 1)}" style="color:var(--cream-dim)">VTT ⇩</a>
-        </span>
-        <button data-rev="${l.code}">Reveal</button></div>`).join("")}`;
+      </video>`
+      : `<div class="itp-novideo">No video on this computer — the subtitles still write and
+          export. ${S.url ? `<button class="btn" id="itp-getvid" style="width:auto;margin-left:6px">⬇ Download it to watch them play</button>
+          <div id="itp-getprog"></div>` : ""}</div>`;
 
     box.innerHTML = `
-      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
-        <h1 style="font-size:19px">${esc(S.meta.title)}</h1>
-        <span class="hint">${S.nSeg} segments · words from ${esc(S.origin || "the transcript")}${S.meta.duration ? ` · ${fmtT(S.meta.duration)}` : ""}</span>
+      <div class="pb-kithead">
+        <div style="min-width:0">
+          <div class="tag">subtitles in other languages</div>
+          <h1 style="font-size:21px;margin-top:3px">${esc(S.meta.title)}</h1>
+          <div class="hint">${S.nSeg} lines · words from ${esc(S.origin || "the transcript")}${S.meta.duration ? ` · ${fmtT(S.meta.duration)}` : ""}</div>
+        </div>
+        <div class="pb-kitacts">${czNextHTML("interpreter", S.source, { isFile: !S.session })}</div>
       </div>
-      <div class="tag" style="margin-top:14px">the languages — select, then carry across</div>
-      <div class="chips" style="margin:6px 0">${langs.map(chipHTML).join("")}</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
-        <button class="btn primary" id="itp-run" style="width:auto" ${nSel && engineOK ? "" : "disabled"}>
-          ▶ Carry across${nSel ? ` (${nSel})` : ""}</button>
-        <label class="hint" style="display:flex;align-items:center;gap:5px">
-          <input type="checkbox" id="itp-fresh"> re-run even if cached</label>
-        <span class="hint" id="itp-jobstat"></span>
-      </div>
-      ${engineOK ? "" : `<div class="progmsg err" style="margin:8px 0">${esc(S.status ? S.status.engine.sentence : "…")}</div>`}
-      ${player}
-      ${rail}`;
+      ${engineOK ? "" : `<div style="margin-top:12px">${engineHTML()}</div>`}
 
+      <div class="cz-step ${avail.length ? "done" : "current"}" style="--acc:${T.acc}">
+        <div class="cz-step-head"><span class="cz-step-num">${avail.length ? "✓" : "1"}</span>
+          <h2>Choose languages</h2>
+          <span class="cz-step-state">${avail.length} of ${langs.length} done</span></div>
+        <div class="cz-step-sub">Tap every language you want, then Translate. Languages already done
+          are marked ✓ — pick them again only to redo them.</div>
+        <div class="itp-langs">${langs.map(langCard).join("")}</div>
+        <div class="cz-row">
+          <button class="btn primary cz-bigbtn" id="itp-run" style="color:#fff" ${nSel ? "" : "disabled"}>
+            ${nSel ? `▶ Translate ${nSel} language${nSel === 1 ? "" : "s"}` : "Pick at least one language"}</button>
+          <label class="hint" style="display:flex;align-items:center;gap:5px">
+            <input type="checkbox" id="itp-fresh"> redo ones already done</label>
+          <span class="hint" id="itp-jobstat"></span>
+        </div>
+        <div id="itp-prog"></div>
+      </div>
+
+      <div class="cz-step ${avail.length ? "current" : ""}" style="--acc:${T.acc}">
+        <div class="cz-step-head"><span class="cz-step-num">2</span><h2>Watch and check</h2></div>
+        <div class="cz-step-sub">${avail.length ? `Pick a language to read it line by line. Click a line to
+          jump the video there; tap ⚑ on anything that reads wrong — it goes to the reviewer list on the right.`
+          : "Once a language is translated, it shows up here to read and check."}</div>
+        ${player}
+        ${avail.length ? `
+        <div class="chips" style="margin:10px 0 6px">
+          ${avail.map(l => `<button class="chip${S.view === l.code ? " on" : ""}" data-view="${l.code}"
+            aria-pressed="${S.view === l.code}" aria-label="read the ${esc(l.english)} subtitles"
+            style="${S.view === l.code ? `border-color:${T.acc};background:${T.acc};color:#fff` : ""}">${esc(l.name)}</button>`).join("")}
+        </div>
+        <div id="itp-prov">${S.view ? provenanceHTML(S.view) : ""}</div>
+        <div id="itp-cues" class="itp-cues"></div>` : ""}
+      </div>
+
+      <div class="cz-step ${avail.length ? "" : ""}" style="--acc:${T.acc}">
+        <div class="cz-step-head"><span class="cz-step-num">3</span><h2>Download the subtitles</h2></div>
+        <div class="cz-step-sub">Each language is two files, timed to the video. <b>.srt</b> — upload it on
+          YouTube (Subtitles → Add language → Upload file). <b>.vtt</b> — for web players and most
+          playout systems. They're also saved beside the meeting.</div>
+        ${avail.length ? avail.map(l => `<div class="batchrow"><span class="bname">${esc(l.name)} <span class="hint" style="display:inline">${esc(l.english)}</span></span>
+          <span class="bstat">
+            <a href="${trackURL(l.code, "srt", 1)}" class="itp-dl">⇩ .srt</a>
+            <a href="${trackURL(l.code, "vtt", 1)}" class="itp-dl">⇩ .vtt</a>
+          </span>
+          <button data-rev="${l.code}">Show in Finder</button></div>`).join("")
+          : `<div class="hint" style="margin-top:6px">nothing to download yet</div>`}
+      </div>`;
+
+    wireEngine(box);
     $$("[data-lang]", box).forEach(b => b.onclick = () => {
       const c = b.dataset.lang;
       S.selected.has(c) ? S.selected.delete(c) : S.selected.add(c);
@@ -199,8 +281,24 @@ const InterpreterPage = (() => {
     $$("[data-rev]", box).forEach(b => b.onclick = () =>
       api("/api/media/reveal", { path: trackPathGuess(b.dataset.rev) })
         .catch(e => toast(e.message, true)));
-    $("#itp-run", box) && ($("#itp-run", box).onclick = translateJob);
+    $("#itp-run", box).onclick = translateJob;
+    const gv = $("#itp-getvid", box);
+    if (gv) gv.onclick = fetchVideo;
     renderCues();
+  }
+
+  async function fetchVideo() {
+    const b = $("#itp-getvid", el);
+    b.disabled = true;
+    try {
+      const job = await api("/api/highlighter/fetch", { url: S.url, quality: "720" });
+      const p = czProgress($("#itp-getprog", el), { label: "downloading the recording", acc: T.acc });
+      watchJob(job.id, j => p.update(j));
+      const done = await jobDone(job.id);
+      p.finish(done);
+      if (done.status === "done") open(S.source);
+      else { b.disabled = false; if (done.status === "error") toast(done.error, true); }
+    } catch (e) { b.disabled = false; toast(e.message, true); }
   }
 
   /* the srt lands beside the source — same shape the server writes */
@@ -217,8 +315,10 @@ const InterpreterPage = (() => {
     $$("[data-view]", el).forEach(b => {
       const on = b.dataset.view === code;
       b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
       b.style.borderColor = on ? T.acc : "";
-      b.style.color = on ? "var(--cream)" : "";
+      b.style.background = on ? T.acc : "";
+      b.style.color = on ? "#fff" : "";
     });
     const video = $("#itp-video", el);
     if (video) {
@@ -245,21 +345,19 @@ const InterpreterPage = (() => {
     }
     box.innerHTML = S.cues.map((c, i) => {
       const badges = [
-        c.fallback ? `<span class="badge" title="the model dropped this line — the English stayed, honestly">kept English</span>` : "",
-        c.miss ? `<span class="badge" title="do-not-translate terms lost in this line">glossary: ${esc(c.miss.join(", "))}</span>` : "",
+        c.fallback ? `<span class="badge" title="the model dropped this line — the English stayed, honestly">kept in English</span>` : "",
+        c.miss ? `<span class="badge" title="word-list terms lost in this line">word list: ${esc(c.miss.join(", "))}</span>` : "",
         c.corrected ? `<span class="badge" title="a reviewer corrected this line">✓ corrected</span>` : "",
       ].join("");
-      return `<div data-cue="${i}" style="display:flex;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);
-        ${c.flag ? "background:rgba(233,196,106,.06);" : ""}cursor:pointer" title="click to jump the player">
-        <span style="font-family:var(--mono);font-size:11px;color:var(--cream-dim);min-width:44px;padding-top:2px">${fmtT(c.start)}</span>
+      return `<div data-cue="${i}" class="itp-cue${c.flag ? " flagged" : ""}" title="click to jump the video here">
+        <span class="itp-cuet">${fmtT(c.start)}</span>
         <span style="flex:1;font-size:13px">${esc(c.text)}
-          <span style="display:block;font-size:11px;color:var(--cream-dim);margin-top:1px">${esc(c.src || "")}</span>
+          <span class="itp-cuesrc">${esc(c.src || "")}</span>
           ${badges}</span>
         <button data-flag="${i}" aria-pressed="${!!c.flag}"
           aria-label="${c.flag ? `unflag line ${i + 1}` : `flag line ${i + 1} for review`}"
-          title="${c.flag ? "flagged — tap to unflag" : "flag this line for review"}"
-          style="background:none;border:none;cursor:pointer;font-size:14px;align-self:flex-start;
-          color:${c.flag ? "var(--amber, #E9C46A)" : "var(--cream-dim)"}">⚑</button>
+          title="${c.flag ? "flagged — tap to unflag" : "flag this line for a reviewer"}"
+          class="itp-flag">⚑</button>
       </div>`;
     }).join("");
     $$("[data-cue]", box).forEach(row => row.onclick = e => {
@@ -279,7 +377,7 @@ const InterpreterPage = (() => {
         (S.langs[S.view] || {}).n_flags = r.n_flags;
         renderCues();
         loadQueue();
-        toast(on ? "flagged — it joins the review queue" : "unflagged");
+        toast(on ? "flagged — it's in the reviewer list" : "unflagged");
       } catch (err) { toast(err.message, true); }
     });
   }
@@ -291,13 +389,13 @@ const InterpreterPage = (() => {
       const job = await api("/api/interpreter/translate",
         { path: S.source, langs, town: S.town,
           fresh: $("#itp-fresh", el) ? $("#itp-fresh", el).checked : false });
-      const p = czProgress($(".inspector", el), {
-        label: "carrying it across", acc: T.acc });
+      const p = czProgress($("#itp-prog", el), {
+        label: `translating ${langs.length} language${langs.length === 1 ? "" : "s"}`, acc: T.acc });
       watchJob(job.id, j => p.update(j));
       const done = await jobDone(job.id);
       p.finish(done);
       if (done.status === "done") {
-        toast("tracks written — read before it airs");
+        toast("subtitles written — check them before they air");
         S.selected.clear();
         open(S.source);
       } else if (done.status === "error") toast(done.error, true);
@@ -309,9 +407,13 @@ const InterpreterPage = (() => {
     try {
       S.status = await api("/api/interpreter/status");
       const eng = $("#itp-engine", el);
-      eng.innerHTML = esc(S.status.engine.sentence) +
-        (S.status.engine.engine ? "" :
-          " — the page still reads existing tracks and the review queue");
+      eng.innerHTML = S.status.engine.engine
+        ? esc(S.status.engine.sentence)
+        : `no engine yet — <a href="#" id="itp-eng-key">add an AI key</a>, or install an on-device
+           model by hand (Models page). The page still reads existing subtitles and the reviewer list.`;
+      const k = $("#itp-eng-key", el);
+      if (k) k.onclick = async e => { e.preventDefault();
+        if (await czKeyModal({ feature: "Translating captions" })) { await loadStatus(); S.source ? renderMain() : shelf(); } };
       $("#itp-qcount", el).textContent =
         S.status.queue_open ? `· ${S.status.queue_open} open` : "";
       if (!S.glossary) loadGlossary(S.town);
@@ -337,10 +439,10 @@ const InterpreterPage = (() => {
       return `<div style="display:flex;gap:5px;align-items:center;margin-top:4px">
         <span style="font-size:11px;flex:0 0 34%;color:var(--cream-dim);overflow:hidden;text-overflow:ellipsis" title="${esc(t)}">${esc(t)}</span>
         <input type="text" data-term="${esc(t)}" value="${esc(r.text || "")}" placeholder="—"
-          style="flex:1;min-width:0;background:var(--ink);border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--cream)">
-        <button data-vet="${esc(t)}" title="${vetted ? "vetted by a reviewer" : "suggested — not yet vetted"}"
+          style="flex:1;min-width:0;background:#fff;border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--cream)">
+        <button data-vet="${esc(t)}" title="${vetted ? "checked by a fluent reviewer" : "a suggestion — not yet checked"}"
           style="background:none;border:1px solid var(--line);border-radius:5px;cursor:pointer;font-size:10px;padding:2px 5px;
-          color:${vetted ? "var(--ok, #7BA05B)" : "var(--cream-dim)"}">${vetted ? "vetted" : "sugg."}</button>
+          color:${vetted ? "var(--ok, #7BA05B)" : "var(--cream-dim)"}">${vetted ? "checked" : "sugg."}</button>
       </div>`;
     }).join("");
     box.innerHTML = `
@@ -348,24 +450,24 @@ const InterpreterPage = (() => {
         <select id="itp-town">${towns.map(t =>
           `<option value="${esc(t.town)}" ${t.town === g.town ? "selected" : ""}>${esc(t.label)}${t.edited ? " ·edited" : ""}</option>`).join("")}
         </select> <span class="hint" style="display:inline">v${g.version}</span></div>
-      <div class="field"><label>never translate <span class="hint" style="display:inline">one per line</span></label>
+      <div class="field"><label>never translate <span class="hint" style="display:inline">one per line — names, places</span></label>
         <textarea id="itp-keep" rows="4" spellcheck="false"
           style="font-size:11px;font-family:var(--mono)">${esc((g.keep || []).join("\n"))}</textarea></div>
-      <div class="field"><label>terms — renders for
+      <div class="field"><label>civic terms, in
         <select id="itp-glang" style="width:auto">${langs.map(l =>
           `<option value="${l.code}" ${l.code === S.glossLang ? "selected" : ""}>${esc(l.name)}</option>`).join("")}
         </select></label>
         ${rows || `<div class="hint">no terms yet</div>`}
         <div style="display:flex;gap:5px;margin-top:6px">
-          <input type="text" id="itp-newterm" placeholder="new term"
-            style="flex:0 0 34%;min-width:0;background:var(--ink);border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--cream)">
-          <input type="text" id="itp-newrender" placeholder="its ${esc((L(S.glossLang) || {}).name || "")} render"
-            style="flex:1;min-width:0;background:var(--ink);border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--cream)">
+          <input type="text" id="itp-newterm" placeholder="English term"
+            style="flex:0 0 34%;min-width:0;background:#fff;border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--cream)">
+          <input type="text" id="itp-newrender" placeholder="in ${esc((L(S.glossLang) || {}).name || "")}"
+            style="flex:1;min-width:0;background:#fff;border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--cream)">
           <button class="btn" id="itp-addterm" style="width:auto;padding:3px 8px">+</button>
         </div>
       </div>
-      <button class="btn" id="itp-glosssave" style="margin-top:6px">Save glossary</button>
-      <div class="hint" style="margin-top:4px">saves bump the version; the next pass carries it</div>`;
+      <button class="btn" id="itp-glosssave" style="margin-top:6px">Save the word list</button>
+      <div class="hint" style="margin-top:4px">the next translation uses it</div>`;
 
     $("#itp-town", box).onchange = e => loadGlossary(e.target.value);
     $("#itp-glang", box).onchange = e => { S.glossLang = e.target.value; renderGlossary(towns); };
@@ -379,14 +481,14 @@ const InterpreterPage = (() => {
     $$("button[data-vet]", box).forEach(b => b.onclick = () => {
       const t = b.dataset.vet;
       const r = (g.terms[t] || {})[S.glossLang];
-      if (!r || !r.text) { toast("write a render first, then vet it", true); return; }
+      if (!r || !r.text) { toast("write the translation first, then mark it checked", true); return; }
       r.status = r.status === "vetted" ? "suggested" : "vetted";
       renderGlossary(towns);
     });
     $("#itp-addterm", box).onclick = () => {
       const t = $("#itp-newterm", box).value.trim();
       const r = $("#itp-newrender", box).value.trim();
-      if (!t) { toast("name the term first", true); return; }
+      if (!t) { toast("write the English term first", true); return; }
       g.terms[t] = g.terms[t] || {};
       if (r) g.terms[t][S.glossLang] = { text: r, status: "suggested" };
       renderGlossary(towns);
@@ -397,7 +499,7 @@ const InterpreterPage = (() => {
         const r = await api("/api/interpreter/glossary", { town: g.town, data: g });
         S.glossary = r.glossary;
         renderGlossary(r.towns || towns);
-        toast(`glossary v${r.glossary.version} saved — the next pass carries it`);
+        toast(`word list v${r.glossary.version} saved — the next translation uses it`);
       } catch (e) { toast(e.message, true); }
     };
   }
@@ -409,19 +511,19 @@ const InterpreterPage = (() => {
     $("#itp-qcount", el).textContent = items.length ? `· ${items.length} open` : "";
     const box = $("#itp-queue", el);
     if (!items.length) {
-      box.innerHTML = `<div class="hint" style="margin-top:4px">nothing flagged — the panel is quiet</div>`;
+      box.innerHTML = `<div class="hint" style="margin-top:4px">nothing flagged — all quiet</div>`;
       return;
     }
     box.innerHTML = items.slice(0, 30).map((r, k) => `
-      <div style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-top:6px;font-size:11px">
+      <div style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-top:6px;font-size:11px;background:#fff">
         <div style="color:var(--cream-dim)">${esc(r.title || r.source)} · ${esc((L(r.lang) || {}).name || r.lang)} · line ${r.i + 1}</div>
         <div style="margin:3px 0">${esc(r.text)}</div>
         <div style="color:var(--cream-dim)">${esc(r.src)}</div>
-        <textarea data-fix="${k}" rows="2" placeholder="correction — leave empty to dismiss"
-          style="width:100%;margin-top:4px;background:var(--ink);border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--cream)">${esc(r.text)}</textarea>
+        <textarea data-fix="${k}" rows="2" placeholder="the correct line — leave it as is to dismiss"
+          style="width:100%;margin-top:4px;background:var(--ink-2);border:1px solid var(--line);border-radius:5px;padding:3px 6px;font-size:11px;color:var(--cream)">${esc(r.text)}</textarea>
         <div style="display:flex;gap:6px;margin-top:4px">
-          <button class="btn" data-apply="${k}" style="width:auto;padding:2px 8px;font-size:11px">Apply correction</button>
-          <button class="btn" data-dismiss="${k}" style="width:auto;padding:2px 8px;font-size:11px">Dismiss</button>
+          <button class="btn" data-apply="${k}" style="width:auto;padding:2px 8px;font-size:11px">Save the fix</button>
+          <button class="btn" data-dismiss="${k}" style="width:auto;padding:2px 8px;font-size:11px">It's fine</button>
         </div>
       </div>`).join("");
     const act = async (k, withFix) => {
@@ -431,7 +533,7 @@ const InterpreterPage = (() => {
         const res = await api("/api/interpreter/resolve",
           { source: r.source, lang: r.lang, i: r.i,
             correction: (withFix && fix !== r.text) ? fix : "" });
-        toast(res.applied ? "corrected — the track rewrote itself" : "dismissed");
+        toast(res.applied ? "fixed — the subtitle file rewrote itself" : "dismissed");
         loadQueue();
         if (S.source === r.source && S.view === r.lang) { loadCues(S.view); open(S.source); }
       } catch (e) { toast(e.message, true); }
@@ -443,21 +545,25 @@ const InterpreterPage = (() => {
   /* ---------- wire up ---------- */
   let inited = false;
   function init() {
-    $("#itp-open", el).onclick = () => open($("#itp-path", el).value.trim());
-    $("#itp-path", el).addEventListener("keydown", e => {
-      if (e.key === "Enter") open($("#itp-path", el).value.trim()); });
-    $("#itp-browse", el).onclick = () => browseForPath(open);
+    $("#itp-back", el).onclick = shelf;
     wireDropZone($("#itp-center", el), open);
   }
 
-  function onshow(arg) {
-    if (!inited) { init(); inited = true; shelf(); }
-    loadStatus();
+  async function onshow(arg) {
+    const first = !inited;
+    if (!inited) { init(); inited = true; }
+    await loadStatus();
     loadQueue();
     if (arg && arg.openPath) open(arg.openPath);
-    else if (S.source) { /* keep the loaded meeting */ }
+    else if (first || !S.source) shelf();
   }
 
-  registerPage("interpreter", el, onshow);
+  function reset() {
+    Object.assign(S, { source: null, meta: null, video: null, langs: {}, nSeg: 0,
+      origin: null, session: false, selected: new Set(), view: null, cues: [], url: null });
+    if (inited) shelf();
+  }
+
+  registerPage("interpreter", el, onshow, { reset });
   return { onshow };
 })();

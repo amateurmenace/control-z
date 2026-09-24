@@ -529,6 +529,18 @@ const IndexPage = (() => {
     if (!$("#ix-q", el).value.trim()) browse();
   }
 
-  registerPage("index", el, onshow);
+  /* reset: no query, nothing ticked, every kind shown — the catalog as
+     it opens (the catalog itself is on disk and untouched) */
+  function reset() {
+    if (!inited) return;
+    $("#ix-q", el).value = "";
+    S.picked = new Set();
+    S.filter = "all";
+    selMeta();
+    const rep = $("#ix-report", el); if (rep) { rep.innerHTML = ""; rep.classList.remove("show"); }
+    browse();
+  }
+
+  registerPage("index", el, onshow, { reset });
   return { onshow };
 })();

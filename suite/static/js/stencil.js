@@ -420,43 +420,66 @@ const StencilPage = (() => {
     dens.forEach(b => b.onclick = () => { applyDensity(b.dataset.d); setDensity("stencil", b.dataset.d); });
     applyDensity(density("stencil"));
 
+    const warn = $("#st-runtimewarn", el);   // both branches below speak through it
     api("/api/stencil/status").then(st => {
       ST.runtime = st;
-      const warn = $("#st-runtimewarn", el);
       if (!st.available) {
         warn.style.display = "";
         $("#st-runtimehint", el).textContent = st.hint;
         // a side note is not enough for a tool that cannot run: say it in
         // the middle of the page, with the button that fixes it
-        const frozen = /can't download it yet/.test(st.hint || "");
         el.insertAdjacentHTML("beforeend", `
           <div id="st-gate" style="position:absolute;inset:0;z-index:40;display:flex;
                align-items:center;justify-content:center;background:rgba(35,38,29,.45);backdrop-filter:blur(3px)">
             <div style="background:var(--ink);border:1.5px solid var(--cream);border-radius:14px;
-                 box-shadow:7px 7px 0 rgba(35,38,29,.28);max-width:480px;padding:22px 24px">
+                 box-shadow:7px 7px 0 rgba(35,38,29,.28);max-width:500px;padding:22px 24px">
               <h2 style="margin:0 0 8px">Stencil needs its brain first.</h2>
               <p style="font-size:13.5px;color:var(--cream-dim);line-height:1.6">Click-to-matte runs on
-                <b>PyTorch + Meta's SAM 2</b> — a one-time ~1&nbsp;GB install. Without it, clicks can't
-                cut a mask and this page can't do its job. Everything else in the suite works without it.</p>
-              ${frozen ? `<p style="font-size:12.5px;color:var(--cream-dim);margin-top:8px">${esc(st.hint)}</p>`
-                : `<button class="btn cta bright" id="st-install" style="width:100%;margin-top:12px">
-                     ⬇ Install the runtime (torch + SAM 2, ~1 GB)</button>
-                   <div class="progmsg" id="st-installmsg" style="margin-top:8px"></div>`}
+                <b>PyTorch + Meta's SAM 2</b> — a one-time ~1&nbsp;GB install into its own folder
+                (it doesn't touch the rest of the app). It takes a few minutes; you can keep working
+                in other tools while it runs. Everything else in the suite works without it.</p>
+              <button class="btn cta bright" id="st-install" style="width:100%;margin-top:12px">
+                ⬇ Install the runtime (PyTorch + SAM 2, ~1 GB)</button>
+              <div id="st-installprog"></div>
+              <div class="progmsg" id="st-installmsg" style="margin-top:8px"></div>
+              <div style="display:flex;gap:12px;margin-top:10px;font-size:12px">
+                <a href="#" id="st-manual">Install it manually instead (Terminal steps)</a>
+                <a href="#" id="st-notnow" style="margin-left:auto">Not now</a>
+              </div>
             </div>
           </div>`);
+        $("#st-manual", el).onclick = e => { e.preventDefault();
+          go("settings", { section: "runtimes", runtime: "stencil-sam2" }); };
+        $("#st-notnow", el).onclick = e => { e.preventDefault();
+          const g = $("#st-gate", el); if (g) g.remove(); };
         const btn = $("#st-install", el);
         if (btn) btn.onclick = async () => {
           btn.disabled = true;
+          $("#st-installmsg", el).textContent = "";
           try {
             const job = await api("/api/stencil/install-runtime", {});
-            watchJob(job.id, j => { $("#st-installmsg", el).textContent = j.message || j.status; });
+            const p = czProgress($("#st-installprog", el), {
+              label: "installing PyTorch + SAM 2", acc: "var(--stencil)" });
+            watchJob(job.id, j => p.update(j));
             const done = await jobDone(job.id);
+            p.finish(done);
             if (done.status === "done") {
-              $("#st-installmsg", el).textContent = "installed — reloading…";
-              setTimeout(() => location.reload(), 900);
+              // the helper starts on the first click — no reload needed
+              const st2 = await api("/api/stencil/status");
+              ST.runtime = st2;
+              if (st2.available) {
+                const g = $("#st-gate", el); if (g) g.remove();
+                warn.style.display = st2.hint ? "" : "none";
+                $("#st-runtimehint", el).textContent = st2.hint || "";
+                $("#st-run", el).disabled = !ST.clip;
+                toast("Stencil is ready — click a subject to cut its matte");
+              } else {
+                btn.disabled = false;
+                $("#st-installmsg", el).textContent = st2.hint || "installed, but the check didn't pass";
+              }
             } else {
               btn.disabled = false;
-              $("#st-installmsg", el).textContent = done.error || "stopped";
+              $("#st-installmsg", el).textContent = done.error || "stopped — press Install to pick up where it left off";
             }
           } catch (e) { btn.disabled = false; $("#st-installmsg", el).textContent = e.message; }
         };
@@ -472,18 +495,45 @@ const StencilPage = (() => {
       // dead, mute button (its whole reason to exist is honesty)
       warn.style.display = "";
       $("#st-runtimehint", el).textContent =
-        "couldn't reach Stencil's runtime check — reload the app, or run from a source checkout";
+        "couldn't reach Stencil's runtime check — reload the app (Settings → optional runtimes shows its state)";
     });
   }
 
   let inited = false;
   function onshow(arg) {
     if (!inited) { init(); inited = true; }
+    else if ($("#st-gate", el)) {
+      // installed from Settings since the gate went up? then it comes down
+      api("/api/stencil/status").then(st => {
+        ST.runtime = st;
+        if (!st.available) return;
+        const g = $("#st-gate", el); if (g) g.remove();
+        $("#st-runtimewarn", el).style.display = st.hint ? "" : "none";
+        $("#st-runtimehint", el).textContent = st.hint || "";
+        $("#st-run", el).disabled = !ST.clip;
+      }).catch(() => {});
+    }
     Viewer.active = viewer;
     if (arg && arg.openPath) open(arg.openPath);
     if (viewer) viewer.resize();
   }
 
-  registerPage("stencil", el, onshow);
+  /* reset: no clip, no clicks, no mattes on screen — the cache on disk
+     stays (reopen the clip and click the same points: nothing recomputes) */
+  function reset() {
+    if (!viewer) return;
+    ST.clip = null; ST.prompts = []; ST.result = null;
+    dropMasks();
+    viewer.setClip(null); strip.setClip(null);
+    $("#st-path", el).value = ""; $("#st-meta", el).innerHTML = "";
+    $("#st-run", el).disabled = true;
+    $("#st-exportsec", el).style.display = "none";
+    $("#st-bar", el).style.width = "0";
+    $("#st-msg", el).textContent = "";
+    const rep = $("#st-report", el); if (rep) { rep.innerHTML = ""; rep.classList.remove("show"); }
+    updatePromptCount(); drawConf(); drawCov();
+  }
+
+  registerPage("stencil", el, onshow, { reset });
   return { onshow };
 })();

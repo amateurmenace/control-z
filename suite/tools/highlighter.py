@@ -13,6 +13,7 @@ Reading is local and labeled: the brief is extractive, ask is retrieval.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 import time
@@ -20,6 +21,8 @@ from pathlib import Path
 
 from czcore import ytdlp
 from czcore.paths import media_dir
+
+from .keyneed import need_key
 
 VIDEO_EXTS = (".mp4", ".mkv", ".mov", ".webm", ".m4v")
 
@@ -32,6 +35,53 @@ def _meetings_dir() -> Path:
     d = _lib() / ".meetings"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def video_dirs() -> list:
+    """Every folder a fetched recording can live in: Highlighter's work
+    folder (section clips, reels, older full downloads), the Downloads
+    folder fetches land in now, and the Grabber's old folder. Twin lookups
+    ("the full video for this session") search them all — a meeting
+    fetched in the Grabber is the same meeting Highlighter read."""
+    from czcore.paths import downloads_root
+    out = []
+    for d in (_lib(), downloads_root(), media_dir("grabber")):
+        try:
+            if d.is_dir() and all(d.resolve() != o.resolve() for o in out):
+                out.append(d)
+        except OSError:
+            continue
+    return out
+
+
+def fetched_videos() -> list:
+    """Every video file across video_dirs() — [Path], unsorted. yt-dlp's
+    half-finished pieces (a lone ".f137.mp4" stream waiting for its merge,
+    a ".temp." remux) are not videos and never listed."""
+    rows = []
+    for d in video_dirs():
+        try:
+            rows += [f for f in d.iterdir()
+                     if f.suffix.lower() in VIDEO_EXTS and f.is_file()
+                     and ".temp." not in f.name
+                     and not re.search(r"\.f\d+$", f.stem)]
+        except OSError:
+            continue
+    return rows
+
+
+_SPAN = re.compile(r"\[\d+-\d+\]$")
+
+
+def full_video_for(vid: str):
+    """The downloaded full recording of YouTube id `vid`, wherever it
+    landed — or None. The full recording is the one whose name ENDS in the
+    id tag ("Title [id].mp4"); a section clip ("… [id] [600-630].mp4"), a
+    reel ("… [id].reel.mp4") or a matte export shares the tag but not the
+    meeting's timeline."""
+    tag = f"[{vid}]"
+    hits = [f for f in fetched_videos() if f.stem.endswith(tag)]
+    return max(hits, key=lambda f: f.stat().st_size) if hits else None
 
 
 def _is_session(source: str) -> bool:
@@ -95,37 +145,70 @@ def _load_transcript(source: str):
     """(transcript dict, origin) — scribe sidecar, else captions, else the
     library twin's words (a session whose video was already downloaded
     borrows the local copy's transcript instead of re-asking YouTube)."""
+    from czcore.moments import VTT_PARSE_V
     from highlighter.highlights import parse_vtt, transcript_dict
 
     sc, _, _ = _sidecars(source)
+    p = Path(source)
+    cap = _captions_for(p)
     if sc.exists():
         try:
             t = json.loads(sc.read_text())
             origin = ("captions" if str(t.get("model", "")).startswith("captions")
                       else "scribe")
-            return t, origin
+            # words read from captions by an older parse_vtt (every rolling
+            # line doubled, before v2) re-read their caption file once —
+            # Scribe's own words are never touched
+            if not (origin == "captions" and cap
+                    and t.get("parse_v", 1) < VTT_PARSE_V):
+                return t, origin
         except ValueError:
             pass
-    p = Path(source)
-    cap = _captions_for(p)
     if not cap and p.is_dir():
-        twin = next((f for f in _lib().iterdir()
-                     if f.suffix.lower() in VIDEO_EXTS
-                     and f"[{p.name}]" in f.name), None)
+        # the FULL recording only — a section clip or a reel shares the id
+        # tag but not the timeline, and its words would be wrong
+        twin = full_video_for(p.name)
         if twin:
             tsc, _, _ = _sidecars(str(twin))
             if tsc.exists():
                 sc.write_text(tsc.read_text())
                 return _load_transcript(source)
             cap = _captions_for(twin)
+    if not cap and p.is_file():
+        # the other direction: a downloaded file whose meeting was already
+        # READ as a URL session borrows the session's words — but only the
+        # full recording ("Title [id].mp4"). A section clip ("… [id]
+        # [600-630].mp4"), a reel ("[id].reel.mp4") or a matte export has
+        # its own timeline; the meeting's timestamps would be wrong on it.
+        m = re.search(r"\[([\w-]{11})\]$", p.stem)
+        sess = (_meetings_dir() / m.group(1)) if m else None
+        if sess and sess.is_dir():
+            ssc, _, _ = _sidecars(str(sess))
+            if ssc.exists():
+                sc.write_text(ssc.read_text())
+                return _load_transcript(source)
+            cap = _captions_for(sess)
     if cap:
         segs = parse_vtt(cap.read_text(errors="replace"))
+        for s in segs:
+            # caption files carry HTML entities (">>" speaker marks arrive
+            # as &gt;&gt;) — the transcript holds the characters themselves
+            s["text"] = html.unescape(s["text"])
+            for w in s.get("words") or []:
+                w["w"] = html.unescape(w["w"])
+        segs = [s for s in segs if s["text"].strip()]
         if segs:
             t = transcript_dict(segs, str(Path(source).resolve()),
                                 origin=f"captions:{cap.name}")
+            t["parse_v"] = VTT_PARSE_V
             sc.write_text(json.dumps(t))
             return t, "captions"
     return None, None
+
+
+# the AI summary's shape — a cached summary written in another shape
+# rewrites once on the next open (exec-5: one ~five-sentence paragraph)
+BRIEF_STYLE = "exec-5"
 
 
 # bump when any insight reading changes shape or behavior — every cached
@@ -191,7 +274,9 @@ def register_highlighter(app, jobs, frames):
 
     @app.get("/api/highlighter/status")
     def api_status():
-        return {"ytdlp": ytdlp.status(), "library": str(lib)}
+        from czcore.paths import downloads_root
+        return {"ytdlp": ytdlp.status(), "library": str(lib),
+                "downloads": str(downloads_root())}
 
     @app.post("/api/highlighter/ytdlp-check")
     def api_ytdlp_check(body: dict = Body(default={})):
@@ -199,85 +284,77 @@ def register_highlighter(app, jobs, frames):
 
     # -- ingest: URL -> a readable meeting, before any video moves ---------
     #
-    # The web app answers in one round trip; this matches it. YouTube URLs
-    # skip the yt-dlp probe entirely (the id is in the URL, the title is in
-    # the watch page the caption fetch already reads) and the two local
-    # caption routes RACE on threads — first one home wins. The community
-    # relay only runs after both local routes lose. A session that was
-    # already read returns instantly.
+    # YouTube: the player-API caption route first (czcore.captions — about
+    # a second, no proxy needed unless YouTube refuses this computer), then
+    # yt-dlp's own caption fetch, then the community relay. Each loser says
+    # why; the answer carries `captions_blocked` when YouTube refused THIS
+    # computer, which is the page's cue to offer the proxy switch — and
+    # only then. A session that was already read returns instantly.
 
-    def _finish_ingest(job, d, how, note, t0):
+    def _finish_ingest(job, d, how, note, t0, blocked=False):
         t, origin = _load_transcript(str(d))
         took = time.monotonic() - t0
         job.message = (f"read in {took:.1f}s — {len(t['segments'])} segments, "
                        f"{how}" if t
-                       else "no captions — transcribe after download")
+                       else "no captions — " + (
+                           "YouTube is limiting this computer; the proxy "
+                           "switch fixes that" if blocked else
+                           "download it and let Scribe transcribe"))
+        from czcore import proxy
         return {"source": str(d), "meta": _session_meta(d),
                 "transcript": t, "origin": origin,
-                "captions_note": None if t else note}
+                "captions_note": None if t else note,
+                "captions_blocked": bool(blocked and not t),
+                "proxy": proxy.status()}
 
     def _ingest_youtube(job, url, vid, t0):
-        from concurrent.futures import (FIRST_COMPLETED, ThreadPoolExecutor,
-                                        wait)
-
         from czcore import captions as ctext
         from czcore import proxy
 
         d = _meetings_dir() / vid
         d.mkdir(parents=True, exist_ok=True)
         purl = proxy.proxy_url()
-        job.message = ("asking YouTube both ways at once…"
-                       + (" (your proxy rides along)" if purl else ""))
+        via = " through the proxy" if purl else ""
+        notes, scraped_meta, how = [], {}, None
+        blocked, final = False, False
 
-        def watch_page():
-            got = ctext.fetch_vtt(url, proxy=purl)
-            return {"how": "captions via watch page"
-                           + (" through your Webshare proxy" if purl else ""),
-                    "vtt": got["vtt"], "meta": got.get("meta") or {}}
-
-        def via_ytdlp():
-            ytdlp.fetch_captions(url, d)   # writes info.json + vtt into d
-            if not _captions_for(d):
-                raise RuntimeError("yt-dlp reached the page but captions "
-                                   "didn't come")
-            return {"how": "captions via yt-dlp", "vtt": None, "meta": {}}
-
-        notes, scraped_meta, winner = [], {}, None
-        gated = False
-        ex = ThreadPoolExecutor(max_workers=2)
+        # 1 · the player API — the fast road, and it names the meeting
+        job.message = f"asking YouTube's player for the captions{via}…"
         try:
-            pending = {ex.submit(watch_page), ex.submit(via_ytdlp)}
-            while pending and winner is None and not gated:
-                done, pending = wait(pending, return_when=FIRST_COMPLETED)
-                for f in done:
-                    try:
-                        winner = winner or f.result()
-                    except Exception as e:  # each loser explains itself
-                        notes.append(str(e))
-                        scraped_meta.update(getattr(e, "meta", None) or {})
-                        # the empty-200 is YouTube's definitive gate tell —
-                        # don't wait out the other doomed route, go to relay
-                        gated = gated or "empty body" in str(e)
-        finally:
-            # the loser may still be running; let it finish in the background
-            # (same files, same session dir) rather than stalling the answer
-            ex.shutdown(wait=False, cancel_futures=True)
+            got = ctext.fetch_vtt(url, proxy=purl)
+            (d / "meeting.en.vtt").write_text(got["vtt"])
+            scraped_meta.update(got.get("meta") or {})
+            how = f"captions via YouTube's {got.get('route', 'player')}{via}"
+        except ctext.CaptionError as e:
+            notes.append(str(e))
+            scraped_meta.update(e.meta or {})
+            blocked = blocked or e.blocked
+            # YouTube said plainly there's nothing to fetch — trust it
+            final = e.kind in ("no_captions", "unavailable", "bad_url")
 
-        if winner and winner.get("vtt"):
-            (d / "meeting.en.vtt").write_text(winner["vtt"])
-        if winner:
-            scraped_meta.update(winner.get("meta") or {})
-        if not _captions_for(d) and proxy.relay_enabled():
-            # last resort, zero setup: the web app's own public transcript
-            # engine (BIG's deployment, its residential proxy behind it).
-            # Off by one switch in Settings for the fully-independent.
-            job.message = "captions via the community service…"
+        # 2 · yt-dlp's caption fetch — a different client, a second chance
+        if not _captions_for(d) and not final:
+            job.message = f"trying yt-dlp's caption fetch{via}…"
+            try:
+                ytdlp.fetch_captions(url, d)   # writes info.json + vtt into d
+                if _captions_for(d):
+                    how = f"captions via yt-dlp{via}"
+            except Exception as e:
+                notes.append(str(e))
+                blocked = blocked or ytdlp.looks_blocked(str(e))
+
+        # 3 · last resort, zero setup: the web app's public transcript engine
+        # (BIG's deployment, a residential proxy behind it). One switch in
+        # Settings turns it off for the fully independent.
+        if not _captions_for(d) and not final and proxy.relay_enabled():
+            job.message = "asking the community caption service…"
             try:
                 got = ctext.fetch_vtt_relay(url)
                 (d / "meeting.en.vtt").write_text(got["vtt"])
-                winner = {"how": "captions via the community service"}
+                how = "captions via the community caption service"
             except RuntimeError as e:
                 notes.append(str(e))
+
         info_p = d / "meeting.info.json"
         existing = {}
         if info_p.exists():
@@ -291,9 +368,9 @@ def register_highlighter(app, jobs, frames):
             info_p.write_text(json.dumps(
                 {**existing, "id": vid, "webpage_url": url,
                  **{k: v for k, v in scraped_meta.items() if v}}))
-        how = (winner["how"] if winner
-               else "no caption route today — kept what was already here")
-        return _finish_ingest(job, d, how, " · ".join(notes[-2:]) or None, t0)
+        how = how or "no caption route today — kept what was already here"
+        return _finish_ingest(job, d, how, " · ".join(notes[-2:]) or None,
+                              t0, blocked=blocked and not purl)
 
     @app.post("/api/highlighter/ingest")
     def api_ingest(body: dict = Body(...)):
@@ -304,7 +381,6 @@ def register_highlighter(app, jobs, frames):
 
         def work(job):
             from czcore import captions as ctext
-            from czcore import proxy
 
             t0 = time.monotonic()
             vid = ctext.video_id(url)
@@ -314,6 +390,15 @@ def register_highlighter(app, jobs, frames):
                 if d.exists() and sc.exists() and not fresh:
                     return _finish_ingest(job, d, "already read (cached)",
                                           None, t0)
+                if fresh and sc.exists():
+                    # a re-read replaces caption-made words; Scribe's own
+                    # (a model pass someone waited for) are never discarded
+                    try:
+                        if str(json.loads(sc.read_text()).get("model", "")) \
+                                .startswith("captions"):
+                            sc.unlink()
+                    except (OSError, ValueError):
+                        pass
                 return _ingest_youtube(job, url, vid, t0)
 
             # not YouTube-shaped: yt-dlp knows the other thousand sites —
@@ -381,19 +466,34 @@ def register_highlighter(app, jobs, frames):
                                               "seconds"}, status_code=422)
 
         def work(job):
+            from czcore.paths import downloads_dir
+
             def prog(p, m):
                 if p >= 0:
                     job.progress = p
                 job.message = m or job.message
 
-            got = ytdlp.download(url, lib, quality=quality, progress=prog,
+            # the whole recording is a DOWNLOAD — it lands in the Downloads
+            # folder beside the Grabber's; section clips are working pieces
+            # for the reel and stay in Highlighter's own folder
+            dest = lib if sections else downloads_dir()
+            got = ytdlp.download(url, dest, quality=quality, progress=prog,
                                  cancelled=lambda: job.cancel_requested,
                                  sections=sections)
             n = len(got.get("paths", [got["path"]]))
             job.message = (f"fetched {n} section clip{'s' if n > 1 else ''}"
                            if sections else
                            f"fetched {Path(got['path']).name}")
+            if not sections and quality != "audio":
+                # the local copy needs words: the session's, when this
+                # meeting was read already; YouTube's captions otherwise
+                p = Path(got["path"])
+                t, _ = _load_transcript(str(p))
+                if not t:
+                    job.message += " · fetching captions…"
+                    ytdlp.sidecar_captions(url, p)
             return {**got, "sections": bool(sections),
+                    "folder": str(dest),
                     "captions": _captions_for(Path(got["path"])) is not None}
 
         what = (f"{len(sections)} sections" if sections else quality)
@@ -435,7 +535,34 @@ def register_highlighter(app, jobs, frames):
                                  "transcript": sc.exists(),
                                  "mtime": d.stat().st_mtime})
             meetings.sort(key=lambda r: -r["mtime"])
-        return {"videos": videos, "meetings": meetings}
+        # everything the Grabber (or a full download) brought home — any of
+        # it opens here, words or not (no words yet → captions or Scribe)
+        from czcore.paths import downloads_root
+        downloads = []
+        own = _lib().resolve()
+        for p in fetched_videos():
+            if p.parent.resolve() == own or _SPAN.search(p.stem):
+                continue
+            info = {}
+            ij = p.with_suffix(".info.json")
+            if ij.exists():
+                try:
+                    raw = json.loads(ij.read_text())
+                    info = {"title": raw.get("title"),
+                            "duration": raw.get("duration"),
+                            "url": raw.get("webpage_url")}
+                except ValueError:
+                    pass
+            sc, hl, _ = _sidecars(str(p))
+            downloads.append({"path": str(p), "name": p.name, **info,
+                              "mtime": p.stat().st_mtime,
+                              "transcript": sc.exists(),
+                              "captions": _captions_for(p) is not None,
+                              "highlights": hl.exists()})
+        downloads.sort(key=lambda r: -r["mtime"])
+        return {"videos": videos, "meetings": meetings,
+                "downloads": downloads[:60],
+                "downloads_folder": str(downloads_root())}
 
     # -- the read ------------------------------------------------------------
 
@@ -455,7 +582,11 @@ def register_highlighter(app, jobs, frames):
                 picks = None
         meta = _session_meta(Path(source)) if _is_session(source) else None
         return {"transcript": t, "origin": origin, "highlights": picks,
-                "meta": meta, "session": _is_session(source)}
+                "meta": meta, "session": _is_session(source),
+                # a downloaded file remembers where it came from (its
+                # info.json) — the page offers that link's captions
+                "file_url": None if _is_session(source)
+                else _info_for(source).get("webpage_url")}
 
     @app.post("/api/highlighter/insight")
     def api_insight(body: dict = Body(...)):
@@ -483,8 +614,15 @@ def register_highlighter(app, jobs, frames):
     # default; these are labeled generative in the UI and cite timestamps
     # so every claim can be clicked and checked.
 
+    def _stamp(sec: float) -> str:
+        # [H:MM:SS] past an hour — the page links [65:41] too, but a model
+        # quoting a five-hour meeting reads its own clock better this way
+        sec = int(sec)
+        h, m, x = sec // 3600, sec % 3600 // 60, sec % 60
+        return f"[{h}:{m:02d}:{x:02d}]" if h else f"[{m:02d}:{x:02d}]"
+
     def _transcript_lines(t, budget: int = 60000) -> str:
-        lines = [f"[{int(s['start'] // 60):02d}:{int(s['start'] % 60):02d}] "
+        lines = [f"{_stamp(s['start'])} "
                  f"{(s.get('speaker') + ': ') if s.get('speaker') else ''}"
                  f"{s.get('text', '')}"
                  for s in t["segments"]]
@@ -500,8 +638,7 @@ def register_highlighter(app, jobs, frames):
         from czcore import llm
 
         if not llm.enabled():
-            return JSONResponse({"error": "no API key configured — "
-                                          "Settings → AI"}, status_code=409)
+            return need_key("The AI summary")
         source = str(Path(body["path"]).expanduser())
         t, _ = _load_transcript(source)
         if not t or not t.get("segments"):
@@ -517,7 +654,9 @@ def register_highlighter(app, jobs, frames):
         if cache_p.exists() and not body.get("fresh"):
             try:
                 cached = json.loads(cache_p.read_text())
-                if cached.get("n_segments") == len(t["segments"]):
+                # a summary in an older shape (the lede + bullets) rewrites once
+                if cached.get("n_segments") == len(t["segments"]) \
+                        and cached.get("style") == BRIEF_STYLE:
                     def cached_work(job):
                         job.message = "executive summary — cached"
                         return cached
@@ -531,21 +670,24 @@ def register_highlighter(app, jobs, frames):
         def work(job):
             job.message = f"asking {llm.status()['model']} (your key)…"
             text = llm.complete(
-                system=("You write executive briefs of public civic meetings "
-                        "for busy residents. Ground every claim in the "
-                        "transcript; keep the [MM:SS] timestamps you quote "
-                        "inline so readers can click them. Plain language, "
-                        "no filler, no speculation."),
+                system=("You write executive summaries of public civic "
+                        "meetings for busy residents. Ground every claim in "
+                        "the transcript. Plain language, no filler, no "
+                        "speculation, no headings, no bullet points."),
                 prompt=(f"Meeting: {title}\n\nTranscript (timestamped):\n"
                         f"{_transcript_lines(t)}\n\n"
-                        "Write: 1) a two-sentence what-happened lede, "
-                        "2) 4-6 bullet points of decisions/major discussion "
-                        "each starting with its [MM:SS], 3) one sentence on "
-                        "what's next. Under 250 words."))
+                        "Write ONE paragraph of about five sentences — an "
+                        "executive summary: what this meeting was, the "
+                        "decisions it made (with outcomes and numbers when "
+                        "they were said), the main debate, and what happens "
+                        "next. Put the bracketed timestamp of the moment "
+                        "right after the two or three most important claims, "
+                        "exactly as the transcript writes it (e.g. [1:05:41]), "
+                        "so a reader can jump there. Under 170 words."))
             job.message = "brief written — generative, your key"
             u = llm.last_usage()
             out = {"text": text, "model": llm.status()["model"],
-                   "n_segments": len(t["segments"]),
+                   "n_segments": len(t["segments"]), "style": BRIEF_STYLE,
                    "usage": (f"{u['tokens_in']:,} in / {u['tokens_out']:,} "
                              f"out · {u['window_pct']}% of the context "
                              "window" if u else "")}
@@ -562,8 +704,7 @@ def register_highlighter(app, jobs, frames):
         from highlighter import insight
 
         if not llm.enabled():
-            return JSONResponse({"error": "no API key configured — "
-                                          "Settings → AI"}, status_code=409)
+            return need_key("An AI answer")
         source = str(Path(body["path"]).expanduser())
         q = str(body.get("q", "")).strip()
         if not q:
@@ -606,10 +747,9 @@ def register_highlighter(app, jobs, frames):
         from czcore import llm
 
         if not llm.enabled():
-            return JSONResponse({"error": "no API key configured — "
-                                          "Settings → AI (the local Make "
-                                          "Highlight Reel needs none)"},
-                                status_code=409)
+            return need_key("The AI highlight reel",
+                            alt="the regular ✨ Make Highlight Reel needs no "
+                                "key")
         source = str(Path(body["path"]).expanduser())
         target = float(body.get("target", 90.0))
         t, origin = _load_transcript(source)
@@ -927,8 +1067,9 @@ def register_highlighter(app, jobs, frames):
         from czcore import llm
 
         if not llm.enabled():
-            return JSONResponse({"error": "translation runs on your API key "
-                                          "— Settings → AI"}, status_code=409)
+            return need_key("Translation",
+                            alt="Google Translate (the free button) takes "
+                                "the transcript by copy-paste")
         source = str(Path(body["path"]).expanduser())
         what = str(body.get("what", "summary"))
         lang = str(body.get("lang", "Spanish"))[:40]
@@ -1021,7 +1162,8 @@ def register_highlighter(app, jobs, frames):
         keywords = [k.strip() for k in str(body.get("keywords", "")).split(",")
                     if k.strip()]
         use_energy = bool(body.get("energy", True)) and not _is_session(source)
-        name = Path(source).name
+        name = (_session_meta(Path(source)).get("title") if _is_session(source)
+                else Path(source).name)[:70]
         t, origin = _load_transcript(source)
         if not t or not t.get("segments"):
             return JSONResponse(
@@ -1036,7 +1178,10 @@ def register_highlighter(app, jobs, frames):
                 job.message = "listening for the room…"
                 scored = blend_energy(scored, audio_energy(
                     source, progress=lambda m: setattr(job, "message", m)))
-            picks = build_reel(scored, target=target)
+            # a caption line is ~3 s; a reel of 4-second fragments cuts every
+            # speaker off mid-thought — 12 s gives each moment its sentence
+            # (fewer, fuller clips at the same length)
+            picks = build_reel(scored, target=target, min_clip=12.0)
             payload = {"picks": picks, "target": target,
                        "origin": origin, "keywords": keywords,
                        "lane": [{"start": s["start"], "end": s["end"],
@@ -1070,7 +1215,7 @@ def register_highlighter(app, jobs, frames):
                                 status_code=409)
         p = Path(path)
         out = str(p.with_suffix("")) + ".reel"
-        name = p.name
+        name = (_session_meta(p).get("title") if p.is_dir() else p.name)[:70]
         cards = ([{"label": str(r.get("label", "")) or f"Moment {k + 1}",
                    "t": float(r.get("start", 0))}
                   for k, r in enumerate(ranges)] if want_cards else None)

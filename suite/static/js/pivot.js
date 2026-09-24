@@ -463,6 +463,24 @@ const PivotPage = (() => {
     viewer.resize();
   }
 
-  registerPage("pivot", el, onshow);
+  /* reset: no clip, no analysis — the page as it opens (the .pivot.json
+     sidecar stays beside the clip; reopening it brings the solve back) */
+  function reset() {
+    if (!viewer) return;
+    Object.assign(P, { clip: null, analysis: null, aspect: null, overrides: {} });
+    viewer.setClip(null); strip.setClip(null);
+    $("#pv-path", el).value = ""; $("#pv-meta", el).innerHTML = "";
+    $("#pv-analyze", el).disabled = true;
+    $("#pv-viewsec", el).style.display = "none";
+    $("#pv-exportsec", el).style.display = "none";
+    ["#pv-amsg", "#pv-rmsg"].forEach(s => { const m = $(s, el);
+      if (m) { m.textContent = ""; m.classList.remove("err"); } });
+    ["#pv-abar", "#pv-rbar"].forEach(s => { const b = $(s, el); if (b) b.style.width = "0"; });
+    const rep = $("#pv-report", el); if (rep) { rep.innerHTML = ""; rep.classList.remove("show"); }
+    renderShots();
+    try { updateScopes(); } catch (e) {}
+  }
+
+  registerPage("pivot", el, onshow, { reset });
   return { onshow };
 })();
